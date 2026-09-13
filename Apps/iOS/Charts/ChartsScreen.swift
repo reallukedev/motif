@@ -1,0 +1,12 @@
+import SwiftUI
+import MotifCore
+
+/// Top songs, artists and albums, one list at a time.
+struct ChartsScreen: View {
+    @AppStorage("chartKind") private var kind: ChartKind = .songs
+
+    var body: some View {
+        TopChartView(kind: kind, kindSelection: $kind)
+            .navigationTitle("Charts")
+    }
+}

@@ -1,0 +1,114 @@
+# Package tests plus unsigned builds of both apps. `./build.sh ci` runs the same locally.
+# Unsigned builds only prove the code compiles; use `./build.sh mac` for a runnable Mac app.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel a run when a newer push to the same ref arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  core-tests:
+    name: MotifCore tests
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # The image's default Xcode may not be 27, and the 27 SDKs are required.
+      - name: Select Xcode 27
+        id: xcode
+        run: |
+          set -euo pipefail
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$xcode" ]; then
+            sudo xcode-select -s "$xcode/Contents/Developer"
+          else
+            echo "::warning::No /Applications/Xcode_27*.app on this runner; using $(xcode-select -p)"
+          fi
+          xcodebuild -version
+          echo "build=$(xcodebuild -version | awk '/Build version/ { print $3 }')" >> "$GITHUB_OUTPUT"
+
+      # Keyed on the Xcode build too, since modules from another compiler won't import.
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: MotifCore/.build
+          key: spm-${{ runner.os }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('MotifCore/Package.swift', 'MotifCore/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ steps.xcode.outputs.build }}-
+
+      - name: Run tests
+        working-directory: MotifCore
+        run: swift test
+
+  build:
+    name: Build ${{ matrix.scheme }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: Motif (iOS)
+            destination: generic/platform=iOS Simulator
+          - scheme: Motif (macOS)
+            destination: generic/platform=macOS
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode 27
+        run: |
+          set -euo pipefail
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$xcode" ]; then
+            sudo xcode-select -s "$xcode/Contents/Developer"
+          else
+            echo "::warning::No /Applications/Xcode_27*.app on this runner; using $(xcode-select -p)"
+          fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          echo "Using $(command -v xcodegen)"
+
+      # The .xcodeproj is generated from project.yml and not committed.
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build
+        env:
+          SCHEME: ${{ matrix.scheme }}
+          DESTINATION: ${{ matrix.destination }}
+        run: |
+          set -o pipefail
+          build=(
+            xcodebuild
+            -project Motif.xcodeproj
+            -scheme "$SCHEME"
+            -configuration Debug
+            -destination "$DESTINATION"
+            -skipPackagePluginValidation
+            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_REQUIRED=NO
+            build
+          )
+          if command -v xcbeautify >/dev/null; then
+            "${build[@]}" 2>&1 | xcbeautify --renderer github-actions
+          else
+            "${build[@]}"
+          fi

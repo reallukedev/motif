@@ -1,0 +1,66 @@
+Motif phase 0 probe
+Exported: 2026-09-08T17:58:05Z
+Platform: macOS
+Entries: 5
+────────────────────────────────────────────────────────
+[12:54:45.741] Environment: Environment loaded
+    Platform                  =  macOS
+    App Group                 =  W3Y3Z7CJH2.group.dev.luke.Backtrack
+    Group container           =  ~/Library/Group Containers/W3Y3Z7CJH2.group.dev.luke.Backtrack
+    SwiftData store           =  App Group container (W3Y3Z7CJH2.group.dev.luke.Backtrack)
+    Music.app running         =  true
+    Spotify running           =  false
+    Observing notification    =  com.apple.Music.playerInfo
+    Duplicate (not observed)  =  com.apple.iTunes.playerInfo
+    MusicKit authorization    =  .authorized
+    Can play catalog content  =  true
+    Has cloud library         =  true
+    Can become subscriber     =  false
+[12:54:45.741] Environment: Started macOS sampling
+    suspensionBehavior  =  deliverImmediately
+    note                =  Music posts the same event under both names; only one is observed.
+[12:54:45.934] Music AppleScript: Music scripting read (2 of 13 failed)
+    player state                   =  playing
+    player position                =  0.0
+    current stream title           =  missing value
+    current stream URL             =  missing value
+    name of current playlist       =  ‹error: Can’t make name of «class pPla» of application "Music" into type text.›
+    class of current playlist      =  ‹error: Can’t make class of «class pPla» of application "Music" into type text.›
+    name of current track          =  Nostalgia
+    artist of current track        =  Lossapardo
+    album of current track         =  Nostalgia - Single
+    duration of current track      =  missing value
+    database ID of current track   =  8399
+    cloud status of current track  =  missing value
+    media kind of current track    =  song
+[12:57:44.283] Music playerInfo: playerInfo fired
+    Player State          =  Playing
+    Name                  =  Nostalgia
+    Artist                =  Lossapardo
+    Album                 =  Nostalgia - Single
+    Genre                 =  Indie Pop
+    Composer              =  ‹absent›
+    Grouping              =  ‹absent›
+    Description           =  ‹absent›
+    Year                  =  ‹absent›
+    Track Number          =  ‹absent›
+    Track Count           =  ‹absent›
+    Disc Number           =  ‹absent›
+    Disc Count            =  ‹absent›
+    Total Time            =  ‹absent›
+    PersistentID          =  ‹absent›
+    Library PersistentID  =  ‹absent›
+[12:57:45.001] Music AppleScript: Music scripting read (2 of 13 failed)
+    player state                   =  playing
+    player position                =  0.0
+    current stream title           =  missing value
+    current stream URL             =  missing value
+    name of current playlist       =  ‹error: Can’t make name of «class pPla» of application "Music" into type text.›
+    class of current playlist      =  ‹error: Can’t make class of «class pPla» of application "Music" into type text.›
+    name of current track          =  DISKO MUSHROOM
+    artist of current track        =  Sunni Colón
+    album of current track         =  DISKO MUSHROOM - Single
+    duration of current track      =  missing value
+    database ID of current track   =  8415
+    cloud status of current track  =  missing value
+    media kind of current track    =  song

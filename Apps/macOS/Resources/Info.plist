@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Motif</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.music</string>
+    <!-- Only HTTPS to Apple Music and Last.fm, which is exempt from export documentation.
+         Saves answering the question in App Store Connect for every build. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Motif reads what Apple Music is playing so it can keep your listening history, scrobble it to Last.fm, and save songs you hear on the radio to your library.</string>
+
+    <!-- Required for Apple events to Music.app or Spotify. Without it sends fail with
+         errAEEventNotPermitted (-1743) and no prompt is shown. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Motif asks Music and Spotify what is playing, and controls playback from the menu bar.</string>
+
+    <key>MotifAppGroupIdentifier</key>
+    <string>$(MOTIF_APP_GROUP)</string>
+
+    <!-- Resolved from Config/Motif.xcconfig. MotifCore treats an empty or unresolved
+         value as no container. -->
+    <key>MotifCloudContainerIdentifier</key>
+    <string>$(MOTIF_ICLOUD_CONTAINER)</string>
+
+    <!-- Last.fm application credentials from Config/Motif.xcconfig, so the repository
+         carries no secret. Empty is fine: Last.fm is then reported as not set up. -->
+    <key>MotifLastFMAPIKey</key>
+    <string>$(MOTIF_LASTFM_API_KEY)</string>
+    <key>MotifLastFMSecret</key>
+    <string>$(MOTIF_LASTFM_SECRET)</string>
+</dict>
+</plist>

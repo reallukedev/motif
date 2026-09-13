@@ -1,0 +1,12 @@
+// Copy to Local.xcconfig (gitignored) and fill in.
+//
+// Only needed to run on a device or build the signed Mac app. The simulator and an
+// unsigned Mac build (`./build.sh ci`) work from a clean checkout.
+//
+// Your 10-character Team ID, from https://developer.apple.com/account under Membership.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Any reverse-DNS identifier you own. Register it as an Explicit App ID with MusicKit
+// ticked under App Services, or catalog search and play-back fail with
+// `developerTokenRequestFailed`. The App Group and iCloud container are derived from it.
+MOTIF_BUNDLE_ID = com.example.Motif
