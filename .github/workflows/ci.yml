@@ -44,7 +44,7 @@ jobs:
 
       # Keyed on the Xcode build too, since modules from another compiler won't import.
       - name: Cache SwiftPM build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: MotifCore/.build
           key: spm-${{ runner.os }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('MotifCore/Package.swift', 'MotifCore/Package.resolved') }}
