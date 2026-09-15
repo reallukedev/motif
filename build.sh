@@ -7,11 +7,34 @@
 #   ./build.sh [all]   signed macOS build with its checks, iOS simulator build, tests
 #   ./build.sh mac     signed macOS build, then checks the entitlements actually landed
 #   ./build.sh ios     iOS simulator build
-#   ./build.sh test    MotifCore tests
-#   ./build.sh ci      what CI runs: tests, then unsigned iOS and macOS builds
+#   ./build.sh test    MotifCore tests on macOS and the iOS Simulator
+#   ./build.sh ci      what CI runs: tests on both, then unsigned iOS and macOS builds
 set -e
 # Uses whichever Xcode `xcode-select -p` points at; set DEVELOPER_DIR to override.
 cd "$(dirname "$0")"
+
+# `swift test` only runs on the Mac, so this runs the package tests in the Simulator, on an
+# iPhone from the newest iOS runtime. Same as the iOS test job in CI.
+ios_test() {
+  local udid
+  udid="$(xcrun simctl list devices available | awk '
+    /^-- iOS / { ios = 1; next }
+    /^-- /     { ios = 0; next }
+    ios && /iPhone/ { match($0, /[0-9A-F-]{36}/); id = substr($0, RSTART, RLENGTH) }
+    END { print id }')"
+  if [ -z "$udid" ]; then
+    echo "✗ no iPhone simulator. Add an iOS runtime in Xcode › Settings › Components."
+    return 1
+  fi
+  # Without -collect-test-diagnostics never, a failing test waits 10 minutes for a
+  # simulator sysdiagnose.
+  (
+    cd MotifCore && xcodebuild test -scheme MotifCore-Package -destination "id=$udid" \
+      -skipPackagePluginValidation -collect-test-diagnostics never 2>&1 \
+      | grep -E "error:|recorded an issue|Test run with"
+    exit "${PIPESTATUS[0]}"
+  )
+}
 
 case "${1:-all}" in
   mac|all)
@@ -69,7 +92,7 @@ esac
 
 case "${1:-all}" in
   test|all)
-    echo "── tests"
+    echo "── tests (macOS)"
     (
       cd MotifCore && swift test 2>&1 | grep -E "Test run with|recorded an issue"
       if [ "${PIPESTATUS[0]}" -ne 0 ]; then
@@ -77,6 +100,11 @@ case "${1:-all}" in
         exit 1
       fi
     )
+    echo "── tests (iOS Simulator)"
+    if ! ios_test; then
+      echo "✗ iOS tests failed"
+      exit 1
+    fi
     ;;
 esac
 
@@ -86,9 +114,15 @@ case "${1:-all}" in
   ci)
     xcodebuild -version
 
-    echo "── tests"
+    echo "── tests (macOS)"
     if ! (cd MotifCore && swift test); then
       echo "✗ tests failed"
+      exit 1
+    fi
+
+    echo "── tests (iOS Simulator)"
+    if ! ios_test; then
+      echo "✗ iOS tests failed"
       exit 1
     fi
 

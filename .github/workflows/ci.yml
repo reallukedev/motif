@@ -1,4 +1,5 @@
-# Package tests plus unsigned builds of both apps. `./build.sh ci` runs the same locally.
+# Package tests on macOS and the iOS Simulator, plus unsigned builds of both apps.
+# `./build.sh ci` runs the same locally.
 # Unsigned builds only prove the code compiles; use `./build.sh mac` for a runnable Mac app.
 name: CI
 
@@ -54,6 +55,55 @@ jobs:
       - name: Run tests
         working-directory: MotifCore
         run: swift test
+
+  # `swift test` only runs on the Mac, so the iOS-only code paths need the Simulator.
+  core-tests-ios:
+    name: MotifCore tests (iOS Simulator)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode 27
+        run: |
+          set -euo pipefail
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$xcode" ]; then
+            sudo xcode-select -s "$xcode/Contents/Developer"
+          else
+            echo "::warning::No /Applications/Xcode_27*.app on this runner; using $(xcode-select -p)"
+          fi
+          xcodebuild -version
+
+      # Simulator names vary between runner images, so take an iPhone from the newest iOS
+      # runtime rather than naming one.
+      - name: Run tests
+        working-directory: MotifCore
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available | awk '
+            /^-- iOS / { ios = 1; next }
+            /^-- /     { ios = 0; next }
+            ios && /iPhone/ { match($0, /[0-9A-F-]{36}/); id = substr($0, RSTART, RLENGTH) }
+            END { print id }')"
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator on this runner"
+            exit 1
+          fi
+          # Without -collect-test-diagnostics never, a failing test waits 10 minutes for a
+          # simulator sysdiagnose before the job reports it.
+          test=(
+            xcodebuild test
+            -scheme MotifCore-Package
+            -destination "id=$udid"
+            -skipPackagePluginValidation
+            -collect-test-diagnostics never
+          )
+          if command -v xcbeautify >/dev/null; then
+            "${test[@]}" 2>&1 | xcbeautify --renderer github-actions
+          else
+            "${test[@]}"
+          fi
 
   build:
     name: Build ${{ matrix.scheme }}

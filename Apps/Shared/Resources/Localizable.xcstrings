@@ -1,7 +1,385 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "#%@ of all time · %@ of your listening" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "#%1$@ of all time · %2$@ of your listening"
+          }
+        }
+      }
+    },
+    "%@ from %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ from %2$@"
+          }
+        }
+      }
+    },
+    "%@ hr" : {
 
+    },
+    "%@ hr %@ min" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ hr %2$@ min"
+          }
+        }
+      }
+    },
+    "%@ is your biggest day, with ^[%@ song](inflect: true)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is your biggest day, with ^[%2$@ song](inflect: true)."
+          }
+        }
+      }
+    },
+    "%@ made up %@%% of everything you played." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ made up %2$@%% of everything you played."
+          }
+        }
+      }
+    },
+    "%@ min" : {
+
+    },
+    "%@ played %@ of your %@ radio songs." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ played %2$@ of your %3$@ radio songs."
+          }
+        }
+      }
+    },
+    "%@ plays" : {
+
+    },
+    "%@%% of what you played was new to you." : {
+
+    },
+    "^[%@ minute](inflect: true)" : {
+
+    },
+    "^[%@ play](inflect: true)" : {
+
+    },
+    "^[%@ play](inflect: true), %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "^[%1$@ play](inflect: true), %2$@"
+          }
+        }
+      }
+    },
+    "^[%@ radio song](inflect: true) from today" : {
+
+    },
+    "^[%@ song](inflect: true)" : {
+
+    },
+    "^[%@ song](inflect: true) from ^[%@ artist](inflect: true)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "^[%1$@ song](inflect: true) from ^[%2$@ artist](inflect: true)"
+          }
+        }
+      }
+    },
+    "^[%@ time](inflect: true)" : {
+
+    },
+    "0s" : {
+
+    },
+    "1m" : {
+
+    },
+    "2m" : {
+
+    },
+    "60m" : {
+
+    },
+    "A song has to play for a little while before it's kept, so skipping through doesn't fill your history. Hearing the same song again inside the window counts once." : {
+
+    },
+    "About" : {
+
+    },
+    "About the same as %@" : {
+
+    },
+    "All %@ songs were new to you." : {
+
+    },
+    "App" : {
+
+    },
+    "Apple Music doesn't count radio as plays, so those songs never reach your play counts, Replay or recommendations. A couple of minutes after a station stops, Motif can play them again so they do. It only starts when you're at your Mac, and never over music you chose." : {
+
+    },
+    "Apple Music doesn't count radio as plays. Playing them back does." : {
+
+    },
+    "Approve Motif on Last.fm, then come back here." : {
+
+    },
+    "avg" : {
+
+    },
+    "Busiest around %@ on %@s." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Busiest around %1$@ on %2$@s."
+          }
+        }
+      }
+    },
+    "Counting Plays" : {
+
+    },
+    "Counts After" : {
+
+    },
+    "Creates a throwaway playlist and adds the song playing right now, using the Apple Music REST API. This is the only playlist path that works on both platforms, so it is worth proving before anything depends on it. Delete the playlist afterwards." : {
+
+    },
+    "Early bird: %@%% of your listening happens before 9 AM." : {
+
+    },
+    "Every song Motif keeps is scrobbled, radio included. Recovered songs are left out unless you turn them on, since their times are only approximate." : {
+
+    },
+    "History" : {
+
+    },
+    "iCloud" : {
+
+    },
+    "Invented listening, so you can look around. Nothing here is yours." : {
+
+    },
+    "Last.fm" : {
+
+    },
+    "Listening time is estimated from when each song started." : {
+
+    },
+    "Motif has no servers and no analytics. Your history stays on your devices and in your iCloud account." : {
+
+    },
+    "Motif only notices what's playing while it's running. Opening it at login means nothing gets missed." : {
+
+    },
+    "Motif only sees music while it's open. When it opens, it fills in what you played in the meantime from Apple Music's Recently Played, which doesn't say how or exactly when you played them." : {
+
+    },
+    "NEW" : {
+
+    },
+    "Night owl: %@%% of your listening happens after 10 PM." : {
+
+    },
+    "Not captured" : {
+
+    },
+    "Now Playing" : {
+
+    },
+    "On repeat: you played %@ by %@ ^[%@ time](inflect: true) in one day." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "On repeat: you played %1$@ by %2$@ ^[%3$@ time](inflect: true) in one day."
+          }
+        }
+      }
+    },
+    "Peak" : {
+
+    },
+    "Play Back" : {
+
+    },
+    "Play something in Apple Music. Motif keeps what you listen to, including radio, and turns it into charts and highlights." : {
+
+    },
+    "Playlist write path" : {
+
+    },
+    "Radio Playlist" : {
+
+    },
+    "Recently Played" : {
+
+    },
+    "Recovered songs are scrobbled with the time Motif found them, because Apple's Recently Played list doesn't say when you played them." : {
+
+    },
+    "Removing the whole song also stops Motif recovering it from Recently Played." : {
+
+    },
+    "Removing the whole song also stops Motif recovering it from Recently Played. Scrobbles already sent stay on Last.fm." : {
+
+    },
+    "Same Song Again Within" : {
+
+    },
+    "Sample Data" : {
+
+    },
+    "Select a song to see its plays." : {
+
+    },
+    "Songs you hear on Apple Music radio are added to this playlist in your library. Turn on Treat Everything as Radio if Motif ever misses a station." : {
+
+    },
+    "Songs you play in Music show up here." : {
+
+    },
+    "Songs you play in Music will collect here." : {
+
+    },
+    "Start sampling, then play a radio station." : {
+
+    },
+    "Station names only show up when Motif sees you tune in." : {
+
+    },
+    "Stations" : {
+
+    },
+    "Stations show up here once you've listened to one." : {
+
+    },
+    "Status Item" : {
+
+    },
+    "The Today widget can list the radio songs Play Back will play next." : {
+
+    },
+    "Try a longer range." : {
+
+    },
+    "Turn a station off to stop keeping what it plays. Songs already kept from it stay in your history." : {
+
+    },
+    "Use %@. Long labels are shortened so they can't push other apps off the menu bar." : {
+
+    },
+    "Weekends are for music: %@%% of your listening falls on them." : {
+
+    },
+    "What sits in the menu bar while music is playing." : {
+
+    },
+    "When Motif starts, it fills in what you played while it was closed from Apple Music's Recently Played, which doesn't say how or exactly when you played them." : {
+
+    },
+    "Widgets" : {
+
+    },
+    "You discovered ^[%@ new artist](inflect: true)." : {
+
+    },
+    "You listen most around %@: ^[%@ song](inflect: true)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You listen most around %1$@: ^[%2$@ song](inflect: true)."
+          }
+        }
+      }
+    },
+    "You passed %@ songs on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You passed %1$@ songs on %2$@."
+          }
+        }
+      }
+    },
+    "You're listening %@%% less than %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You're listening %1$@%% less than %2$@."
+          }
+        }
+      }
+    },
+    "You're listening %@%% more than %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You're listening %1$@%% more than %2$@."
+          }
+        }
+      }
+    },
+    "You've listened ^[%@ day](inflect: true) in a row." : {
+
+    },
+    "You've played back %@ of %@ radio songs, so Apple Music counts them." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You've played back %1$@ of %2$@ radio songs, so Apple Music counts them."
+          }
+        }
+      }
+    },
+    "Your listening history, stations and sessions are mirrored to your private iCloud database, so they appear on your other devices and survive losing this one. Songs are stored as catalog identifiers, not audio. Turning this off takes effect the next time Motif starts." : {
+
+    },
+    "Your listening isn't being saved" : {
+
+    },
+    "Your longest radio session ran ^[%@ minute](inflect: true)." : {
+
+    },
+    "Your most played song is %@ by %@, ^[%@ time](inflect: true)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Your most played song is %1$@ by %2$@, ^[%3$@ time](inflect: true)."
+          }
+        }
+      }
+    },
+    "Your top %@ appear once you've listened to some music." : {
+
+    }
   },
   "version" : "1.0"
 }

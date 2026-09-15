@@ -12,15 +12,20 @@ struct TransportControls: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            HStack(spacing: 18) {
-                button(.previous, symbol: "backward.fill", label: "Previous Track")
-                button(
-                    .playPause,
-                    symbol: isPlaying ? "pause.fill" : "play.fill",
-                    label: isPlaying ? "Pause" : "Play"
-                )
-                .controlSize(.extraLarge)
-                button(.next, symbol: "forward.fill", label: "Next Track")
+            // Each glyph gets a fixed square, so the circles match and the glyphs sit centred.
+            // Sized to the glyph, the wide skip symbols filled their circles edge to edge.
+            GlassEffectContainer(spacing: 18) {
+                HStack(spacing: 18) {
+                    button(.previous, symbol: "backward.fill", label: "Previous Track", glyph: 13, box: 18)
+                    button(
+                        .playPause,
+                        symbol: isPlaying ? "pause.fill" : "play.fill",
+                        label: isPlaying ? "Pause" : "Play",
+                        glyph: 17,
+                        box: 24
+                    )
+                    button(.next, symbol: "forward.fill", label: "Next Track", glyph: 13, box: 18)
+                }
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
@@ -50,13 +55,19 @@ struct TransportControls: View {
     private func button(
         _ command: TransportCommand,
         symbol: String,
-        label: String
+        label: String,
+        glyph: CGFloat,
+        box: CGFloat
     ) -> some View {
         let allowed = monitor.capabilities.allows(command)
-        return Button(label, systemImage: symbol) {
+        return Button {
             monitor.perform(command)
+        } label: {
+            Label(label, systemImage: symbol)
+                .labelStyle(.iconOnly)
+                .font(.system(size: glyph, weight: .semibold))
+                .frame(width: box, height: box)
         }
-        .labelStyle(.iconOnly)
         .disabled(!allowed)
         // Music accepts a skip on a station and ignores it without feedback, so explain.
         .help(allowed ? label : reasonUnavailable)

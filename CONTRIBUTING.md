@@ -134,9 +134,9 @@ found by running the app or reading captured data. Before opening a pull request
 ## Tests and builds
 
 ```sh
-cd MotifCore && swift test   # package tests
-./build.sh ci                # same as CI: tests, then unsigned iOS and macOS builds
-./build.sh test              # package tests, short output
+cd MotifCore && swift test   # package tests, macOS only
+./build.sh ci                # same as CI: tests on both, then unsigned iOS and macOS builds
+./build.sh test              # package tests on macOS and the iOS Simulator, short output
 ./build.sh mac               # signed Mac build plus entitlement checks (needs Local.xcconfig)
 ./build.sh ios               # iOS simulator build
 ```

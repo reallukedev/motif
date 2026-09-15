@@ -239,6 +239,7 @@ private struct RecentList: View {
     @Environment(AppModel.self) private var model
     @Environment(PlaybackController.self) private var playback
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -249,6 +250,7 @@ private struct RecentList: View {
                 Button("Show All") {
                     model.sidebarSelection = .history
                     MenuBarFooter.bringMainWindowForward(openWindow: openWindow)
+                    dismiss()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
@@ -335,11 +337,15 @@ private struct MenuBarFooter: View {
     @Environment(CaptureService.self) private var capture
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
+    /// Closes the menu bar window. Anything that brings up another window calls it, so the
+    /// menu doesn't stay open over what it just opened.
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         HStack(spacing: 6) {
             Button("Open Motif") {
                 Self.bringMainWindowForward(openWindow: openWindow)
+                dismiss()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
@@ -351,8 +357,11 @@ private struct MenuBarFooter: View {
                 capture.isRunning ? capture.stop() : capture.start()
             }
             .help(capture.isRunning ? "Stop noticing what's playing for now" : "Start noticing what's playing again")
-            Button("Settings", systemImage: "gearshape") { openSettings() }
-                .help("Settings")
+            Button("Settings", systemImage: "gearshape") {
+                openSettings()
+                dismiss()
+            }
+            .help("Settings")
             Button("Quit Motif", systemImage: "power") { NSApp.terminate(nil) }
                 .help("Quit Motif")
         }
