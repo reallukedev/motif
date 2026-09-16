@@ -1,0 +1,100 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "display-p3:0.98000,0.37000,0.47000,1.00000",
+      "display-p3:0.91000,0.13000,0.25000,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0.5,
+        "y": 0.0
+      },
+      "stop": {
+        "x": 0.5,
+        "y": 1.0
+      }
+    }
+  },
+  "groups": [
+    {
+      "name": "Played",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      },
+      "layers": [
+        {
+          "image-name": "played.svg",
+          "name": "played",
+          "glass": true
+        }
+      ]
+    },
+    {
+      "name": "Record",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.25
+      },
+      "lighting": "combined",
+      "layers": [
+        {
+          "image-name": "label.svg",
+          "name": "label",
+          "glass": false,
+          "fill": {
+            "solid": "display-p3:0.99000,0.30000,0.40000,1.00000"
+          }
+        },
+        {
+          "image-name": "track.svg",
+          "name": "track",
+          "glass": false,
+          "opacity": 0.12
+        },
+        {
+          "image-name": "grooves.svg",
+          "name": "grooves",
+          "glass": false,
+          "opacity": 0.22
+        },
+        {
+          "image-name": "sheen.svg",
+          "name": "sheen",
+          "glass": false,
+          "opacity": 0.09
+        },
+        {
+          "image-name": "vinyl.svg",
+          "name": "vinyl",
+          "glass": true,
+          "fill": {
+            "solid": "display-p3:0.10000,0.09000,0.11000,1.00000"
+          },
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "display-p3:0.22000,0.21000,0.23000,1.00000"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

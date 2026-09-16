@@ -1,0 +1,31 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# The project is generated from project.yml by XcodeGen. Regenerate with `xcodegen generate`
+# rather than editing it, so build settings live in reviewable YAML and xcconfig instead of
+# a merge-hostile pbxproj.
+*.xcodeproj/
+
+# Real credentials. The tracked xcconfig includes this if it exists and builds fine without
+# it, so a fresh clone works and nobody commits a shared secret by filling in the obvious file.
+Config/Secrets.xcconfig
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+# macOS
+.DS_Store
+
+# Per-developer signing overrides; see Config/Local.example.xcconfig.
+Config/Local.xcconfig
+
+# Agent worktrees and local tool settings.
+.claude/worktrees/
+.claude/settings.local.json
