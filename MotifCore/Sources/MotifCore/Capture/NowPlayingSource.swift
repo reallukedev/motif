@@ -24,6 +24,10 @@ public struct NowPlayingObservation: Sendable, Equatable {
     public var playerPosition: TimeInterval?
     /// Station name, when the platform gives one.
     public var stationName: String?
+    /// Whether this came from a station, when the player knows rather than having to guess.
+    /// Motif's own player on iPhone sets it, since it queued the music itself. Nil everywhere
+    /// else, which leaves the decision to ``RadioHeuristic``.
+    public var isStation: Bool?
     public var observedAt: Date
 
     /// Everything the platform reported, verbatim, for the probe and diagnostics.
@@ -39,6 +43,7 @@ public struct NowPlayingObservation: Sendable, Equatable {
         playbackState: PlaybackState = .playing,
         playerPosition: TimeInterval? = nil,
         stationName: String? = nil,
+        isStation: Bool? = nil,
         observedAt: Date = .now,
         rawFields: [String: String] = [:]
     ) {
@@ -51,6 +56,7 @@ public struct NowPlayingObservation: Sendable, Equatable {
         self.playbackState = playbackState
         self.playerPosition = playerPosition
         self.stationName = stationName
+        self.isStation = isStation
         self.observedAt = observedAt
         self.rawFields = rawFields
     }
@@ -63,6 +69,7 @@ public struct NowPlayingObservation: Sendable, Equatable {
                 hasComposer: !(rawFields[PlayerInfoKey.composer] ?? "").isEmpty,
                 playerPosition: playerPosition,
                 entryIdentifier: rawFields["entry.id"].flatMap(QueueEntryIdentifier.init),
+                statedStation: isStation,
                 userForcedCapture: userForcedCapture
             )
         )

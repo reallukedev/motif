@@ -48,54 +48,8 @@ public enum AppleMusicPlaylistRequestBuilder {
 
     // No delete or remove-track request: DELETE on /v1/me/library/playlists/{id} returns
     // 401 even with valid tokens, and there's no endpoint for removing a track. Once a song
-    // is in "Heard on Radio", the app can't take it out. ``PlaylistSizeLimit`` therefore has
-    // to hold the playlist's size down from the writing end.
-
-    /// `GET /v1/me/library/playlists/{id}/tracks`
-    ///
-    /// One page of the playlist's tracks, for counting it. 100 is the endpoint's maximum.
-    public static func playlistTracks(
-        playlistID: String,
-        limit: Int = 100,
-        offset: Int = 0
-    ) -> URLRequest {
-        var components = URLComponents(
-            url: baseURL.appending(path: "playlists").appending(path: playlistID).appending(path: "tracks"),
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "offset", value: String(offset)),
-        ]
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = "GET"
-        return request
-    }
-
-    /// One page of a tracks response: how many came back, and the total if Apple stated one.
-    ///
-    /// `meta.total` isn't documented for library relationships and isn't always there, so a
-    /// caller that doesn't get one has to keep paging.
-    public struct TracksPage: Sendable, Equatable {
-        public let count: Int
-        public let total: Int?
-        public let hasMore: Bool
-
-        public init(count: Int, total: Int?, hasMore: Bool) {
-            self.count = count
-            self.total = total
-            self.hasMore = hasMore
-        }
-    }
-
-    /// Reads a tracks response. An empty playlist answers 404, which the caller turns into
-    /// a page of nothing rather than an error.
-    public static func parseTracksPage(from data: Data) -> TracksPage {
-        let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let items = root?["data"] as? [[String: Any]] ?? []
-        let total = (root?["meta"] as? [String: Any])?["total"] as? Int
-        return TracksPage(count: items.count, total: total, hasMore: root?["next"] != nil)
-    }
+    // is in "Heard on Radio", the app can't take it out, which is why Motif offers no cap on
+    // the playlist's size: a cap could only fill up and then stop adding.
 
     /// `GET /v1/me/library/playlists/{id}`
     public static func playlist(id playlistID: String) -> URLRequest {

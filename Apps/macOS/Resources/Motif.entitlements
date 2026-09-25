@@ -35,6 +35,16 @@
     <key>com.apple.security.network.client</key>
     <true/>
 
+    <!-- Your Music: songs and folders chosen in the import panel are read, then copied into
+         Motif's own Music folder. -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+
+    <!-- Listening for Motif on your other devices nearby, which connect to this Mac to show
+         and control what Music is playing. Only your devices can: see NearbyDevices. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
     <!-- iCloud sync, which is also the backup. Automatic signing creates the container on
          the first build; see Config/Motif.xcconfig. -->
     <key>com.apple.developer.icloud-container-identifiers</key>

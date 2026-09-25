@@ -14,6 +14,7 @@ public enum StatsCalculator {
         sessions: [SessionStat],
         calendar: Calendar = .current,
         now: Date = .now,
+        periodOffset: Int = 0,
         topLimit: Int = 5,
         songLimit: Int = 8
     ) -> StatsSummary {
@@ -23,6 +24,7 @@ public enum StatsCalculator {
             sessions: sessions,
             calendar: calendar,
             now: now,
+            periodOffset: periodOffset,
             topLimit: topLimit,
             songLimit: songLimit
         )
@@ -34,9 +36,15 @@ public enum StatsCalculator {
         sessions: [SessionStat],
         calendar: Calendar = .current,
         now: Date = .now,
+        periodOffset: Int = 0,
         topLimit: Int = 5,
         songLimit: Int = 8
     ) -> StatsSummary {
+        // An earlier period is summed up as it stood when it ended: its last moment stands in
+        // for now, so the comparison covers the whole period before it, and nothing after it
+        // counts. Later than the current period is never offered, so it's clamped.
+        let offset = range == .allTime ? 0 : min(periodOffset, 0)
+        let now = range.periodEnd(offset: offset, from: now, calendar: calendar) ?? now
         let interval = range.interval(containing: now, calendar: calendar)
         let indices = history.indices(in: interval)
         let ordered = history.captures
@@ -135,7 +143,9 @@ public enum StatsCalculator {
             heatMap: heatMap(for: inRange, calendar: calendar),
             sources: sources(for: inRange),
             streak: streak,
-            insights: insights(context),
+            // A streak and a trend against "this time last month" are about now, so an
+            // ended period leaves them to the cards that say which period they compare.
+            insights: offset == 0 ? insights(context) : insights(context).filter(\.isAboutEndedPeriod),
             uniqueAlbumCount: albumTallies.count,
             oneOffSongCount: songTallies.count { $0.count == 1 },
             deepestArtist: deepestArtist(in: artistTallies),
@@ -165,7 +175,11 @@ public enum StatsCalculator {
             knownYearPlays: genres.knownYearPlays,
             recentReleasePlays: genres.recentReleasePlays,
             medianReleaseYear: genres.medianReleaseYear,
-            oldestRelease: genres.oldest
+            oldestRelease: genres.oldest,
+            periodOffset: offset,
+            hasEarlierPeriod: interval.map { interval in
+                ordered.first.map { $0.capturedAt < interval.start } ?? false
+            } ?? false
         )
     }
 
@@ -384,8 +398,8 @@ public enum StatsCalculator {
 
     // MARK: - Tallies
 
-    /// Songs, most played first. Ties go to the most recent, then alphabetical, so the
-    /// order doesn't shuffle between renders.
+    /// Songs, most played first. Ties go to the most recent, then alphabetical, then by
+    /// identity, so the order never shuffles between renders.
     static func tallySongs(_ indices: some Sequence<Int>, in history: ListeningHistory) -> [SongTally] {
         var groups: [String: [Int]] = [:]
         for index in indices { groups[history.captures[index].songIdentity, default: []].append(index) }
@@ -411,7 +425,7 @@ public enum StatsCalculator {
                 listeningSeconds: members.reduce(0) { $0 + history.seconds[$1] }
             )
         }
-        .sorted { ($0.count, $0.lastHeard, $1.title) > ($1.count, $1.lastHeard, $0.title) }
+        .sorted { ($0.count, $0.lastHeard, $1.title, $1.id) > ($1.count, $1.lastHeard, $0.title, $0.id) }
     }
 
     /// Artists, most played first. Blank names are skipped.
@@ -440,7 +454,7 @@ public enum StatsCalculator {
                 lastHeard: captures[captures.count - 1].capturedAt
             )
         }
-        .sorted { ($0.count, $0.listeningSeconds, $1.name) > ($1.count, $1.listeningSeconds, $0.name) }
+        .sorted { ($0.count, $0.listeningSeconds, $1.name, $1.id) > ($1.count, $1.listeningSeconds, $0.name, $0.id) }
     }
 
     /// Albums, most played first. Captures without an album are skipped.
@@ -464,7 +478,7 @@ public enum StatsCalculator {
                 listeningSeconds: members.reduce(0) { $0 + history.seconds[$1] }
             )
         }
-        .sorted { ($0.count, $0.listeningSeconds, $1.title) > ($1.count, $1.listeningSeconds, $0.title) }
+        .sorted { ($0.count, $0.listeningSeconds, $1.title, $1.id) > ($1.count, $1.listeningSeconds, $0.title, $0.id) }
     }
 
     /// Most recent artwork URL that will actually load (MusicKit sometimes hands out
@@ -528,6 +542,16 @@ extension StatsRange {
     public func previousInterval(before current: DateInterval, calendar: Calendar = .current) -> DateInterval? {
         guard let component else { return nil }
         return calendar.dateInterval(of: component, for: current.start.addingTimeInterval(-1))
+    }
+
+    /// The last moment of the period `offset` periods from the one containing `date`: -1 is
+    /// last month. `nil` for the current period and for all time, which have no end yet.
+    public func periodEnd(offset: Int, from date: Date, calendar: Calendar = .current) -> Date? {
+        guard offset != 0, let component,
+              let shifted = calendar.date(byAdding: component, value: offset, to: date),
+              let period = calendar.dateInterval(of: component, for: shifted)
+        else { return nil }
+        return period.end.addingTimeInterval(-1)
     }
 
     var component: Calendar.Component? {

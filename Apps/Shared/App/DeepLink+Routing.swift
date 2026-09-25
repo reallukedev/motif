@@ -40,9 +40,16 @@ extension DeepLink {
 }
 
 extension View {
-    /// Follows `motif://` links from the widgets.
+    /// Follows `motif://` links from the widgets, and on iPhone takes in songs opened in
+    /// Motif from Files or the share sheet, into Your Music.
     func opensDeepLinks(in model: AppModel) -> some View {
         onOpenURL { url in
+            #if os(iOS)
+            if url.isFileURL {
+                model.openInYourMusic([url])
+                return
+            }
+            #endif
             DeepLink(url: url)?.open(in: model)
         }
     }

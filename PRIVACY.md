@@ -51,6 +51,20 @@ Songs that Motif has added to your "Heard on Radio" playlist stay there if you d
 
 You can withdraw Motif's access to Apple Music at any time in Settings → Privacy & Security → Media & Apple Music on iPhone, or System Settings → Privacy & Security → Media & Apple Music on Mac.
 
+## Your own music (iPhone, optional)
+
+If you choose Your Music as the music source, Motif plays audio files you put in its folder on your iPhone and songs from music servers you connect yourself, such as Navidrome.
+
+- **Your files** stay in Motif's own storage on your iPhone, where the Files app can see them as On My iPhone › Motif. Motif reads their tags and covers to show them, and doesn't send them anywhere.
+- **Your servers.** Motif connects only to the servers you add, directly from your iPhone. The address and username are stored with your settings on the device; the password is stored in the device's Keychain and is never sent: each request carries a token made from it, as the Subsonic API asks. When you play a song from a server, Motif tells that server, so it can count your plays. Server details aren't synced to iCloud.
+- **Downloads** from your servers are kept on your iPhone, left out of iCloud backup, and can be removed at any time in Motif.
+- If a server is on your home network, iOS asks your permission for Motif to reach the local network. You can change your answer in Settings → Privacy & Security → Local Network.
+
+- **Lidarr**, if you connect it, is reached directly from your iPhone with the address and API key you give. The key is stored in the device's Keychain and sent only to your Lidarr, in a request header. Motif asks Lidarr what it follows and has, and tells it which artists and albums you ask for.
+- **Suggestions** in Your Music look up songs and artists in Apple Music's catalog, as they do with Apple Music, and check each one against your files, your servers and Lidarr, all from your iPhone.
+
+Songs you play from your own music are recorded in your listening history just like Apple Music's.
+
 ## On the Mac: controlling Music
 
 On the Mac, Motif asks Music what is playing and sends it playback commands (play, pause, next, previous) from the menu bar. macOS asks for your permission the first time, and you can change your answer in System Settings → Privacy & Security → Automation.

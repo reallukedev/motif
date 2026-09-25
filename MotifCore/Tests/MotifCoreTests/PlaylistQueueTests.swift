@@ -18,7 +18,6 @@ struct PlaylistQueueTests {
         store = try MotifStore(inMemory: true)
         settings = scratch.settings
         settings.minimumListenSeconds = 0
-        settings.limitsPlaylistSize = false
     }
 
     func coordinator(resolver: (any CatalogResolving)? = nil) -> CaptureCoordinator {
@@ -385,10 +384,6 @@ final class ScriptedPlaylistWriter: PlaylistWriter, @unchecked Sendable {
         let error = lock.withLock { failure ?? ids.lazy.compactMap { self.failures[$0] }.first }
         if let error { throw error }
         lock.withLock { _written.append(contentsOf: ids) }
-    }
-
-    func trackCount(inPlaylist playlistID: String, upTo ceiling: Int?) async throws -> Int {
-        written.count
     }
 }
 

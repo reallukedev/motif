@@ -32,6 +32,11 @@
          Both apps resolve this to the same string — they share a bundle id — which is what
          lets the Mac and the iPhone see each other's settings. Without the entitlement
          NSUbiquitousKeyValueStore accepts writes and syncs nothing. -->
+    <!-- Siri's "play" requests, which Motif handles in the app. Automatic signing adds the
+         capability to the App ID. -->
+    <key>com.apple.developer.siri</key>
+    <true/>
+
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 </dict>

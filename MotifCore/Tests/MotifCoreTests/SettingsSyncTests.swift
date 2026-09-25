@@ -29,7 +29,6 @@ struct SettingsSyncTests {
     func deviceLocalSettingsAreExcluded() {
         let mirrored = Set(SyncedSetting.all.map(\.key))
         #expect(!mirrored.contains(CaptureSettings.recentlyPlayedAnchorKey))
-        #expect(!mirrored.contains(CaptureSettings.playlistTrackCountKey))
         #expect(!mirrored.contains(CaptureSettings.forceCaptureKey))
     }
 

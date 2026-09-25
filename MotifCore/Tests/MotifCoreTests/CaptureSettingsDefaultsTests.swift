@@ -48,15 +48,6 @@ struct CaptureSettingsDefaultsTests {
         #expect(settings.autoAddToPlaylist)
         #expect(settings.playlistName == "Heard on Radio")
         #expect(settings.playlistID == nil)
-        #expect(settings.playlistTrackCount == nil)
-    }
-
-    /// Apple Music can't remove a track once it's in, so without this a station left running
-    /// grows the playlist for ever.
-    @Test("the playlist is capped at 250 songs")
-    func playlistIsCapped() {
-        #expect(settings.limitsPlaylistSize)
-        #expect(settings.playlistSizeLimit == 250)
     }
 
     // MARK: - Scrobbling

@@ -6,6 +6,10 @@ public struct StatsSummary: Sendable, Equatable {
     public let generatedAt: Date
     /// `nil` for all time.
     public let interval: DateInterval?
+    /// How many periods back from the one containing now: 0 for this month, -1 for last.
+    public let periodOffset: Int
+    /// Whether anything was played before this period, so there's an earlier one to go to.
+    public let hasEarlierPeriod: Bool
 
     public let captureCount: Int
     public let uniqueSongCount: Int
@@ -137,11 +141,15 @@ public struct StatsSummary: Sendable, Equatable {
         knownYearPlays: Int = 0,
         recentReleasePlays: Int = 0,
         medianReleaseYear: Int? = nil,
-        oldestRelease: ReleaseRecord? = nil
+        oldestRelease: ReleaseRecord? = nil,
+        periodOffset: Int = 0,
+        hasEarlierPeriod: Bool = false
     ) {
         self.range = range
         self.generatedAt = generatedAt
         self.interval = interval
+        self.periodOffset = periodOffset
+        self.hasEarlierPeriod = hasEarlierPeriod
         self.captureCount = captureCount
         self.uniqueSongCount = uniqueSongCount
         self.uniqueArtistCount = uniqueArtistCount
@@ -200,6 +208,9 @@ public struct StatsSummary: Sendable, Equatable {
     }
 
     public var isEmpty: Bool { captureCount == 0 && sessionCount == 0 }
+
+    /// This week, month or year, rather than one that has already ended.
+    public var isCurrentPeriod: Bool { periodOffset == 0 }
 
     public var captureCountDelta: Int? {
         previousCaptureCount.map { captureCount - $0 }

@@ -24,20 +24,6 @@ public final class CaptureCoordinator {
     /// per station.
     private var hasAskedForStationName = false
 
-    /// Songs in the playlist as of the last count, kept so the cap doesn't cost a request on
-    /// every drain. Counted afresh when it's unknown or ``countIsStaleAfter`` has passed;
-    /// incremented in between as songs go in.
-    private var knownTrackCount: Int?
-    private var countedAt: Date?
-
-    /// How long a count stands for. Long enough that a listening session costs one or two
-    /// counts, short enough that trimming the playlist in Apple Music frees it up soon after.
-    private static let countIsStaleAfter: TimeInterval = 10 * 60
-
-    /// True when the playlist was at its limit on the last drain, so captures are being kept
-    /// without being written. Read by the probe and the tests.
-    public private(set) var playlistIsFull = false
-
     public init(
         store: MotifStore,
         settings: CaptureSettings = CaptureSettings(),
@@ -216,12 +202,6 @@ public final class CaptureCoordinator {
 
         guard let playlistID = await ensurePlaylist() else { return }
 
-        // How many will fit. Rows beyond it keep `needsPlaylistWrite`, without an attempt
-        // against them, so raising the limit or trimming the playlist lets them through.
-        var room = await roomInPlaylist(playlistID)
-        playlistIsFull = room == 0
-        guard room > 0 else { return }
-
         // A service failure not yet put down to its song. An outage and a song Apple chokes
         // on look the same from one request, so the next write decides: if it goes through,
         // the service is up and that song gets the attempt; if it fails too, it's an outage
@@ -229,10 +209,6 @@ public final class CaptureCoordinator {
         var unexplained: (id: PersistentIdentifier, message: String)?
 
         writing: for id in writable {
-            guard room > 0 else {
-                playlistIsFull = true
-                break
-            }
             // Looked up again each time: an earlier write's wait is long enough for a merge
             // to delete this row, or to fold it into one already in the playlist.
             guard let capture = liveCapture(id), capture.needsPlaylistWrite, !capture.songID.isEmpty
@@ -241,8 +217,6 @@ public final class CaptureCoordinator {
 
             do {
                 try await playlistWriter.addSongs(ids: [songID], toPlaylist: playlistID)
-                room -= 1
-                noteSongAdded()
                 writeBackoff.reset()
                 if let capture = liveCapture(id) {
                     capture.needsPlaylistWrite = false
@@ -320,12 +294,9 @@ public final class CaptureCoordinator {
         return false
     }
 
-    /// The user deleted the playlist. Its cached size belonged to it too.
+    /// The user deleted the playlist.
     private func forgetPlaylist() {
         settings.playlistID = nil
-        knownTrackCount = nil
-        countedAt = nil
-        playlistIsFull = false
     }
 
     private func chargeWriteAttempt(_ id: PersistentIdentifier, message: String) {
@@ -337,39 +308,6 @@ public final class CaptureCoordinator {
     /// The row, if it still exists. See ``MotifStore/existingCaptures(_:)``.
     private func liveCapture(_ id: PersistentIdentifier) -> Capture? {
         store.existingCaptures([id])[id]
-    }
-
-    /// How many more songs the playlist will take, or `Int.max` with the limit off.
-    ///
-    /// The count comes from Apple rather than from our own rows: someone can trim the
-    /// playlist by hand, and the other device writes into the same library playlist.
-    /// A count that fails leaves the writes alone — refusing to add because we couldn't ask
-    /// would lose songs over a flaky network.
-    private func roomInPlaylist(_ playlistID: String) async -> Int {
-        guard settings.limitsPlaylistSize else { return .max }
-        let limit = settings.playlistSizeLimit
-
-        if let knownTrackCount, let countedAt,
-           Date.now.timeIntervalSince(countedAt) < Self.countIsStaleAfter {
-            return PlaylistSizeLimit.room(existing: knownTrackCount, limit: limit)
-        }
-
-        guard let counted = try? await playlistWriter.trackCount(
-            inPlaylist: playlistID,
-            upTo: limit
-        ) else { return .max }
-
-        knownTrackCount = counted
-        countedAt = .now
-        settings.playlistTrackCount = counted
-        return PlaylistSizeLimit.room(existing: counted, limit: limit)
-    }
-
-    /// Keeps the cached count in step with what we just wrote.
-    private func noteSongAdded() {
-        guard let current = knownTrackCount else { return }
-        knownTrackCount = current + 1
-        settings.playlistTrackCount = current + 1
     }
 
     /// macOS has no catalog ID until we search for one.

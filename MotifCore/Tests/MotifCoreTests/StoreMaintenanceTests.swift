@@ -131,8 +131,9 @@ struct StoreMaintenanceTests {
 
     @Test("every container is opened on the versioned schema")
     func schemaIsVersioned() throws {
-        #expect(MotifStore.schema.version == MotifSchemaV1.versionIdentifier)
-        #expect(MotifMigrationPlan.schemas.map(ObjectIdentifier.init) == [ObjectIdentifier(MotifSchemaV1.self)])
+        #expect(MotifStore.schema.version == MotifSchemaV2.versionIdentifier)
+        #expect(MotifMigrationPlan.schemas.map(ObjectIdentifier.init)
+            == [ObjectIdentifier(MotifSchemaV1.self), ObjectIdentifier(MotifSchemaV2.self)])
         #expect(store.container.schema.entities.map(\.name).sorted()
             == ["Capture", "Session", "Station", "StatsSnapshot"])
     }

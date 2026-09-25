@@ -4,9 +4,13 @@ import MotifCore
 /// Summary on the Mac: the same cards as the iPhone, laid out as a dashboard.
 struct MacSummaryView: View {
     @Environment(AppModel.self) private var model
+    @Environment(UnexpectedQuitMonitor.self) private var quitMonitor
     @AppStorage("statsRange") private var range: StatsRange = .month
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var summary: StatsSummary?
+    /// 0 for this week, month or year; -1 for the one before. Back to 0 when the range changes.
+    @State private var periodOffset = LaunchScene.periodOffset
+    private var sources = SourceScopeSetting()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -16,6 +20,10 @@ struct MacSummaryView: View {
                         StoreWarningBanner()
                     }
 
+                    if quitMonitor.notice != nil {
+                        UnexpectedQuitNotice()
+                    }
+
                     if model.library.isLoaded, model.library.history.isEmpty {
                         WelcomeView()
                             .padding(.top, 60)
@@ -23,11 +31,7 @@ struct MacSummaryView: View {
                         // Hides itself once Apple Music access is granted.
                         MusicAccessCard()
                         if summary.captureCount == 0 {
-                            ContentUnavailableView(
-                                "Nothing Played \(Text(range.phrase))",
-                                systemImage: "waveform",
-                                description: Text("Try a longer range.")
-                            )
+                            NothingPlayedView(summary: summary)
                             .padding(.top, 60)
                         } else {
                             Dashboard(summary: summary)
@@ -53,6 +57,11 @@ struct MacSummaryView: View {
                 RangePicker(range: $range)
                     .fixedSize()
             }
+            if sources.isOffered {
+                ToolbarItem(placement: .primaryAction) {
+                    SourceScopeMenu(scope: sources.selection)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Check for Missed Songs", systemImage: "arrow.clockwise") {
                     Task { await model.capture?.catchUp() }
@@ -61,15 +70,38 @@ struct MacSummaryView: View {
                 .help("Fill in anything you played while Motif wasn't running")
             }
         }
-        .task(id: "\(range.rawValue)|\(model.library.revision)") {
-            let (range, history, sessions) = (range, model.library.history, model.library.sessions)
+        .task(id: "\(range.rawValue)|\(periodOffset)|\(sources.scope.rawValue)|\(model.library.revision)") {
+            let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
             let next = await OffMainActor.run {
-                StatsCalculator.summary(range: range, history: history, sessions: sessions, topLimit: 8)
+                StatsCalculator.summary(
+                    range: range,
+                    history: history.scoped(to: scope),
+                    sessions: scope.includesStations ? sessions : [],
+                    periodOffset: offset,
+                    topLimit: 8
+                )
             }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: summary?.range == range, reduceMotion: reduceMotion) {
+            let isLive = summary?.range == range && summary?.periodOffset == next.periodOffset
+            LiveUpdate.apply(isLive: isLive, reduceMotion: reduceMotion) {
                 summary = next
             }
+        }
+        .onChange(of: range) { periodOffset = 0 }
+        .environment(\.statsPaging, paging)
+    }
+
+    /// Steps through periods from the one on show. A step waits for the summary it asked for,
+    /// so a quick double tap can't run past the first period.
+    private var paging: StatsPeriodPaging? {
+        guard let summary, summary.range != .allTime else { return nil }
+        let isSettled = summary.periodOffset == periodOffset
+        let offset = $periodOffset
+        return StatsPeriodPaging(
+            canGoBack: isSettled && summary.hasEarlierPeriod,
+            canGoForward: isSettled && !summary.isCurrentPeriod
+        ) { step in
+            offset.wrappedValue = min(0, offset.wrappedValue + step)
         }
     }
 
@@ -107,7 +139,7 @@ private struct Dashboard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionHeader(title: "Highlights") {
                         if summary.insights.count > 3 {
-                            NavigationLink("Show All", value: Route.highlights(summary.range))
+                            NavigationLink("Show All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
                         }
                     }
                     EqualHeightRows(items: Array(summary.insights.prefix(6)), columns: 3, spacing: 14) { insight in

@@ -5,6 +5,7 @@ struct SongDetailView: View {
     let songID: String
     @Environment(AppModel.self) private var model
     @Environment(PlaybackController.self) private var playback
+    @Environment(\.playSongs) private var playSongs
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: SongProfile?
@@ -147,8 +148,11 @@ struct SongDetailView: View {
         if !song.songID.isEmpty, !model.isShowingSampleData {
             HStack(spacing: 12) {
                 Button("Play", systemImage: "play.fill") {
-                    Task {
-                        await playback.play(PlaybackItem(songID: song.songID, title: song.title, artistName: song.artistName))
+                    let item = PlaybackItem(songID: song.songID, title: song.title, artistName: song.artistName)
+                    if let playSongs {
+                        playSongs([item], title: song.title)
+                    } else {
+                        Task { await playback.play(item) }
                     }
                 }
                 .buttonStyle(.borderedProminent)

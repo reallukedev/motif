@@ -46,7 +46,7 @@ public struct DedupePolicy: Sendable, Equatable {
     /// closer together than that cannot have come from one device, and are the same play seen
     /// twice — while two further apart are two plays the importer deliberately let through.
     public func mergeWindow(earlier: CaptureKind, later: CaptureKind) -> TimeInterval {
-        later.sourceIsKnown ? window : importWindow
+        later.timeIsKnown ? window : importWindow
     }
 
     /// Whether a new observation should be recorded, given when this song was last seen.
