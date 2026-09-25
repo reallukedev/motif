@@ -12,6 +12,10 @@ struct PlaylistsPage: View {
     @State private var deleting: MotifPlaylist?
     @State private var renaming: MotifPlaylist?
     @State private var name = ""
+    @State private var query = ""
+    @Environment(PlayerModel.self) private var player
+    @Environment(PlayFeed.self) private var feed
+    @ScaledMetric(relativeTo: .body) private var newRowScaled: CGFloat = 56
 
     var body: some View {
         content
@@ -60,39 +64,63 @@ struct PlaylistsPage: View {
 
     #if os(iOS)
     private var content: some View {
-        List {
-            Section {
-                Button {
-                    makesPlaylist = true
-                } label: {
-                    newRow("New Playlist", systemImage: "plus")
-                }
-                Button {
-                    makesSmartPlaylist = true
-                } label: {
-                    newRow("New Smart Playlist", systemImage: "gearshape")
-                }
-            }
-            if music.playlists.all.isEmpty {
-                CollectionMessage(
-                    text: String(localized: "Make a playlist and add songs to it, or make a smart playlist that fills itself with the songs that fit."),
-                    systemImage: "music.note.list"
-                )
-            } else {
+        let playlists = LibrarySort.filtered(music.playlists.recent, matching: query) { LibrarySortKeys(title: $0.name) }
+        return List {
+            if query.isEmpty {
                 Section {
-                    ForEach(music.playlists.recent) { playlist in
+                    Button {
+                        makesPlaylist = true
+                    } label: {
+                        newRow("New Playlist", systemImage: "plus")
+                    }
+                    .libraryRowInsets()
+                    Button {
+                        makesSmartPlaylist = true
+                    } label: {
+                        newRow("New Smart Playlist", systemImage: "gearshape")
+                    }
+                    .libraryRowInsets()
+                } footer: {
+                    if music.playlists.all.isEmpty {
+                        Text("A smart playlist fills itself with the songs that fit its rules, and keeps up as your music changes.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                    }
+                }
+                .listSectionSeparator(.hidden, edges: .bottom)
+            }
+            if !playlists.isEmpty {
+                Section {
+                    ForEach(playlists) { playlist in
                         NavigationLink(value: PlayRoute.motifPlaylist(playlist.id)) {
                             PlaylistRow(playlist: playlist)
                         }
+                        .navigationLinkIndicatorVisibility(.hidden)
+                        .libraryRowInsets()
                         .contextMenu { menu(playlist) }
+                        .swipeActions(edge: .leading) {
+                            Button("Play", systemImage: "play.fill") { play(playlist) }
+                                .tint(.accentColor)
+                        }
                         .swipeActions(allowsFullSwipe: false) {
                             Button("Delete", systemImage: "trash", role: .destructive) { deleting = playlist }
                         }
                     }
                 }
+            } else if !query.isEmpty {
+                LibraryNoMatches(query: query)
+                    .libraryStateRow()
             }
         }
         .listStyle(.plain)
+        .searchable(text: $query, placement: .pageSearch(alwaysShown: false), prompt: "Filter Playlists")
+    }
+
+    private func play(_ playlist: MotifPlaylist) {
+        let playable = music.songs(in: playlist, facts: feed.facts).filter(music.isPlayable)
+        guard !playable.isEmpty else { return }
+        player.play(.local(playable), from: PlayContext(kind: .playlist, title: playlist.name))
     }
 
     private func newRow(_ title: LocalizedStringKey, systemImage: String) -> some View {
@@ -100,43 +128,48 @@ struct PlaylistsPage: View {
             Image(systemName: systemImage)
                 .font(.title3)
                 .foregroundStyle(.tint)
-                .frame(width: 56, height: 56)
-                .background(Color.cardFill, in: .rect(cornerRadius: CoverImage.radius(for: 56), style: .continuous))
+                .frame(width: newRowSide, height: newRowSide)
+                .background(Color.cardFill, in: .rect(cornerRadius: CoverImage.radius(for: newRowSide), style: .continuous))
                 .accessibilityHidden(true)
             Text(title)
                 .foregroundStyle(.tint)
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
     }
+
+    /// The same side as a playlist's cover beside it.
+    private var newRowSide: CGFloat { min(newRowScaled, 80) }
     #else
     private var content: some View {
         ScrollView {
-            if music.playlists.all.isEmpty {
-                CollectionMessage(
-                    text: String(localized: "Make a playlist and add songs to it, or make a smart playlist that fills itself with the songs that fit."),
-                    systemImage: "music.note.list"
-                ) {
-                    HStack(spacing: 10) {
-                        Button("New Playlist") { makesPlaylist = true }
-                            .buttonStyle(.borderedProminent)
-                        Button("New Smart Playlist") { makesSmartPlaylist = true }
+            VStack(alignment: .leading, spacing: 0) {
+                LibraryPageHeader(
+                    title: String(localized: "Playlists"),
+                    subtitle: music.playlists.all.isEmpty ? nil : String(AttributedString(localized: "^[\(music.playlists.all.count) playlist](inflect: true)").characters)
+                )
+                if music.playlists.all.isEmpty {
+                    CollectionMessage(
+                        text: String(localized: "Make a playlist and add songs to it, or make a smart playlist that fills itself with the songs that fit."),
+                        systemImage: "music.note.list"
+                    ) {
+                        HStack(spacing: 10) {
+                            Button("New Playlist") { makesPlaylist = true }
+                                .buttonStyle(.borderedProminent)
+                            Button("New Smart Playlist") { makesSmartPlaylist = true }
+                        }
+                    }
+                    .padding(.top, 60)
+                } else {
+                    LibraryGrid {
+                        ForEach(music.playlists.recent) { playlist in
+                            PlaylistTile(playlist: playlist) { menu(playlist) }
+                        }
                     }
                 }
-                .padding(.top, 80)
-            } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: PlayMetrics.tile, maximum: PlayMetrics.tile), spacing: PlayMetrics.shelfSpacing, alignment: .top)],
-                    alignment: .leading,
-                    spacing: 24
-                ) {
-                    ForEach(music.playlists.recent) { playlist in
-                        PlaylistTile(playlist: playlist)
-                            .contextMenu { menu(playlist) }
-                    }
-                }
-                .padding(PlayMetrics.margin)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.bottom, PlayMetrics.sectionSpacing)
         }
+        .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -172,6 +205,11 @@ private struct PlaylistMenu: View {
         Button("Shuffle", systemImage: "shuffle") { player.play(.local(playable), from: context, shuffled: true) }
             .disabled(playable.isEmpty)
         Divider()
+        Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: true, title: playlist.name) }
+            .disabled(playable.isEmpty)
+        Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: false, title: playlist.name) }
+            .disabled(playable.isEmpty)
+        Divider()
         Button("Rename…", systemImage: "pencil", action: rename)
         Divider()
         Button("Delete Playlist…", systemImage: "trash", role: .destructive, action: delete)
@@ -179,49 +217,60 @@ private struct PlaylistMenu: View {
 }
 
 #if os(macOS)
-/// A playlist in the Mac's grid: its cover, which opens it on a click, its name and its count.
-private struct PlaylistTile: View {
+/// A playlist in the Mac's grid, as the library's covers are: Play and More under the pointer,
+/// its name and how many songs.
+private struct PlaylistTile<Menu: View>: View {
     let playlist: MotifPlaylist
+    @ViewBuilder var menu: Menu
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
-    @State private var isHovering = false
+    @Environment(PlayerModel.self) private var player
 
     var body: some View {
         let songs = music.songs(in: playlist, facts: feed.facts)
-        NavigationLink(value: PlayRoute.motifPlaylist(playlist.id)) {
-            TileLabel(title: playlist.name, subtitle: PlaylistRow.summary(playlist, count: songs.count)) { side in
-                PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: side)
-                    .shadow(color: .black.opacity(isHovering ? 0.22 : 0.1), radius: isHovering ? 10 : 4, y: isHovering ? 5 : 2)
-                    .brightness(isHovering ? 0.03 : 0)
-            }
-        }
-        .buttonStyle(.pressable)
-        .onHover { hovering in
-            withAnimation(PlayMotion.hover) { isHovering = hovering }
+        let playable = songs.filter(music.isPlayable)
+        LibraryCoverTile(
+            title: playlist.name,
+            subtitle: PlaylistRow.summary(playlist, count: songs.count),
+            route: .motifPlaylist(playlist.id),
+            play: playable.isEmpty ? nil : { player.play(.local(playable), from: PlayContext(kind: .playlist, title: playlist.name)) }
+        ) { side in
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    GeometryReader { proxy in
+                        PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: side ?? proxy.size.width)
+                    }
+                }
+        } menu: {
+            menu
         }
     }
 }
 #endif
 
-/// A playlist in a list: its cover, name, and how many songs.
+/// A playlist in a list, as Music lists them: its cover, its name, and how many songs.
 struct PlaylistRow: View {
     let playlist: MotifPlaylist
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
+    @ScaledMetric(relativeTo: .body) private var side: CGFloat = 56
 
     var body: some View {
         let songs = music.songs(in: playlist, facts: feed.facts)
         HStack(spacing: 12) {
-            PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: 56)
+            PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: min(side, 80))
             VStack(alignment: .leading, spacing: 2) {
                 Text(playlist.name)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(Self.summary(playlist, count: songs.count))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
+        .accessibilityElement(children: .combine)
     }
 
     /// "12 songs", or "Smart Playlist · 12 songs".
@@ -468,7 +517,9 @@ struct MotifPlaylistPage: View {
                 plays: feed.facts[pair.1.identity]?.plays ?? 0,
                 duration: pair.1.duration ?? 0,
                 isCurrent: player.current?.local?.id == pair.1.id,
-                isPlayable: music.isPlayable(pair.1)
+                isPlayable: music.isPlayable(pair.1),
+                // Each song's own cover, as Apple Music's playlists show them.
+                artwork: .url(music.artworkURL(pair.1.artwork)?.absoluteString, seed: pair.1.album ?? pair.1.title)
             )
         }
         let track = { (id: String) in zip(ids, songs).first { $0.0 == id }?.1 }

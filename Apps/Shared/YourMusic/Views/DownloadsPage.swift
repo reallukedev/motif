@@ -36,39 +36,7 @@ private struct DownloadsList: View {
         let active = downloads.progress.keys.sorted().compactMap { id in music.index.track(id: id).map { ($0, downloads.progress[id] ?? 0) } }
         let failed = downloads.failures.keys.sorted().compactMap { id in music.index.track(id: id).map { ($0, downloads.failures[id] ?? "") } }
         List {
-            if !songs.isEmpty || music.fileBytes > 0 {
-                Section {
-                    StorageBar(downloads: stats.bytes, files: music.fileBytes, free: freeBytes)
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                } header: {
-                    Text("Storage")
-                }
-            }
-
-            if !songs.isEmpty {
-                Section("Your Downloads") {
-                    statsGrid(stats)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                    let top = DownloadReport.mostPlayed(songs, facts: feed.facts)
-                    if !top.isEmpty {
-                        DisclosureGroup("Most Played") {
-                            ForEach(top) { song in
-                                songRow(song, in: top.map(\.track))
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Toggle("Automatic Downloads", isOn: $automaticDownloads)
-                Toggle("Download over Cellular", isOn: $allowsCellular)
-            } footer: {
-                Text(allowsCellular
-                    ? "With Automatic Downloads, songs you play or add from your servers come down to this iPhone. Downloads are the original files, so FLAC stays lossless, and they don't count against iCloud backup."
-                    : "Downloads wait for Wi-Fi, and start by themselves when you're back on it. With Automatic Downloads, songs you play or add from your servers come down to this iPhone as the original files.")
-            }
-
+            // What's under way first: it's what you come to check.
             if !active.isEmpty {
                 Section("Downloading") {
                     ForEach(active, id: \.0.id) { track, progress in
@@ -80,6 +48,7 @@ private struct DownloadsList: View {
                                     .tint(.accentColor)
                             }
                         }
+                        .accessibilityElement(children: .combine)
                         .swipeActions {
                             Button("Stop", systemImage: "xmark", role: .destructive) { downloads.cancel([track.id]) }
                         }
@@ -106,26 +75,25 @@ private struct DownloadsList: View {
                 }
             }
 
-            if !unplayed.isEmpty {
-                Section {
-                    Button {
-                        confirmsFreeingUp = true
-                    } label: {
-                        LabeledContent {
-                            Text(LocalFormat.bytes(unplayed.map(\.bytes).reduce(0, +)))
-                        } label: {
-                            Label("Free Up Space", systemImage: "leaf")
-                        }
-                    }
-                } footer: {
-                    Text("Removes the ^[\(unplayed.count) song](inflect: true) you haven't played in three months. They stay on your servers, to download again whenever you like.")
-                }
-            }
-
+            // The music, as the library's pages have it: Play and Shuffle, then the albums or
+            // songs in the order chosen.
             if !songs.isEmpty {
+                let sorted = DownloadReport.sorted(songs, by: order, facts: feed.facts)
+                Section {
+                    let context = PlayContext(kind: .songs, title: String(localized: "Downloads"))
+                    let all = sorted.map(\.track)
+                    LibraryPlayButtons {
+                        player.play(.local(all), from: context)
+                    } shuffle: {
+                        player.play(.local(all), from: context, shuffled: true)
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                }
+
                 Section {
                     if showsSongs {
-                        let sorted = DownloadReport.sorted(songs, by: order, facts: feed.facts)
                         ForEach(sorted) { song in
                             songRow(song, in: sorted.map(\.track))
                         }
@@ -158,7 +126,47 @@ private struct DownloadsList: View {
                     }
                     .textCase(nil)
                 }
+            }
 
+            // Looking after the room they take, below the music.
+            if !songs.isEmpty || music.fileBytes > 0 {
+                Section {
+                    StorageBar(downloads: stats.bytes, files: music.fileBytes, free: freeBytes)
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    if !songs.isEmpty {
+                        statsGrid(stats)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    }
+                    if !unplayed.isEmpty {
+                        Button {
+                            confirmsFreeingUp = true
+                        } label: {
+                            LabeledContent {
+                                Text(LocalFormat.bytes(unplayed.map(\.bytes).reduce(0, +)))
+                            } label: {
+                                Label("Free Up Space", systemImage: "leaf")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Storage")
+                } footer: {
+                    if !unplayed.isEmpty {
+                        Text("Free Up Space removes the ^[\(unplayed.count) song](inflect: true) you haven't played in three months. They stay on your servers, to download again whenever you like.")
+                    }
+                }
+            }
+
+            Section {
+                Toggle("Automatic Downloads", isOn: $automaticDownloads)
+                Toggle("Download over Cellular", isOn: $allowsCellular)
+            } footer: {
+                Text(allowsCellular
+                    ? "With Automatic Downloads, songs you play or add from your servers come down to this iPhone. Downloads are the original files, so FLAC stays lossless, and they don't count against iCloud backup."
+                    : "Downloads wait for Wi-Fi, and start by themselves when you're back on it. With Automatic Downloads, songs you play or add from your servers come down to this iPhone as the original files.")
+            }
+
+            if !songs.isEmpty {
                 Section {
                     Button("Remove All Downloads", role: .destructive) { confirmsRemoveAll = true }
                 }
@@ -171,16 +179,13 @@ private struct DownloadsList: View {
                 ContentUnavailableView(
                     "Nothing Downloaded",
                     systemImage: "arrow.down.circle",
-                    description: Text("Songs you play from your servers download here with Automatic Downloads, to play anywhere, even with no connection.")
+                    description: Text(automaticDownloads
+                        ? "Songs you play from your servers download here by themselves, to play anywhere, even with no connection."
+                        : "Download an album or song from its menu to play it anywhere, even with no connection.")
                 )
             }
         }
         .navigationTitle("Downloads")
-        .toolbar {
-            if !songs.isEmpty {
-                ToolbarItem(placement: .primaryAction) { ShuffleDownloadsButton() }
-            }
-        }
         .onChange(of: allowsCellular) { music.downloads.cellularSettingChanged() }
         .task(id: downloads.items.count) { freeBytes = await Self.freeSpace() }
         .confirmationDialog("Remove All Downloads?", isPresented: $confirmsRemoveAll, titleVisibility: .visible) {
@@ -252,14 +257,19 @@ private struct DownloadsList: View {
             HStack(spacing: 12) {
                 LocalCover(artwork: album.artwork, seed: album.title, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(album.title).lineLimit(1)
+                    Text(album.displayTitle).lineLimit(1)
                     Text(album.artist).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                     Text("^[\(album.tracks.count) song](inflect: true) · \(LocalFormat.bytes(bytes(of: album)))")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             }
+            .accessibilityElement(children: .combine)
         }
+        .navigationLinkIndicatorVisibility(.hidden)
+        .libraryRowInsets()
         .swipeActions {
             Button("Remove", systemImage: "trash", role: .destructive) {
                 music.downloads.remove(Set(album.tracks.map(\.id)))

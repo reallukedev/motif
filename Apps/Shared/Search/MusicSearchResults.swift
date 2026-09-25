@@ -13,6 +13,7 @@ struct MusicSearchResults: View {
     @Environment(AppModel.self) private var model
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
+    @Environment(\.openPlayRoute) private var openRoute
     @State private var results = Results()
     @State private var state: LoadState = .idle
     @AppStorage("recentMusicSearches") private var recentStorage = ""
@@ -59,58 +60,12 @@ struct MusicSearchResults: View {
     @ViewBuilder
     private var blank: some View {
         if !recents.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Recently Searched")
-                        .font(.title3.bold())
-                    Spacer()
-                    Button("Clear") { withAnimation(.snappy) { recentStorage = "" } }
-                        .buttonStyle(.plain)
-                        .font(.subheadline)
-                        .foregroundStyle(.tint)
-                }
-                .padding(.horizontal, PlayMetrics.margin)
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(recents, id: \.self) { recent in
-                            Button {
-                                search(recent)
-                            } label: {
-                                Label(recent, systemImage: "clock.arrow.circlepath")
-                                    .font(.subheadline.weight(.medium))
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 34)
-                                    .background(.quaternary, in: .capsule)
-                                    .contentShape(.capsule)
-                            }
-                            .buttonStyle(.pressable)
-                        }
-                    }
-                }
-                .contentMargins(.horizontal, PlayMetrics.margin, for: .scrollContent)
-                .scrollIndicators(.hidden)
-            }
+            RecentSearchesSection(recents: recents, clear: { recentStorage = "" }, search: search)
         }
         if scope == .appleMusic, model.musicAuthorization == .authorized {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Browse by Mood")
-                    .font(.title3.bold())
-                    .accessibilityAddTraits(.isHeader)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.moodTile), spacing: 12)], spacing: 12) {
-                    ForEach(Mood.allCases) { mood in
-                        MoodTile(mood: mood, height: 84, fillsWidth: true)
-                    }
-                }
-            }
-            .padding(.horizontal, PlayMetrics.margin)
+            BrowseByMoodSection()
         }
     }
-
-    #if os(macOS)
-    private static let moodTile: CGFloat = 170
-    #else
-    private static let moodTile: CGFloat = 150
-    #endif
 
     // MARK: - Results
 
@@ -131,6 +86,37 @@ struct MusicSearchResults: View {
         case artist(Artist), album(Album), song(Song)
     }
 
+    /// The top result as the card shows it.
+    private func card(for result: TopResult) -> SearchTopResult {
+        switch result {
+        case .artist(let artist):
+            SearchTopResult(
+                title: artist.name,
+                kind: String(localized: "Artist"),
+                cover: artist.artwork.map(CoverArt.artwork),
+                isArtist: true,
+                open: { remember(); openRoute(.artist(artist)) },
+                play: { remember(); Task { await ArtistPlayback.playTopSongs(of: artist, player: player) } }
+            )
+        case .album(let album):
+            SearchTopResult(
+                title: CollectionKind.of(album).title,
+                kind: String(localized: "Album · \(album.artistName)"),
+                cover: album.artwork.map(CoverArt.artwork) ?? .url(nil, seed: album.title),
+                open: { remember(); openRoute(.album(album)) },
+                play: { remember(); player.play(.album(album), from: PlayContext(kind: .album, title: album.title)) }
+            )
+        case .song(let song):
+            SearchTopResult(
+                title: song.title,
+                kind: String(localized: "Song · \(song.artistName)"),
+                cover: song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title),
+                open: { remember(); player.play(.songs([song]), from: .songs(String(localized: "Search"))) },
+                play: { remember(); player.play(.songs([song]), from: .songs(String(localized: "Search"))) }
+            )
+        }
+    }
+
     @ViewBuilder
     private var resultSections: some View {
         let top = topResult
@@ -140,14 +126,14 @@ struct MusicSearchResults: View {
         HStack(alignment: .top, spacing: 28) {
             if let top {
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("Top Result")
-                    TopResultCard(result: top, remember: remember)
+                    SearchSectionTitle("Top Result")
+                    TopResultCard(result: card(for: top))
                 }
                 .frame(width: 340)
             }
             if !songs.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("Songs")
+                    SearchSectionTitle("Songs")
                     songRows(Array(songs.prefix(4)), all: songs)
                 }
                 .frame(maxWidth: .infinity)
@@ -162,14 +148,14 @@ struct MusicSearchResults: View {
         #else
         if let top {
             VStack(alignment: .leading, spacing: 10) {
-                sectionTitle("Top Result")
-                TopResultCard(result: top, remember: remember)
+                SearchSectionTitle("Top Result")
+                TopResultCard(result: card(for: top))
             }
             .padding(.horizontal, PlayMetrics.margin)
         }
         if !songs.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                sectionTitle("Songs")
+                SearchSectionTitle("Songs")
                 songRows(songs, all: songs)
             }
             .padding(.horizontal, PlayMetrics.margin)
@@ -212,42 +198,28 @@ struct MusicSearchResults: View {
         }
     }
 
-    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
-        Text(title)
-            .font(.title3.bold())
-            .accessibilityAddTraits(.isHeader)
-    }
-
     /// Songs in rows, two columns of them on the Mac.
     private func songRows(_ shown: [Song], all: [Song]) -> some View {
-        LazyVGrid(columns: Self.songColumns, alignment: .leading, spacing: 0) {
-            ForEach(shown) { song in
-                Button {
-                    remember()
-                    // The song, then the rest of the results, as playing from any list does.
-                    player.play(.songs(all, startingAt: all.firstIndex(of: song) ?? 0), from: .songs(String(localized: "Search")))
-                } label: {
-                    TrackRow(
-                        title: song.title,
-                        subtitle: [song.artistName, song.albumTitle].compactMap(\.self).joined(separator: " · "),
-                        cover: song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.title),
-                        isExplicit: song.isExplicit,
-                        isCurrent: player.current?.songIdentity == HistoryImport.key(title: song.title, artistName: song.artistName)
-                    )
-                    .padding(.vertical, 5)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .contextMenu { SongMenu(song: song) }
+        SearchSongGrid(items: shown) { song in
+            Button {
+                remember()
+                // The song, then the rest of the results, as playing from any list does.
+                player.play(.songs(all, startingAt: all.firstIndex(of: song) ?? 0), from: .songs(String(localized: "Search")))
+            } label: {
+                TrackRow(
+                    title: song.title,
+                    subtitle: [song.artistName, song.albumTitle].compactMap(\.self).joined(separator: " · "),
+                    cover: song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.title),
+                    isExplicit: song.isExplicit,
+                    isCurrent: player.current?.songIdentity == HistoryImport.key(title: song.title, artistName: song.artistName)
+                )
+                .padding(.vertical, 5)
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            .contextMenu { SongMenu(song: song) }
         }
     }
-
-    #if os(macOS)
-    private static let songColumns = [GridItem(.flexible(), spacing: 28), GridItem(.flexible())]
-    #else
-    private static let songColumns = [GridItem(.flexible())]
-    #endif
 
     @ViewBuilder
     private var overlay: some View {
@@ -354,15 +326,12 @@ struct MusicSearchResults: View {
     // MARK: - Recent searches
 
     private var recents: [String] {
-        recentStorage.split(separator: "\n").map(String.init)
+        RecentSearches.list(recentStorage)
     }
 
     /// Keeps the query once someone acts on a result, newest first, eight at most.
     private func remember() {
-        let term = query.trimmingCharacters(in: .whitespaces)
-        guard !term.isEmpty else { return }
-        let kept = [term] + recents.filter { $0.caseInsensitiveCompare(term) != .orderedSame }
-        recentStorage = kept.prefix(8).joined(separator: "\n")
+        recentStorage = RecentSearches.adding(query, to: recentStorage)
     }
 }
 
@@ -376,106 +345,5 @@ private struct SearchKey: Equatable {
 private extension Optional where Wrapped == MusicSearchResults.TopResult {
     var isArtist: Bool {
         if case .artist = self { true } else { false }
-    }
-}
-
-/// The best match, large: its picture, what it is, and Play, as Music's Top Result is.
-private struct TopResultCard: View {
-    let result: MusicSearchResults.TopResult
-    let remember: () -> Void
-    @Environment(PlayerModel.self) private var player
-    @Environment(\.openPlayRoute) private var openRoute
-    @State private var tint: Color?
-
-    var body: some View {
-        Button(action: open) {
-            VStack(alignment: .leading, spacing: 14) {
-                CoverImage(cover: cover, size: 112, isCircle: isArtist)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.title2.bold())
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Text(kind)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.75))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
-            .background {
-                CoverStage(tint: tint, deepens: true)
-                    .clipShape(.rect(cornerRadius: 18, style: .continuous))
-            }
-            .overlay(alignment: .bottomTrailing) {
-                Button(action: play) {
-                    Image(systemName: "play.fill")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.black)
-                        .frame(width: 48, height: 48)
-                        .background(.white, in: .circle)
-                        .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
-                }
-                .buttonStyle(.pressable)
-                .padding(16)
-                .accessibilityLabel("Play \(title)")
-            }
-            .contentShape(.rect(cornerRadius: 18))
-        }
-        .buttonStyle(.pressable)
-        .coverTint(of: cover, into: $tint)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var isArtist: Bool {
-        if case .artist = result { true } else { false }
-    }
-
-    private var cover: CoverArt {
-        switch result {
-        case .artist(let artist): artist.artwork.map(CoverArt.artwork) ?? .url(nil, seed: artist.name)
-        case .album(let album): album.artwork.map(CoverArt.artwork) ?? .url(nil, seed: album.title)
-        case .song(let song): song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title)
-        }
-    }
-
-    private var title: String {
-        switch result {
-        case .artist(let artist): artist.name
-        case .album(let album): CollectionKind.of(album).title
-        case .song(let song): song.title
-        }
-    }
-
-    private var kind: String {
-        switch result {
-        case .artist: String(localized: "Artist")
-        case .album(let album): String(localized: "Album · \(album.artistName)")
-        case .song(let song): String(localized: "Song · \(song.artistName)")
-        }
-    }
-
-    private func open() {
-        remember()
-        switch result {
-        case .artist(let artist): openRoute(.artist(artist))
-        case .album(let album): openRoute(.album(album))
-        case .song: play()
-        }
-    }
-
-    private func play() {
-        remember()
-        switch result {
-        case .artist(let artist):
-            Task { await ArtistPlayback.playTopSongs(of: artist, player: player) }
-        case .album(let album):
-            player.play(.album(album), from: PlayContext(kind: .album, title: album.title))
-        case .song(let song):
-            player.play(.songs([song]), from: .songs(String(localized: "Search")))
-        }
     }
 }

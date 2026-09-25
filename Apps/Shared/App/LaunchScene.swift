@@ -136,6 +136,27 @@ extension LaunchScene {
             show(.mood(mood), in: model)
             return
         }
+        // `-MotifAlbum "night ferry"` or `-MotifArtist "umbra"`: one of yours, by the start of its name.
+        if let name = value("MotifAlbum").map(StatsCalculator.folded), !hasOpenedMix,
+           let album = model.yourMusic.index.albums.first(where: { StatsCalculator.folded($0.title).hasPrefix(name) }) {
+            hasOpenedMix = true
+            // `-MotifDownloadAlbum YES`: and download it, to see downloads come down.
+            if value("MotifDownloadAlbum") == "YES" {
+                model.yourMusic.downloads.download(album.tracks.filter(\.isFromServer))
+            }
+            if let page = value("MotifPage"), page == "downloads" {
+                show(.yourMusic(.downloads), in: model)
+            } else {
+                show(.localAlbum(album.id), in: model)
+            }
+            return
+        }
+        if let name = value("MotifArtist").map(StatsCalculator.folded), !hasOpenedMix,
+           let artist = model.yourMusic.index.artists.first(where: { $0.id.hasPrefix(name) }) {
+            hasOpenedMix = true
+            show(.localArtist(artist.id), in: model)
+            return
+        }
         if let page = value("MotifPage"), !hasOpenedMix {
             let parts = page.split(separator: ".").map(String.init)
             let route: PlayRoute? = switch parts.first {
@@ -146,6 +167,8 @@ extension LaunchScene {
             case "yourAlbums": .yourMusic(.albums)
             case "yourArtists": .yourMusic(.artists)
             case "downloads": .yourMusic(.downloads)
+            case "yourPlaylists": .yourMusic(.playlists)
+            case "recentlyAdded": .yourMusic(.recentlyAdded)
             case "lidarr": .lidarr
             case "localAlbum": model.yourMusic.index.recentlyAdded.first.map { .localAlbum($0.id) }
             case "localArtist": model.yourMusic.index.artists.first.map { .localArtist($0.id) }
@@ -186,3 +209,38 @@ extension LaunchScene {
         }
     }
 }
+
+#if DEBUG
+import SwiftUI
+
+extension View {
+    /// `-MotifScrollBy 900`: scrolls the page that far down once it's drawn, for screenshots of
+    /// what's below the fold. Debug builds only.
+    func launchScroll() -> some View {
+        modifier(LaunchScroll())
+    }
+}
+
+private struct LaunchScroll: ViewModifier {
+    @State private var position = ScrollPosition(edge: .top)
+
+    func body(content: Content) -> some View {
+        if let offset = UserDefaults.standard.string(forKey: "MotifScrollBy").flatMap(Double.init) {
+            content
+                .scrollPosition($position)
+                .task {
+                    try? await Task.sleep(for: .seconds(UserDefaults.standard.string(forKey: "MotifScrollDelay").flatMap(Double.init) ?? 4))
+                    position.scrollTo(y: offset)
+                }
+        } else {
+            content
+        }
+    }
+}
+#else
+import SwiftUI
+
+extension View {
+    func launchScroll() -> some View { self }
+}
+#endif

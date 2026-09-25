@@ -19,6 +19,9 @@ final class MusicServers {
     private(set) var status: [String: Status] = [:]
     /// Every song on each server, as of its last sync.
     private(set) var catalogs: [String: [LocalTrack]] = [:]
+    /// Each server's artists, by folded name: their id there, for artists like them, and their
+    /// picture's cover id, for artist pages and circles. A server not asked yet isn't here.
+    private(set) var artists: [String: [String: ServerArtistRef]] = [:]
     private(set) var syncing: Set<String> = []
     private(set) var lastSynced: [String: Date] = [:]
     /// Servers not told when a song plays from them. Everyone else's are, so the server's own
@@ -55,13 +58,41 @@ final class MusicServers {
            let saved = try? JSONDecoder().decode([SubsonicServer].self, from: data) {
             servers = saved
         }
+        #if DEBUG
+        let test = addTestServer()
+        #endif
         for server in servers {
             if let password = ServerKeychain.password(for: server.id) {
                 clients[server.id] = SubsonicClient(server: server, password: password)
             }
             catalogs[server.id] = Self.loadCatalog(server.id)
+            artists[server.id] = Self.loadArtists(server.id)
         }
+        #if DEBUG
+        // An unsigned build has no keychain.
+        if let test { clients[test.server.id] = SubsonicClient(server: test.server, password: test.password) }
+        #endif
     }
+
+    #if DEBUG
+    /// `-MotifTestServer "http://127.0.0.1:4533|user|password|Name"`: connects a test server at
+    /// launch, for UI checks against a local server without typing into the form.
+    private func addTestServer() -> (server: SubsonicServer, password: String)? {
+        guard let value = UserDefaults.standard.string(forKey: "MotifTestServer") else { return nil }
+        let parts = value.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 3, let url = URL(string: parts[0]) else { return nil }
+        let id = "test-server"
+        let server = SubsonicServer(id: id, name: parts.count > 3 ? parts[3] : "Test Server", url: url, username: parts[1], salt: "testsalt")
+        ServerKeychain.setPassword(parts[2], for: id)
+        if let index = servers.firstIndex(where: { $0.id == id }) {
+            servers[index] = server
+        } else {
+            servers.append(server)
+        }
+        save()
+        return (server, parts[2])
+    }
+    #endif
 
     func client(for serverID: String) -> SubsonicClient? { clients[serverID] }
 
@@ -106,6 +137,8 @@ final class MusicServers {
         setReportsPlays(true, to: serverID)
         ServerKeychain.removePassword(for: serverID)
         try? FileManager.default.removeItem(at: Self.catalogURL(serverID))
+        try? FileManager.default.removeItem(at: Self.artistsURL(serverID))
+        artists[serverID] = nil
         save()
     }
 
@@ -131,6 +164,9 @@ final class MusicServers {
             if catalogs[serverID]?.isEmpty != false || kept[serverID]?.isEmpty == false
                 || Date.now.timeIntervalSince(synced ?? .distantPast) > 24 * 60 * 60 {
                 await sync(serverID)
+            } else if artists[serverID] == nil {
+                // Synced before its artists were kept.
+                await syncArtists(serverID)
             }
         } catch SubsonicError.wrongCredentials {
             status[serverID] = .wrongPassword
@@ -186,13 +222,17 @@ final class MusicServers {
         guard clients[serverID] != nil else { return }
         let now = Date.now
         let tracks = songs.map { song in
-            // On a first sync there's no telling when songs arrived; the server's order stands.
-            song.track(on: serverID, addedAt: known[LocalTrack.id(for: .server(serverID: serverID, songID: song.id))] ?? (isFirstSync ? .distantPast : now))
+            // When the server added it, where it says, so Recently Added is the server's own
+            // from the first sync. Otherwise when this sync first saw it; on a first sync
+            // there's no telling, and the server's order stands.
+            song.track(on: serverID, addedAt: song.createdDate ?? known[LocalTrack.id(for: .server(serverID: serverID, songID: song.id))] ?? (isFirstSync ? .distantPast : now))
         }
         catalogs[serverID] = tracks
         lastSynced[serverID] = now
         Self.saveCatalog(tracks, serverID)
         settleKept(serverID, synced: tracks)
+        // Its artists' pictures after the songs are safe.
+        await syncArtists(serverID)
     }
 
     // MARK: - Searching and keeping
@@ -361,6 +401,29 @@ final class MusicServers {
         return (try? JSONDecoder().decode([String: ServerKeeps].self, from: data)) ?? [:]
     }
 
+    /// Asks a server for its artists, for their pictures and ids. One request, however many.
+    private func syncArtists(_ serverID: String) async {
+        guard let client = clients[serverID], let found = try? await client.artists() else { return }
+        var refs: [String: ServerArtistRef] = [:]
+        for artist in found {
+            refs[StatsCalculator.folded(artist.name)] = ServerArtistRef(id: artist.id, cover: artist.coverArt.flatMap { $0.isEmpty ? nil : $0 })
+        }
+        guard clients[serverID] != nil else { return }
+        artists[serverID] = refs
+        if let data = try? JSONEncoder().encode(refs) {
+            try? data.write(to: Self.artistsURL(serverID), options: .atomic)
+        }
+    }
+
+    private static func artistsURL(_ serverID: String) -> URL {
+        LibraryFolders.index.appending(path: "server-\(serverID)-artists.json")
+    }
+
+    private static func loadArtists(_ serverID: String) -> [String: ServerArtistRef]? {
+        guard let data = try? Data(contentsOf: artistsURL(serverID)) else { return nil }
+        return try? JSONDecoder().decode([String: ServerArtistRef].self, from: data)
+    }
+
     private static func catalogURL(_ serverID: String) -> URL {
         LibraryFolders.index.appending(path: "server-\(serverID).json")
     }
@@ -387,6 +450,12 @@ final class MusicServers {
         catalogs[server.id] = tracks
     }
     #endif
+}
+
+/// An artist as a server knows them: their id there, and their picture's cover id if it has one.
+nonisolated struct ServerArtistRef: Codable, Sendable, Hashable {
+    let id: String
+    let cover: String?
 }
 
 /// A page of a search of your servers, and where each server's next one starts.

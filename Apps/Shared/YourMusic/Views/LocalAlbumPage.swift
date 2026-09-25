@@ -109,31 +109,44 @@ struct LocalAlbumContent: View {
                 header(playable: playable, context: context)
             }
 
-            Section {
-                ForEach(album.tracks.enumerated(), id: \.element.id) { position, track in
-                    Button {
-                        play(track, in: playable, context: context)
-                    } label: {
-                        TrackRow(
-                            title: track.title,
-                            subtitle: showsArtist(of: track) ? track.artist : nil,
-                            number: track.trackNumber ?? position + 1,
-                            plays: feed.facts[track.identity]?.plays,
-                            isCurrent: player.current?.local?.id == track.id,
-                            localTrack: track,
-                            isPlayable: music.isPlayable(track)
-                        )
+            // One section per disc, headed as Music heads them, when there's more than one.
+            let discs = album.discs
+            ForEach(discs, id: \.number) { disc in
+                Section {
+                    ForEach(disc.tracks.enumerated(), id: \.element.id) { position, track in
+                        Button {
+                            play(track, in: playable, context: context)
+                        } label: {
+                            TrackRow(
+                                title: track.title,
+                                subtitle: showsArtist(of: track) ? track.artist : nil,
+                                number: track.trackNumber ?? position + 1,
+                                isCurrent: player.current?.local?.id == track.id,
+                                localTrack: track,
+                                isPlayable: music.isPlayable(track)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!music.isPlayable(track))
+                        .trackMenu { LocalTrackMenu(track: track, showsStats: true, onDelete: { deleting = $0 }) }
+                        .collectionRowInsets(hasCover: false)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!music.isPlayable(track))
-                    .trackMenu { LocalTrackMenu(track: track, showsStats: true, onDelete: { deleting = $0 }) }
-                    .listRowInsets(EdgeInsets(top: 0, leading: PlayMetrics.margin, bottom: 0, trailing: 6))
+                } header: {
+                    if discs.count > 1 {
+                        Text("Disc \(disc.number)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: 12, leading: PlayMetrics.margin, bottom: 4, trailing: PlayMetrics.margin))
+                    }
+                } footer: {
+                    if disc.number == discs.last?.number {
+                        CollectionFooter(lines: footerLines)
+                    }
                 }
-            } footer: {
-                CollectionFooter(lines: footerLines)
             }
         }
-        .collectionPage(title: album.title)
+        .collectionPage(title: album.displayTitle)
         #if DEBUG
         // Screenshots reach a playlist through an album of yours, which a launch can open.
         .task { CollectionDemo.seedPlaylists(music: music, isDemo: model.isDemoLaunch, open: openPlayRoute) }
@@ -218,14 +231,19 @@ struct LocalAlbumContent: View {
     }
 
     private func header(playable: [LocalTrack], context: PlayContext) -> some View {
-        let history = CollectionHistory.summary(songIdentities: album.tracks.map(\.identity), facts: feed.facts)
         let cover = CoverArt.url(music.artworkURL(album.artwork)?.absoluteString, seed: album.title)
+        #if os(iOS)
+        let kindName: String? = album.kind == .album ? nil : album.kind.name
+        #else
+        let kindName: String? = nil
+        #endif
         return CollectionHeader(
-            kind: .album,
-            title: album.title,
+            kind: album.kind.collectionKind,
+            title: album.displayTitle,
             subtitle: album.artist,
             onSubtitle: { openPlayRoute(.localArtist(StatsCalculator.folded(album.artist))) },
             facts: CollectionFacts.line([
+                kindName,
                 album.genre,
                 album.year.map { Format.year($0) },
                 CollectionFacts.length(count: album.tracks.count, seconds: album.duration),
@@ -244,7 +262,8 @@ struct LocalAlbumContent: View {
 
     @ViewBuilder
     private var moreItems: some View {
-        LocalAlbumMenu(album: album)
+        // Play and Shuffle are the header's.
+        LocalAlbumMenu(album: album, showsPlay: false)
         Divider()
         Button("Go to Artist", systemImage: "music.microphone") {
             openPlayRoute(.localArtist(StatsCalculator.folded(album.artist)))

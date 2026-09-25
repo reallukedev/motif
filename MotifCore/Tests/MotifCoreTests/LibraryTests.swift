@@ -168,6 +168,21 @@ struct SubsonicTests {
         #expect(albums[0].year == 2019)
     }
 
+    @Test("a song's added date is read however the server writes it", arguments: [
+        ("2024-03-01T18:22:10.000Z", true),
+        ("2024-03-01T18:22:10Z", true),
+        ("2024-03-01T18:22:10", true),
+        ("last tuesday", false),
+    ])
+    func created(text: String, isRead: Bool) {
+        var song = SubsonicSong(id: "s1", title: "Night Drive")
+        song.created = text
+        #expect((song.createdDate != nil) == isRead)
+        if isRead {
+            #expect(song.createdDate.map { Calendar(identifier: .gregorian).dateComponents(in: .gmt, from: $0).day } == 1)
+        }
+    }
+
     @Test("an album's songs become your own, on that server, with their format")
     func albumSongs() async throws {
         let client = SubsonicClient(server: server, password: "x", transport: StubTransport(body: """
@@ -278,6 +293,32 @@ struct LocalLibraryTests {
         #expect(LocalLibraryIndex(tracks: [track("One"), guest]).albums.count == 1)
     }
 
+    @Test("a song with a featured artist stays on its album, unless its tags say otherwise")
+    func featured() {
+        let index = LocalLibraryIndex(tracks: [
+            track("One", artist: "Umbra", album: "Eclipse"),
+            track("Two", artist: "Umbra feat. Yuki Tanabe", album: "Eclipse"),
+            track("Three", artist: "Umbra (Feat. Mara Solis)", album: "Eclipse"),
+            track("Four", artist: "Umbra ft. Nova Harbor", album: "Eclipse"),
+        ])
+        #expect(index.albums.count == 1)
+        #expect(index.albums[0].artist == "Umbra")
+        #expect(index.artists.map(\.name) == ["Umbra"])
+        // The song keeps its own artist for the history.
+        #expect(index.albums[0].tracks.contains { $0.artist == "Umbra feat. Yuki Tanabe" })
+        #expect(LocalTrack.leadArtist(of: "Featherweight") == "Featherweight")
+        #expect(LocalTrack.leadArtist(of: "Crosby, Stills & Nash") == "Crosby, Stills & Nash")
+    }
+
+    @Test("a song credits each artist on it by their whole name")
+    func credits() {
+        #expect(LocalTrack.creditedArtists(of: "Umbra feat. Yuki Tanabe & Mara Solis").isSuperset(of: ["umbra", "yuki tanabe", "mara solis"]))
+        #expect(LocalTrack.creditedArtists(of: "Nova Harbor (feat. Air)").contains("air"))
+        #expect(!LocalTrack.creditedArtists(of: "Blair").contains("air"))
+        // A band with "&" in its name is still found whole.
+        #expect(LocalTrack.creditedArtists(of: "Fern & Fable").contains("fern & fable"))
+    }
+
     @Test("a history song is found by id, then by name, a file before a server's copy")
     func matching() {
         let file = track("Night Drive")
@@ -369,5 +410,89 @@ struct PushedNowPlayingSourceTests {
         for await observation in stream { titles.append(observation.title) }
         #expect(titles == ["First", "Second"])
         #expect(source.current?.title == "Second")
+    }
+}
+
+@Suite("Your library, searched and arranged")
+struct LocalLibraryArrangementTests {
+    func track(_ title: String, artist: String = "Mara Solis", album: String? = "Coastlines", number: Int? = nil, disc: Int? = nil, duration: TimeInterval? = 200) -> LocalTrack {
+        LocalTrack(
+            origin: .file(path: "\(artist)/\(album ?? "")/\(title).flac"),
+            title: title,
+            artist: artist,
+            album: album,
+            trackNumber: number,
+            discNumber: disc,
+            duration: duration
+        )
+    }
+
+    @Test("the best matches come first: the same name, then one starting with it, then a word")
+    func ranking() {
+        let index = LocalLibraryIndex(tracks: [
+            track("Afterglow Harbor"),
+            track("Harbor"),
+            track("Northern Harbor Lights"),
+            track("Harbored"),
+            track("Tides", artist: "Harbor Lights", album: "Night Ferry"),
+        ])
+        #expect(index.search("harbor").tracks.map(\.title) == ["Harbor", "Harbored", "Afterglow Harbor", "Northern Harbor Lights", "Tides"])
+    }
+
+    @Test("an artist named just what was typed comes before one that merely starts with it")
+    func artistRanking() {
+        let index = LocalLibraryIndex(tracks: [track("One", artist: "Umbra Collective"), track("Two", artist: "Umbra")])
+        #expect(index.search("umbra").artists.map(\.name) == ["Umbra", "Umbra Collective"])
+    }
+
+    @Test("albums and artists are found by their id")
+    func lookups() {
+        let index = LocalLibraryIndex(tracks: [track("One"), track("Two", artist: "Nova Harbor", album: "Tides")])
+        let album = index.albums.first { $0.title == "Tides" }
+        #expect(album != nil)
+        #expect(index.album(id: album?.id ?? "") == album)
+        #expect(index.artist(id: "nova harbor")?.name == "Nova Harbor")
+        #expect(index.album(id: "nothing") == nil)
+    }
+
+    @Test("a multi-disc album is split into its discs, in order")
+    func discs() {
+        let index = LocalLibraryIndex(tracks: [
+            track("C", number: 1, disc: 2), track("B", number: 2, disc: 1), track("A", number: 1, disc: 1), track("D", number: 2, disc: 2),
+        ])
+        let discs = index.albums[0].discs
+        #expect(discs.map(\.number) == [1, 2])
+        #expect(discs.map { $0.tracks.map(\.title) } == [["A", "B"], ["C", "D"]])
+        #expect(LocalLibraryIndex(tracks: [track("Only")]).albums[0].discs.map(\.number) == [1])
+    }
+
+    @Test("a short release is a single or an EP, by its title or its length", arguments: [
+        (["One"], 200.0, "Coastlines", LocalAlbum.Kind.single),
+        (["One", "Two", "Three", "Four", "Five"], 200.0, "Coastlines", .ep),
+        (["One", "Two", "Three", "Four", "Five", "Six", "Seven"], 200.0, "Coastlines", .album),
+        (["One", "Two"], 1000.0, "Coastlines", .album),
+        (["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"], 200.0, "Coastlines - EP", .ep),
+        (["One"], 200.0, "Coastlines - Single", .single),
+    ])
+    func kinds(titles: [String], duration: Double, album: String, kind: LocalAlbum.Kind) {
+        let index = LocalLibraryIndex(tracks: titles.map { track($0, album: album, duration: duration) })
+        #expect(index.albums[0].kind == kind)
+        #expect(index.albums[0].displayTitle == "Coastlines")
+    }
+
+    @Test("an artist appears on others' albums they're credited on, by whole name")
+    func appearsOn() {
+        let index = LocalLibraryIndex(tracks: [
+            track("One", artist: "Air", album: "Moon"),
+            track("Two", artist: "Blair", album: "Dusk"),
+            track("Three", artist: "Nova Harbor feat. Air", album: "Tides"),
+        ])
+        #expect(index.albums(appearingOn: "air").map(\.title) == ["Tides"])
+    }
+
+    @Test("a release whose songs have no lengths is taken for an album")
+    func unknownLengths() {
+        let index = LocalLibraryIndex(tracks: [track("One", duration: nil)])
+        #expect(index.albums[0].kind == .album)
     }
 }

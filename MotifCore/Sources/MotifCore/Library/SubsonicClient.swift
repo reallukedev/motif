@@ -302,6 +302,18 @@ public struct SubsonicSong: Codable, Sendable, Hashable, Identifiable {
     public var displayAlbumArtist: String?
     /// Octo: a song it found for you rather than one in the library.
     public var isExternal: Bool?
+    /// When the server added the song, as ISO 8601: "2024-03-01T18:22:10.000Z".
+    public var created: String?
+
+    /// When the server added the song, where it says.
+    public var createdDate: Date? {
+        guard let created else { return nil }
+        if let date = try? Date(created, strategy: .iso8601) { return date }
+        // Without fractional seconds, or without a zone, as some servers send it.
+        let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        if let date = try? Date(created, strategy: withFraction) { return date }
+        return try? Date(created + "Z", strategy: .iso8601)
+    }
 
     public init(id: String, title: String, artist: String? = nil, album: String? = nil, albumId: String? = nil, track: Int? = nil, duration: Int? = nil, suffix: String? = nil, coverArt: String? = nil) {
         self._id = Lenient(wrappedValue: id)

@@ -336,7 +336,13 @@ struct MoodView: View {
                 .clipped()
                 // Into the page at its foot, rather than stopping at an edge.
                 .mask {
-                    LinearGradient(stops: [.init(color: .black, location: 0.85), .init(color: .black.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
+                    // A fade of fixed length at the foot, below the words, however tall the
+                    // field is.
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 44)
+                    }
                 }
                 // Up under the bar and into any pull past the top.
                 .padding(.top, -400)

@@ -86,6 +86,12 @@ final class ServerDiscovery {
     /// How often each server may be asked to go on: a few at once, then one every few
     /// seconds, however fast the shelves are scrolled.
     @ObservationIgnored private var budgets: [String: RequestBudget] = [:]
+    /// Songs by an artist gone on from that the slower search found after the quick one, per
+    /// server, with the artists the picks started from: they join the waiting lists when either
+    /// shelf next goes on, unless the picks have been made again since.
+    @ObservationIgnored private var lateFinds: [String: [(from: [String], artist: String, songs: [SubsonicSong])]] = [:]
+    /// The slower searches still going, per server, oldest first.
+    @ObservationIgnored private var lateSearches: [String: [(id: UUID, task: Task<Void, Never>)]] = [:]
     /// What the last load was told, for going on later: whether you've heard a song, and
     /// whether you know an artist.
     @ObservationIgnored private var heard: @MainActor (String) -> Bool = { _ in false }
@@ -192,10 +198,12 @@ final class ServerDiscovery {
                 fresh.isFilling = true
                 forYou[serverID] = fresh
             }
-            // Enough for each shelf's first columns, from as few artists as that takes.
-            for shelf in [Shelf.picks, .suggested] {
+            // Enough for each shelf's first columns, from as few artists as that takes. A column
+            // at a time, each shelf in turn, Suggested Songs first as it leads the page: an
+            // artist's songs go to both shelves, and neither waits while the other asks for more.
+            for shelf in [Shelf.suggested, .picks, .suggested, .picks] {
                 guard !Task.isCancelled else { break }
-                fresh = await goOn(from: fresh, for: shelf, serverID: serverID, publishing: !replaces)
+                fresh = await goOn(from: fresh, for: shelf, serverID: serverID, publishing: !replaces, want: SuggestionShelfPaging.rowsPerColumn)
             }
             fresh.isFilling = false
             forYou[serverID] = fresh
@@ -242,8 +250,20 @@ final class ServerDiscovery {
         // Going on from at most two artists a call, so songs without covers can't keep it asking.
         var goneOn = 0
         while shown < want, !Task.isCancelled {
+            for find in lateFinds.removeValue(forKey: serverID) ?? [] where find.from == feed.from {
+                add(find.songs, from: find.artist, includingYours: false, to: &feed, serverID: serverID)
+            }
             let waiting = shelf == .picks ? feed.waitingPicks : feed.waitingOthers
             guard let next = waiting.first else {
+                // With no artist to go on from, or none the budget allows yet, a slower search
+                // still going brings songs sooner: its songs join the lists as it ends.
+                if let oldest = lateSearches[serverID]?.first {
+                    let budgetSpent = await budget(for: serverID).timeUntilNext > 0
+                    if budgetSpent || feed.queue.isEmpty || goneOn >= 2 {
+                        await oldest.task.value
+                        continue
+                    }
+                }
                 guard goneOn < 2, !feed.queue.isEmpty else { break }
                 feed = await findMore(feed, serverID: serverID)
                 goneOn += 1
@@ -271,8 +291,7 @@ final class ServerDiscovery {
     private func findMore(_ start: ForYou, serverID: String) async -> ForYou {
         var feed = start
         guard let client = music.servers.client(for: serverID) else { return feed }
-        let budget = budgets[serverID] ?? RequestBudget(capacity: 3, interval: 8)
-        budgets[serverID] = budget
+        let budget = budget(for: serverID)
         // The next artist not yet gone on from.
         var artist: String?
         while artist == nil, !feed.queue.isEmpty {
@@ -282,12 +301,20 @@ final class ServerDiscovery {
         guard let artist, (try? await budget.wait()) != nil else { return feed }
         feed.asked.append(StatsCalculator.folded(artist))
 
-        let found = await songs(startingFrom: artist, serverID: serverID, client: client)
+        let found = await songs(startingFrom: artist, for: feed.from, serverID: serverID, client: client)
+        add(found, from: artist, includingYours: true, to: &feed, serverID: serverID)
+        return feed
+    }
+
+    /// Adds songs found going on from an artist to the waiting lists, leaving out ones you've
+    /// heard or that are there already, and queues the new artists among them.
+    /// - Parameter includingYours: add a few of the artist's songs you have and haven't heard
+    ///   too, so what you have comes up with what's new.
+    private func add(_ found: [SubsonicSong], from artist: String, includingYours: Bool, to feed: inout ForYou, serverID: String) {
         var seen = Set((feed.songs + feed.suggested + feed.further + feed.waitingPicks + feed.waitingOthers).map(\.identity))
         let candidates = found.map { track(from: $0, serverID: serverID) }
             .filter { !heard($0.identity) && seen.insert($0.identity).inserted }
-        // Theirs you already have and haven't heard, so what you have comes up with what's new.
-        let yours = music.index.tracks
+        let yours = !includingYours ? [] : music.index.tracks
             .filter { StatsCalculator.folded($0.artist) == StatsCalculator.folded(artist) && !heard($0.identity) && seen.insert($0.identity).inserted }
             .prefix(3)
         // New artists to go on from later.
@@ -312,7 +339,13 @@ final class ServerDiscovery {
         }
         feed.waitingPicks += ServerMix.blend(owned: picks.owned, new: picks.new)
         feed.waitingOthers += FreshShuffle.order(discovered, artist: \.artistKey, seed: FreshShuffle.dailySeed(for: .now, salt: "for-you-\(artist)"))
-        return feed
+    }
+
+    private func budget(for serverID: String) -> RequestBudget {
+        if let budget = budgets[serverID] { return budget }
+        let budget = RequestBudget(capacity: 3, interval: 8)
+        budgets[serverID] = budget
+        return budget
     }
 
     /// How long picks stand before they're made again on their own.
@@ -335,12 +368,32 @@ final class ServerDiscovery {
     }
 
     /// A few of an artist's own songs, then songs like the first: the server's search finds
-    /// the artist, shared with the suggestions looked for on it, and its similar songs, which a
-    /// server like Octo gets from Last.fm, go on from there.
-    private func songs(startingFrom artist: String, serverID: String, client: SubsonicClient) async -> [SubsonicSong] {
-        guard let found = await music.serverSongs(on: serverID, matching: artist, count: YourMusic.artistSongCount) else { return [] }
+    /// the artist, and its similar songs, which a server like Octo gets from Last.fm, go on
+    /// from there.
+    /// - Parameter from: the artists the picks started from, so songs found after this returns
+    ///   go to the picks they were found for.
+    private func songs(startingFrom artist: String, for from: [String], serverID: String, client: SubsonicClient) async -> [SubsonicSong] {
         let key = StatsCalculator.folded(artist)
-        let theirs = found.filter { StatsCalculator.folded($0.artist ?? "") == key }
+        let isTheirs = { (song: SubsonicSong) in StatsCalculator.folded(song.artist ?? "") == key }
+        // The library's matches first, which Octo answers at once; asked for more, it spends
+        // seconds finding songs elsewhere. With the artist in the library, that search goes on
+        // while these show, and its songs follow them; without, it's waited for.
+        var found = await music.serverSongs(on: serverID, matching: artist, count: MusicServers.quickSearchSize) ?? []
+        if found.contains(where: isTheirs) {
+            let id = UUID()
+            let search = Task { [weak self, music] in
+                let more = await music.serverSongs(on: serverID, matching: artist, count: YourMusic.artistSongCount)
+                guard let self else { return }
+                lateSearches[serverID]?.removeAll { $0.id == id }
+                guard let more else { return }
+                lateFinds[serverID, default: []].append((from, artist, Array(more.filter(isTheirs).prefix(4))))
+            }
+            lateSearches[serverID, default: []].append((id, search))
+        } else {
+            guard let more = await music.serverSongs(on: serverID, matching: artist, count: YourMusic.artistSongCount) else { return [] }
+            found = more
+        }
+        let theirs = found.filter(isTheirs)
         guard let start = theirs.first ?? found.first else { return [] }
         let like = (try? await music.servers.lookups.run { try await client.similarSongs(to: start.id, count: 15) }) ?? []
         return Array(theirs.prefix(4)) + like

@@ -3,7 +3,7 @@ import MotifCore
 
 /// The lists of everything in your music, each a page of its own.
 enum YourMusicList: String, Hashable, CaseIterable, Identifiable {
-    case playlists, songs, albums, artists, downloads
+    case playlists, songs, albums, artists, downloads, recentlyAdded
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum YourMusicList: String, Hashable, CaseIterable, Identifiable {
         case .albums: "Albums"
         case .artists: "Artists"
         case .downloads: "Downloads"
+        case .recentlyAdded: "Recently Added"
         }
     }
 
@@ -24,6 +25,7 @@ enum YourMusicList: String, Hashable, CaseIterable, Identifiable {
         case .albums: "square.stack"
         case .artists: "music.microphone"
         case .downloads: "arrow.down.circle"
+        case .recentlyAdded: "clock"
         }
     }
 
@@ -35,6 +37,7 @@ enum YourMusicList: String, Hashable, CaseIterable, Identifiable {
         case .albums: LocalAlbumsPage()
         case .artists: LocalArtistsPage()
         case .downloads: DownloadsPage()
+        case .recentlyAdded: LocalRecentlyAddedPage()
         }
     }
 }
@@ -102,11 +105,13 @@ struct FormatBadge: View {
 /// An album of yours on a shelf or in a grid.
 struct LocalAlbumTile: View {
     let album: LocalAlbum
+    /// What's under the title: its artist, unless given.
+    var subtitle: String?
     var side: CGFloat?
 
     var body: some View {
         NavigationLink(value: PlayRoute.localAlbum(album.id)) {
-            TileLabel(title: album.title, subtitle: album.artist) { tileSide in
+            TileLabel(title: album.displayTitle, subtitle: subtitle ?? album.artist) { tileSide in
                 LocalCover(artwork: album.artwork, seed: album.title, size: side ?? tileSide)
             }
             .frame(width: side)
@@ -116,80 +121,25 @@ struct LocalAlbumTile: View {
     }
 }
 
-/// A song of yours in a list: cover or number, title, artist, whether it's here to play
-/// offline, and your plays.
+/// A song of yours in a list, as Apple Music's songs are: ``TrackRow`` with its cover, from
+/// your files or its server, and its download coming down.
 struct LocalTrackRow: View {
     let track: LocalTrack
-    var number: Int?
-    var showsCover = true
-    var showsArtist = true
     var isCurrent = false
 
     @Environment(YourMusic.self) private var music
-    @Environment(PlayFeed.self) private var feed
-    @Environment(PlayerModel.self) private var player
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .body) private var coverSide: CGFloat = 48
 
     var body: some View {
         let isPlayable = music.isPlayable(track)
-        let plays = feed.facts[track.identity]?.plays ?? 0
-        HStack(spacing: 12) {
-            if showsCover {
-                LocalCover(artwork: track.artwork, seed: track.album ?? track.title, size: min(coverSide, 72))
-                    .overlay {
-                        if isCurrent {
-                            RoundedRectangle(cornerRadius: CoverImage.radius(for: min(coverSide, 72)), style: .continuous)
-                                .fill(.black.opacity(0.4))
-                            playingGlyph.foregroundStyle(.white)
-                        }
-                    }
-            } else if let number {
-                Group {
-                    if isCurrent {
-                        playingGlyph.foregroundStyle(.tint)
-                    } else {
-                        Text(number, format: .number)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                .frame(width: 28)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                    .lineLimit(1)
-                if showsArtist {
-                    Text(track.artist)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-            Spacer(minLength: 8)
-            DownloadStateIcon(track: track)
-            if plays > 0 {
-                Text(PlayCountText.short(plays))
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(PlayCountText.spoken(plays))
-            }
-        }
-        .frame(minHeight: 44)
-        .opacity(isPlayable ? 1 : 0.4)
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
+        TrackRow(
+            title: track.title,
+            subtitle: track.artist,
+            cover: .url(music.artworkURL(track.artwork)?.absoluteString, seed: track.album ?? track.title),
+            isCurrent: isCurrent,
+            localTrack: track,
+            isPlayable: isPlayable
+        )
         .accessibilityHint(isPlayable ? "" : String(localized: "Not downloaded, and its server can't be reached"))
-    }
-
-    private var playingGlyph: some View {
-        Image(systemName: "waveform")
-            .font(.subheadline.weight(.semibold))
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
-            .accessibilityLabel("Now Playing")
     }
 }
 
@@ -336,15 +286,19 @@ struct LocalTrackMenu: View {
 /// What can be done with an album of yours from a long press.
 struct LocalAlbumMenu: View {
     let album: LocalAlbum
+    /// Play and Shuffle, left out where the page has its own.
+    var showsPlay = true
     @Environment(YourMusic.self) private var music
     @Environment(PlayerModel.self) private var player
 
     var body: some View {
         let playable = album.tracks.filter(music.isPlayable)
         if !playable.isEmpty {
-            Button("Play", systemImage: "play") { player.play(.local(playable), from: PlayContext(kind: .album, title: album.title)) }
-            Button("Shuffle", systemImage: "shuffle") { player.play(.local(playable), from: PlayContext(kind: .album, title: album.title), shuffled: true) }
-            Divider()
+            if showsPlay {
+                Button("Play", systemImage: "play") { player.play(.local(playable), from: PlayContext(kind: .album, title: album.title)) }
+                Button("Shuffle", systemImage: "shuffle") { player.play(.local(playable), from: PlayContext(kind: .album, title: album.title), shuffled: true) }
+                Divider()
+            }
             Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: true, title: album.title) }
             Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: false, title: album.title) }
         }
@@ -361,6 +315,35 @@ struct LocalAlbumMenu: View {
         Button("Add to Playlist…", systemImage: "text.badge.plus") {
             music.playlists.picking = PlaylistPick(tracks: album.tracks)
         }
+    }
+}
+
+/// What can be done with an artist of yours from a long press: play or queue everything of
+/// theirs, download it, and the artist menu's own.
+struct LocalArtistMenu: View {
+    let artist: LocalArtist
+    @Environment(YourMusic.self) private var music
+    @Environment(PlayerModel.self) private var player
+
+    var body: some View {
+        let playable = artist.tracks.filter(music.isPlayable)
+        let context = PlayContext(kind: .artist, title: artist.name)
+        if !playable.isEmpty {
+            Button("Shuffle", systemImage: "shuffle") { player.play(.local(playable), from: context, shuffled: true) }
+            Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: true, title: artist.name) }
+            Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { player.enqueue(.local(playable), next: false, title: artist.name) }
+        }
+        let server = artist.tracks.filter(\.isFromServer)
+        if !server.isEmpty {
+            Divider()
+            if server.allSatisfy({ music.downloads.isDownloaded($0.id) }) {
+                Button("Remove Downloads", systemImage: "trash") { music.downloads.remove(Set(server.map(\.id))) }
+            } else {
+                Button("Download All", systemImage: "arrow.down.circle") { music.downloads.download(server) }
+            }
+        }
+        Divider()
+        LibraryArtistMenu(name: artist.name)
     }
 }
 

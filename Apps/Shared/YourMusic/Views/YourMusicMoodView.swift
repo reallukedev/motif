@@ -94,7 +94,7 @@ struct YourMusicMoodView: View {
         .foregroundStyle(.white)
         .padding(.horizontal, PlayMetrics.margin)
         .padding(.top, 12)
-        .padding(.bottom, 28)
+        .padding(.bottom, 36)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             MoodField(mood: mood)
@@ -107,6 +107,16 @@ struct YourMusicMoodView: View {
                         .accessibilityHidden(true)
                 }
                 .clipped()
+                // Into the page at its foot, as Apple Music's mood pages do.
+                .mask {
+                    // A fade of fixed length at the foot, below the words, however tall the
+                    // field is.
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 44)
+                    }
+                }
                 // Up under the bar and into any pull past the top.
                 .padding(.top, -400)
         }
@@ -129,14 +139,8 @@ struct YourMusicMoodView: View {
                                 .padding(.vertical, 4)
                         }
                         .buttonStyle(.plain)
-                        if track.isFromServer, !music.isInYourMusic(track), !music.servers.isWaitingToKeep(track) {
-                            Button("Add to Your Music", systemImage: "plus.circle") {
-                                Task { player.confirm(await music.keep(track)) }
-                            }
-                            .labelStyle(.iconOnly)
-                            .font(.title3)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
+                        if track.isFromServer, !music.isInYourMusic(track) {
+                            AddFoundSongButton(track: track)
                         }
                     }
                     .contextMenu { LocalTrackMenu(track: track) }
@@ -181,9 +185,16 @@ struct YourMusicMoodView: View {
         guard !hasLoaded else { return }
         let (tracks, history, signals, mood) = (music.playableTracks, model.library.history, player.signals, mood)
         let mix = await OffMainActor.run { LiveMix.mood(mood, from: tracks, history: history, signals: signals, seed: 1) }
-        yours = mix.candidates
-            .sorted { $0.song.plays == $1.song.plays ? $0.song.title < $1.song.title : $0.song.plays > $1.song.plays }
-            .compactMap { music.index.track(id: $0.song.songID) }
+        // The ones you play most first; the rest in a fresh order each day, artists spread
+        // out, rather than by name.
+        let candidates = mix.candidates.compactMap { candidate in music.index.track(id: candidate.song.songID).map { (track: $0, plays: candidate.song.plays) } }
+        let mostPlayed = candidates.filter { $0.plays > 0 }.sorted { $0.plays > $1.plays }.map(\.track)
+        let unplayed = FreshShuffle.order(
+            candidates.filter { $0.plays == 0 }.map(\.track),
+            artist: \.artistKey,
+            seed: FreshShuffle.dailySeed(for: .now, salt: "mood-\(mood.rawValue)")
+        )
+        yours = mostPlayed + unplayed
         hasLoaded = true
         guard suggestionMode == .everything else { return }
         // Songs that suit it to find more like: yours you play most, then ones you've played

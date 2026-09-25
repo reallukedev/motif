@@ -89,15 +89,7 @@ struct ServerExploring: View {
                             .padding(.vertical, 4)
                     }
                     .buttonStyle(.plain)
-                    if track.isFromServer, !music.isInYourMusic(track), !music.servers.isWaitingToKeep(track) {
-                        Button("Add to Your Music", systemImage: "plus.circle") {
-                            Task { player.confirm(await music.keep(track)) }
-                        }
-                        .labelStyle(.iconOnly)
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
-                    }
+                    AddFoundSongButton(track: track)
                 }
                 .contextMenu { LocalTrackMenu(track: track, showsStats: true) }
                 Divider().padding(.leading, 60)

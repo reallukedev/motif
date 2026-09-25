@@ -21,6 +21,21 @@ enum SearchScope: String, CaseIterable, Identifiable {
         case .history: Text("Songs, Artists and Albums")
         }
     }
+
+    /// The title where the library is your own music rather than Apple Music's.
+    func title(for source: MusicSource) -> LocalizedStringKey {
+        self == .library && source == .yourMusic ? "Your Music" : title
+    }
+
+    func prompt(for source: MusicSource) -> Text {
+        self == .library && source == .yourMusic ? Text("Songs, Albums and Artists") : prompt
+    }
+
+    /// The scopes Play offers: Apple Music's catalog isn't one when your own music is what
+    /// plays.
+    static func scopes(for source: MusicSource) -> [SearchScope] {
+        source == .yourMusic ? [.library, .history] : allCases
+    }
 }
 
 /// Puts the cursor in the window's search field, in the scope given: on the Mac, where search

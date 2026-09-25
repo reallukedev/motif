@@ -60,7 +60,7 @@ struct MacSearchResults: View {
             case .history:
                 SearchResultsList(query: query)
             case .library where model.musicSource == .yourMusic:
-                YourMusicSearchResults(query: query)
+                YourMusicSearchResults(query: query, search: search)
             case .library:
                 LibrarySearchResults(query: query)
             case .appleMusic:
@@ -68,17 +68,27 @@ struct MacSearchResults: View {
             }
         }
         .navigationTitle("Search")
+        // Apple Music's catalog isn't a scope when your own music plays.
+        .onAppear { keepScope() }
+        .onChange(of: model.musicSource) { keepScope() }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Search In", selection: $scope) {
-                    ForEach(SearchScope.allCases) { scope in
-                        Text(scope.title).tag(scope)
+                    ForEach(SearchScope.scopes(for: model.musicSource)) { scope in
+                        Text(scope.title(for: model.musicSource)).tag(scope)
                     }
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
             }
         }
+    }
+}
+
+private extension MacSearchResults {
+    func keepScope() {
+        let scopes = SearchScope.scopes(for: model.musicSource)
+        if !scopes.contains(scope) { scope = scopes[0] }
     }
 }
 

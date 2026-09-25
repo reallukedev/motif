@@ -59,6 +59,7 @@ struct ArtistScaffold<Sections: View, More: View>: View {
                 .padding(.bottom, PlayMetrics.sectionSpacing)
             }
         }
+        .launchScroll()
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .top)
         // The picture meets the top edge clean; the bar's edge comes back once it's scrolled by.

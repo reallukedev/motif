@@ -135,6 +135,37 @@ final class YourMusic {
         }
     }
 
+    /// An artist's picture: their server's, where one of your servers has it, otherwise the
+    /// cover of one of their albums. Nil draws their initials.
+    func artistPicture(for artist: LocalArtist) -> CoverArt? {
+        artistPicture(named: artist.name) ?? artworkURL(artist.artwork).map { .url($0.absoluteString, seed: artist.name) }
+    }
+
+    /// An artist on a server that isn't in your music: the picture that server has.
+    func artistPicture(for artist: ServerArtist) -> CoverArt? {
+        artistPicture(named: artist.name) ?? artworkURL(artist.artwork).map { .url($0.absoluteString, seed: artist.name) }
+    }
+
+    /// The picture one of your servers has of an artist, by name.
+    func artistPicture(named name: String) -> CoverArt? {
+        let key = StatsCalculator.folded(name)
+        for server in servers.servers {
+            guard let cover = servers.artists[server.id]?[key]?.cover,
+                  let url = servers.client(for: server.id)?.coverArtURL(id: cover, size: 600) else { continue }
+            return .url(url.absoluteString, seed: name)
+        }
+        return nil
+    }
+
+    /// An artist of yours as one of your servers knows them, online, to ask it about them.
+    func serverArtist(named name: String) -> (serverID: String, artistID: String)? {
+        let key = StatsCalculator.folded(name)
+        for server in servers.onlineServers {
+            if let ref = servers.artists[server.id]?[key] { return (server.id, ref.id) }
+        }
+        return nil
+    }
+
     /// The song in your music a history song stands for, if it's here and can play.
     func track(for song: HistorySong) -> LocalTrack? {
         let identity = HistoryImport.key(title: song.title, artistName: song.artistName)

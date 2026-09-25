@@ -1,8 +1,9 @@
 import SwiftUI
 import MotifCore
 
-/// An artist in your music: the songs of theirs you play most, their newest album, and every
-/// album of theirs you have.
+/// An artist in your music, laid out as Apple Music's artist pages are: their top songs,
+/// newest release, albums, singles and EPs, the albums they appear on, and artists like them
+/// from your server.
 struct LocalArtistPage: View {
     let artistID: String
     @Environment(YourMusic.self) private var music
@@ -10,6 +11,16 @@ struct LocalArtistPage: View {
     @Environment(PlayFeed.self) private var feed
     @Environment(PlayerModel.self) private var player
     @Environment(\.openPlayRoute) private var openPlayRoute
+    /// What their server says about them, once asked.
+    @State private var fromServer = FromServer()
+    /// Albums by others they're on, worked out when the library changes.
+    @State private var appearsOn: [LocalAlbum] = []
+
+    struct FromServer {
+        /// Their songs of yours in the order the server ranks them, most popular first.
+        var topSongs: [LocalTrack] = []
+        var similar: [SimilarArtist] = []
+    }
 
     var body: some View {
         if let artist = music.index.artist(id: artistID) {
@@ -19,7 +30,11 @@ struct LocalArtistPage: View {
             ArtistScaffold(
                 name: artist.name,
                 picture: picture(of: artist),
-                play: playable.isEmpty ? nil : { player.play(.local(top.isEmpty ? playable : top.filter(music.isPlayable)), from: context) },
+                play: playable.isEmpty ? nil : {
+                    // Their top songs, or everything that can play when none of those can.
+                    let top = top.songs.filter(music.isPlayable)
+                    player.play(.local(top.isEmpty ? playable : top), from: context)
+                },
                 shuffle: playable.isEmpty ? nil : { player.play(.local(playable), from: context, shuffled: true) },
                 showsYourTopSongs: false
             ) {
@@ -34,10 +49,11 @@ struct LocalArtistPage: View {
                     }
                 }
             } sections: {
-                songs(top.isEmpty ? Array(artist.tracks) : top, areYours: !top.isEmpty, artist: artist.name, context: context)
+                songs(top.songs, title: top.title, artist: artist.name, context: context)
+                let (albums, singles) = releases(of: artist)
                 if artist.albums.count > 1, let latest = latestAlbum(of: artist) {
                     ArtistLatestRelease(
-                        title: latest.title,
+                        title: latest.displayTitle,
                         cover: cover(of: latest),
                         detail: detail(of: latest),
                         route: .localAlbum(latest.id)
@@ -45,9 +61,33 @@ struct LocalArtistPage: View {
                         LocalAlbumMenu(album: latest)
                     }
                 }
-                Shelf(title: String(localized: "Albums"), items: newestFirst(artist.albums)) { album in
-                    LocalAlbumShelfTile(album: album)
+                if !albums.isEmpty {
+                    Shelf(title: String(localized: "Albums"), items: albums) { album in
+                        LocalAlbumShelfTile(album: album, showsYear: true)
+                    }
                 }
+                if !singles.isEmpty {
+                    Shelf(title: String(localized: "Singles & EPs"), items: singles) { album in
+                        LocalAlbumShelfTile(album: album, showsYear: true)
+                    }
+                }
+                if !appearsOn.isEmpty {
+                    Shelf(title: String(localized: "Appears On"), items: appearsOn) { album in
+                        LocalAlbumShelfTile(album: album)
+                    }
+                }
+                if !fromServer.similar.isEmpty {
+                    Shelf(title: String(localized: "Similar Artists"), items: fromServer.similar) { other in
+                        SimilarArtistTile(artist: other)
+                    }
+                }
+            }
+            .task(id: "\(artist.id).\(music.index.tracks.count)") {
+                let (index, id) = (music.index, artist.id)
+                appearsOn = await Task.detached(priority: .userInitiated) { index.albums(appearingOn: id) }.value
+            }
+            .task(id: "\(artist.id).\(music.servers.onlineServers.count)") {
+                await loadFromServer(artist)
             }
         } else {
             ScrollView {
@@ -65,11 +105,21 @@ struct LocalArtistPage: View {
         }
     }
 
-    /// Their songs: the ones you play most, or all of them in album order before you've
-    /// played any.
-    private func songs(_ tracks: [LocalTrack], areYours: Bool, artist: String, context: PlayContext) -> some View {
+    /// Their songs: the ones you play most; before you've played any, the ones their server
+    /// ranks highest; failing that, all of them in album order.
+    private func topSongs(of artist: LocalArtist) -> (title: String, songs: [LocalTrack]) {
+        let yours = artist.tracks
+            .map { ($0, feed.facts[$0.identity]?.plays ?? 0) }
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+        if !yours.isEmpty { return (String(localized: "Your Top Songs"), yours) }
+        if !fromServer.topSongs.isEmpty { return (String(localized: "Top Songs"), fromServer.topSongs) }
+        return (String(localized: "Songs"), artist.tracks)
+    }
+
+    private func songs(_ tracks: [LocalTrack], title: String, artist: String, context: PlayContext) -> some View {
         let visible = Array(tracks.prefix(ArtistSongsSection<EmptyView, EmptyView>.visibleRows))
-        let title = areYours ? String(localized: "Your Top Songs") : String(localized: "Songs")
         return ArtistSongsSection(title: title, showsSeeAll: tracks.count > visible.count) {
             ArtistSongListPage(title: title, artist: artist) {
                 ForEach(tracks) { track in songRow(track, in: tracks, context: context) }
@@ -91,15 +141,17 @@ struct LocalArtistPage: View {
                 cover: .url(music.artworkURL(track.artwork)?.absoluteString, seed: track.album ?? track.title),
                 plays: feed.facts[track.identity]?.plays,
                 isCurrent: player.current?.local?.id == track.id,
+                localTrack: track,
                 isPlayable: music.isPlayable(track)
             )
         }
         .buttonStyle(.plain)
+        .disabled(!music.isPlayable(track))
         .contextMenu { LocalTrackMenu(track: track, showsStats: true) }
     }
 
     private func picture(of artist: LocalArtist) -> CoverArt? {
-        let picture = music.artworkURL(artist.artwork).map { CoverArt.url($0.absoluteString, seed: artist.name) }
+        let picture = music.artistPicture(for: artist)
         #if DEBUG
         if picture == nil, LibraryLaunch.drawsSamplePictures { return .url("sample", seed: artist.name) }
         #endif
@@ -110,10 +162,10 @@ struct LocalArtistPage: View {
         .url(music.artworkURL(album.artwork)?.absoluteString, seed: album.title)
     }
 
-    /// "Album · 2024 · 12 songs".
+    /// "2024 · Album · 12 songs".
     private func detail(of album: LocalAlbum) -> String {
         let songs = String(AttributedString(localized: "^[\(album.tracks.count) song](inflect: true)").characters)
-        return [album.year.map(String.init), songs].compactMap(\.self).joined(separator: " · ")
+        return [album.year.map(String.init), album.kind.name, songs].compactMap(\.self).joined(separator: " · ")
     }
 
     /// The newest album that has a year; none when no album says when it came out.
@@ -121,29 +173,87 @@ struct LocalArtistPage: View {
         artist.albums.filter { $0.year != nil }.max { ($0.year ?? 0, $0.addedAt) < ($1.year ?? 0, $1.addedAt) }
     }
 
-    private func newestFirst(_ albums: [LocalAlbum]) -> [LocalAlbum] {
-        albums.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+    /// Their albums, and their singles and EPs apart, each newest first.
+    private func releases(of artist: LocalArtist) -> (albums: [LocalAlbum], singles: [LocalAlbum]) {
+        let newest = artist.albums.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+        let singles = newest.filter { $0.kind != .album }
+        // An artist with only singles has them as their albums, rather than an empty shelf.
+        guard singles.count < newest.count else { return (newest, []) }
+        return (newest.filter { $0.kind == .album }, singles)
     }
 
-    /// The artist's songs you've played most; none if you haven't played any.
-    private func topSongs(of artist: LocalArtist) -> [LocalTrack] {
-        artist.tracks
-            .map { ($0, feed.facts[$0.identity]?.plays ?? 0) }
-            .filter { $0.1 > 0 }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
+    /// Their top songs and artists like them, from a server that has them.
+    private func loadFromServer(_ artist: LocalArtist) async {
+        guard let (serverID, artistID) = music.serverArtist(named: artist.name),
+              let client = music.servers.client(for: serverID) else { return }
+        async let similar = try? await client.similarArtists(to: artistID, count: 15)
+        let top = (try? await client.topSongs(artist: artist.name, count: 20)) ?? []
+        // Only the ones in your music, as yours.
+        let yours = top.compactMap { song in
+            music.index.track(id: LocalTrack.id(for: .server(serverID: serverID, songID: song.id)))
+                ?? music.index.tracks(withIdentity: HistoryImport.key(title: song.title, artistName: song.artist ?? artist.name)).first
+        }
+        var seen = Set<String>()
+        let others = (await similar ?? []).compactMap { other -> SimilarArtist? in
+            let key = StatsCalculator.folded(other.name)
+            guard key != artist.id, seen.insert(key).inserted else { return nil }
+            if let mine = music.index.artist(id: key) { return .yours(mine) }
+            return .server(ServerArtist(other, serverID: serverID))
+        }
+        guard !Task.isCancelled else { return }
+        withAnimation(PlayMotion.panel) {
+            fromServer = FromServer(topSongs: yours, similar: others)
+        }
+    }
+}
+
+/// An artist like the one whose page it is: one of yours, or one only their server has.
+enum SimilarArtist: Identifiable {
+    case yours(LocalArtist)
+    case server(ServerArtist)
+
+    var id: String {
+        switch self {
+        case .yours(let artist): "yours:\(artist.id)"
+        case .server(let artist): "server:\(artist.id)"
+        }
+    }
+}
+
+/// A similar artist's circle, opening their page.
+private struct SimilarArtistTile: View {
+    let artist: SimilarArtist
+    @Environment(YourMusic.self) private var music
+
+    var body: some View {
+        switch artist {
+        case .yours(let artist):
+            NavigationLink(value: PlayRoute.localArtist(artist.id)) {
+                ArtistCircleTile(name: artist.name, picture: music.artistPicture(for: artist))
+            }
+            .buttonStyle(.pressable)
+            .contextMenu { LocalArtistMenu(artist: artist) }
+        case .server(let artist):
+            NavigationLink(value: PlayRoute.serverArtist(artist)) {
+                ArtistCircleTile(name: artist.name, picture: music.artistPicture(for: artist))
+            }
+            .buttonStyle(.pressable)
+        }
     }
 }
 
 /// An album of yours on an artist's shelf: the library's hover tile on the Mac.
 struct LocalAlbumShelfTile: View {
     let album: LocalAlbum
+    /// Its year under it rather than its artist, on the artist's own page.
+    var showsYear = false
 
     var body: some View {
+        let subtitle = showsYear ? album.year.map(String.init) ?? album.kind.name : nil
         #if os(macOS)
-        LocalAlbumGridTile(album: album, side: LibraryCoverTile<EmptyView, EmptyView>.shelfSide)
+        LocalAlbumGridTile(album: album, subtitle: subtitle, side: LibraryCoverTile<EmptyView, EmptyView>.shelfSide)
         #else
-        LocalAlbumTile(album: album)
+        LocalAlbumTile(album: album, subtitle: subtitle)
         #endif
     }
 }
@@ -466,7 +576,7 @@ struct LocalArtistsPage: View {
                 }
             }
         } menu: { artist in
-            LibraryArtistMenu(name: artist.name)
+            LocalArtistMenu(artist: artist)
         }
         #else
         LibraryArtistIndexSections(artists: artists, name: \.name) { artist in
@@ -474,17 +584,16 @@ struct LocalArtistsPage: View {
                 LibraryArtistRow(
                     name: artist.name,
                     picture: picture(of: artist),
-                    detail: String(AttributedString(localized: "^[\(artist.albums.count) album](inflect: true)").characters),
                     plays: plays[StatsCalculator.folded(artist.name)]
                 )
             }
-            .contextMenu { LibraryArtistMenu(name: artist.name) }
+            .contextMenu { LocalArtistMenu(artist: artist) }
         }
         #endif
     }
 
     private func picture(of artist: LocalArtist) -> CoverArt? {
-        music.artworkURL(artist.artwork).map { .url($0.absoluteString, seed: artist.name) }
+        music.artistPicture(for: artist)
     }
 
     /// "3 albums · 212 plays".

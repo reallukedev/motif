@@ -18,7 +18,7 @@ struct ServerArtistPage: View {
     var body: some View {
         ArtistScaffold(
             name: artist.name,
-            picture: music.artworkURL(artist.artwork).map { .url($0.absoluteString, seed: artist.name) },
+            picture: music.artistPicture(for: artist),
             play: songs.isEmpty ? nil : { player.play(.local(songs), from: context) },
             shuffle: songs.isEmpty ? nil : { player.play(.local(songs), from: context, shuffled: true) }
         ) {

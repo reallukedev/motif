@@ -91,6 +91,8 @@ struct ArtistSongLabel: View {
     var plays: Int?
     var isExplicit = false
     var isCurrent = false
+    /// A song of yours, for its download coming down.
+    var localTrack: LocalTrack?
     var isPlayable = true
 
     #if os(macOS)
@@ -131,6 +133,9 @@ struct ArtistSongLabel: View {
                 }
             }
             Spacer(minLength: 8)
+            if let localTrack {
+                DownloadStateIcon(track: localTrack)
+            }
             if let plays, plays > 0 {
                 Text(PlayCountText.short(plays))
                     .font(.callout)
@@ -147,9 +152,8 @@ struct ArtistSongLabel: View {
         .onHover { hovering in withAnimation(PlayMotion.hover) { isHovered = hovering } }
         .accessibilityElement(children: .combine)
         #else
-        TrackRow(title: title, subtitle: subtitle, cover: cover, plays: plays, isExplicit: isExplicit, isCurrent: isCurrent)
+        TrackRow(title: title, subtitle: subtitle, cover: cover, plays: plays, isExplicit: isExplicit, isCurrent: isCurrent, localTrack: localTrack, isPlayable: isPlayable)
             .padding(.vertical, 6)
-            .opacity(isPlayable ? 1 : 0.45)
         #endif
     }
 }
