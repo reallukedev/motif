@@ -17,7 +17,7 @@ MOTIF_BUNDLE_ID = com.luke.motif
 
 // The version people see, and the build number App Store Connect requires to go up with
 // every upload. Both Info.plists read these.
-MARKETING_VERSION = 1.0
+MARKETING_VERSION = 2.0
 CURRENT_PROJECT_VERSION = 1
 
 // App Group identifiers differ by platform: iOS uses `group.<name>`, macOS needs the team

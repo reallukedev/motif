@@ -1,6 +1,6 @@
 # What's New in Motif
 
-## Next Release
+## Motif 2.0
 
 Motif can now play your music on iPhone and Mac. Every song you play in Motif is kept, even
 with the app in the background, so your history no longer depends on having Motif open.
