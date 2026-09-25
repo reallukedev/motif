@@ -40,7 +40,7 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 
     <key>NSAppleMusicUsageDescription</key>
-    <string>Motif reads what Apple Music is playing so it can keep your listening history, scrobble it to Last.fm, and save songs you hear on the radio to your library.</string>
+    <string>Motif plays Apple Music in Listen Now, and reads what Music is playing, so it can keep your listening history, scrobble it to Last.fm, and save songs you hear on the radio to your library.</string>
 
     <!-- Required for Apple events to Music.app. Without it sends fail with
          errAEEventNotPermitted (-1743) and no prompt is shown. -->
@@ -61,5 +61,25 @@
     <string>$(MOTIF_LASTFM_API_KEY)</string>
     <key>MotifLastFMSecret</key>
     <string>$(MOTIF_LASTFM_SECRET)</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Motif finds Motif on your other devices nearby, to show what your Mac is playing on them and let them control it.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_motif._tcp</string>
+    </array>
+    <!-- Songs dragged inside Motif, from a list to Up Next. See SongDrag. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.luke.motif.songs</string>
+            <key>UTTypeDescription</key>
+            <string>Motif Songs</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

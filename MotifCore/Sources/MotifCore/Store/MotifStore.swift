@@ -50,7 +50,7 @@ public final class MotifStore {
 
     /// The current schema. Always open a container through ``makeContainer(_:)`` so the
     /// migration plan comes with it.
-    public static let schema = Schema(versionedSchema: MotifSchemaV1.self)
+    public static let schema = Schema(versionedSchema: MotifSchemaV2.self)
 
     /// Opens the shared container, falling back to in-memory if that fails.
     ///
@@ -400,6 +400,8 @@ public final class MotifStore {
             artworkURL: observation.artworkURL,
             kind: kind,
             capturedAt: now,
+            // Apple Music or Your Music, so the two can be counted apart.
+            source: PlaySource(observation: observation),
             session: session
         )
         context.insert(capture)
@@ -420,13 +422,17 @@ public final class MotifStore {
 
     /// Rows with no catalog ID yet (macOS, before the search runs).
     ///
-    /// Every kind, not just radio: artwork is looked up by ID, so on-demand rows need one
-    /// too. The playlist write checks the kind, not the ID.
+    /// Every kind but Last.fm's, not just radio: artwork is looked up by ID, so on-demand
+    /// rows need one too. The playlist write checks the kind, not the ID. A Last.fm history
+    /// can be a hundred thousand plays, and searching the catalog for each would hold up
+    /// every playlist write behind it; those rows keep Last.fm's cover.
     public static func awaitingCatalogID() -> FetchDescriptor<Capture> {
         let maxAttempts = maxCatalogLookupAttempts
+        let lastFM = CaptureKind.lastFM.rawValue
         return FetchDescriptor<Capture>(
             predicate: #Predicate {
                 $0.songID.isEmpty && $0.catalogLookupAttempts < maxAttempts
+                    && $0.kindRawValue != lastFM
             },
             sortBy: [SortDescriptor(\.capturedAt, order: .forward)]
         )
@@ -575,6 +581,73 @@ public final class MotifStore {
             throw error
         }
         settings.recentlyPlayedAnchor = keys
+        return new.count
+    }
+
+    /// Writes plays read from the connected Last.fm account. See ``LastFMHistory``.
+    ///
+    /// Dated when they played, marked as already scrobbled so they're never sent back, and
+    /// skipped when the store already has the play (``LastFMHistory/newPlays(in:known:forgotten:policy:)``).
+    /// Only the rows near the page's dates are read, so a long history costs the same per
+    /// page as a short one.
+    ///
+    /// - Returns: how many rows were written.
+    @discardableResult
+    public func importScrobbles(
+        _ scrobbles: [ScrobbledTrack],
+        settings: CaptureSettings = CaptureSettings()
+    ) throws -> Int {
+        guard let earliest = scrobbles.map(\.playedAt).min(),
+              let latest = scrobbles.map(\.playedAt).max()
+        else { return 0 }
+
+        let policy = settings.dedupePolicy
+        // An import from Recently Played can be dated up to a day after the play it's a copy of.
+        let reach = max(policy.window, policy.importWindow)
+        let from = earliest.addingTimeInterval(-reach)
+        let to = latest.addingTimeInterval(reach)
+        let nearby = try context.fetch(FetchDescriptor<Capture>(
+            predicate: #Predicate { $0.capturedAt >= from && $0.capturedAt <= to }
+        ))
+        let known = nearby.map {
+            LastFMHistory.KnownPlay(
+                key: HistoryImport.key(title: $0.title, artistName: $0.artistName),
+                playedAt: $0.capturedAt,
+                kind: $0.kind
+            )
+        }
+        let new = LastFMHistory.newPlays(
+            in: scrobbles, known: known, forgotten: settings.forgottenSongs, policy: policy
+        )
+        guard !new.isEmpty else { return 0 }
+
+        var inserted: [Capture] = []
+        for scrobble in new {
+            let capture = Capture(
+                songID: "",
+                // The same shape as a Mac capture's key, which has no catalog ID either.
+                songKey: "\(scrobble.title)\u{1F}\(scrobble.artistName)",
+                title: scrobble.title,
+                artistName: scrobble.artistName,
+                albumTitle: scrobble.albumTitle,
+                artworkURL: scrobble.artworkURL,
+                kind: .lastFM,
+                capturedAt: scrobble.playedAt
+            )
+            // Already on Last.fm. When it got there isn't in the response; when it played is
+            // the closest, and it keeps the row out of the scrobble queue on every device.
+            capture.scrobbledAt = scrobble.playedAt
+            context.insert(capture)
+            inserted.append(capture)
+        }
+        do {
+            try context.save()
+        } catch {
+            // Out again, so an unrelated later save doesn't write them. The progress hasn't
+            // moved, so the next run reads this page again.
+            for capture in inserted { context.delete(capture) }
+            throw error
+        }
         return new.count
     }
 
@@ -848,7 +921,9 @@ public final class MotifStore {
         switch kind {
         case .radio: 0
         case .onDemand: 1
-        case .imported: 2
+        // Before an import, because its time is when the song played.
+        case .lastFM: 2
+        case .imported: 3
         }
     }
 

@@ -29,6 +29,15 @@ public enum Insight: Sendable, Equatable, Identifiable {
     case longestSession(minutes: Int)
     case playedBack(count: Int, total: Int)
 
+    /// Whether it still reads true for a period that has ended. A streak is about today, and
+    /// a trend compares with "this time last month".
+    public var isAboutEndedPeriod: Bool {
+        switch self {
+        case .streak, .listeningTrend: false
+        default: true
+        }
+    }
+
     public var id: String {
         switch self {
         case .milestone: "milestone"

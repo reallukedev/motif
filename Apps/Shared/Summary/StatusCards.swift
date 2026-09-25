@@ -11,12 +11,13 @@ struct NowPlayingCard: View {
     /// Follows connecting and disconnecting in Settings, without a Keychain read per render.
     @AppStorage(LastFMSessionStore.usernameDefaultsKey, store: CaptureSettings.sharedDefaults)
     private var lastFMUsername: String?
+    @Environment(PlayerModel.self) private var player
 
     var body: some View {
         if let song = capture.nowPlaying {
             Card(padding: 12) {
                 HStack(spacing: 12) {
-                    ArtworkView(url: song.artworkURL, seed: song.albumTitle ?? song.title, size: 52)
+                    cover(of: song)
                     VStack(alignment: .leading, spacing: 2) {
                         Label {
                             Text(caption)
@@ -41,6 +42,18 @@ struct NowPlayingCard: View {
             }
             .accessibilityElement(children: .combine)
             .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    /// Motif's own player has the song's cover to hand, even one only MusicKit can draw, and
+    /// before any lookup: used when it's the one playing. Otherwise the cover capture found.
+    @ViewBuilder
+    private func cover(of song: NowPlaying) -> some View {
+        if let track = player.current, player.isPlaying,
+           track.title == song.title, track.artistName == song.artistName {
+            CoverImage(cover: track.cover, size: 52)
+        } else {
+            ArtworkView(url: song.artworkURL, seed: song.albumTitle ?? song.title, size: 52)
         }
     }
 

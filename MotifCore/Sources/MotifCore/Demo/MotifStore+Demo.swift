@@ -44,6 +44,7 @@ extension MotifStore {
                 albumTitle: play.albumTitle,
                 kind: play.kind,
                 capturedAt: play.capturedAt,
+                source: DemoLibrary.source(of: play),
                 session: owner
             )
             capture.needsPlaylistWrite = false

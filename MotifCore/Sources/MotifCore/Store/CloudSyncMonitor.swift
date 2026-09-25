@@ -30,6 +30,9 @@ public final class CloudSyncMonitor {
     /// The most recent failure that nothing of the same kind has succeeded since, if any.
     public private(set) var failure: Failure?
 
+    /// When an import or export last finished without a problem, since launch.
+    public private(set) var lastSynced: Date?
+
     @ObservationIgnored private var observer: NSObjectProtocol?
 
     public init() {}
@@ -112,6 +115,8 @@ public final class CloudSyncMonitor {
     func record(_ activity: Activity, succeeded: Bool, message: String?, at date: Date) {
         if succeeded {
             if failure?.activity == activity { failure = nil }
+            // Setup only opens the mirror; nothing has moved yet.
+            if activity != .setup { lastSynced = max(lastSynced ?? date, date) }
             return
         }
         failure = Failure(

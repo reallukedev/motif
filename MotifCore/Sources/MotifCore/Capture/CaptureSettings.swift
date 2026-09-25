@@ -8,9 +8,6 @@ public struct CaptureSettings: Sendable {
     public static let playlistIDKey = "playlistID"
     public static let dedupeWindowKey = "dedupeWindowSeconds"
     public static let autoAddKey = "autoAddToPlaylist"
-    public static let limitsPlaylistSizeKey = "limitsPlaylistSize"
-    public static let playlistSizeLimitKey = "playlistSizeLimit"
-    public static let playlistTrackCountKey = "playlistTrackCount"
     public static let forceCaptureKey = "forceCapture"
     public static let autoPlayBackKey = "autoPlayBack"
     public static let capturesOnDemandKey = "capturesOnDemand"
@@ -26,6 +23,7 @@ public struct CaptureSettings: Sendable {
     public static let showsUpNextInWidgetKey = "showsUpNextInWidget"
     public static let recentlyPlayedAnchorKey = "recentlyPlayedAnchor"
     public static let artworkMissesKey = "artworkMisses"
+    public static let lastFMHistoryKey = "lastFMHistoryImport"
 
     public static let defaultPlaylistName = "Heard on Radio"
 
@@ -143,41 +141,6 @@ public struct CaptureSettings: Sendable {
         nonmutating set { defaults.set(newValue, forKey: Self.autoAddKey) }
     }
 
-    /// Whether to stop adding once the playlist reaches ``playlistSizeLimit``. On by default:
-    /// a station left running adds songs indefinitely, and the Apple Music API has no way to
-    /// take a track back out again (see ``AppleMusicPlaylistRequestBuilder``), so the ceiling
-    /// is the only thing keeping the playlist a usable size.
-    public var limitsPlaylistSize: Bool {
-        get { defaults.object(forKey: Self.limitsPlaylistSizeKey) as? Bool ?? true }
-        nonmutating set { defaults.set(newValue, forKey: Self.limitsPlaylistSizeKey) }
-    }
-
-    /// How many songs the playlist may hold. Clamped to ``PlaylistSizeLimit/allowed``, so a
-    /// value written by an older build or by hand can't switch the cap off by being absurd.
-    public var playlistSizeLimit: Int {
-        get {
-            guard defaults.object(forKey: Self.playlistSizeLimitKey) != nil
-            else { return PlaylistSizeLimit.default }
-            return PlaylistSizeLimit.clamped(defaults.integer(forKey: Self.playlistSizeLimitKey))
-        }
-        nonmutating set {
-            defaults.set(PlaylistSizeLimit.clamped(newValue), forKey: Self.playlistSizeLimitKey)
-        }
-    }
-
-    /// Songs in the playlist as of the last count, so Settings can say how full it is without
-    /// a request of its own. Nil until something has counted.
-    public var playlistTrackCount: Int? {
-        get { defaults.object(forKey: Self.playlistTrackCountKey) as? Int }
-        nonmutating set {
-            guard let newValue else {
-                defaults.removeObject(forKey: Self.playlistTrackCountKey)
-                return
-            }
-            defaults.set(newValue, forKey: Self.playlistTrackCountKey)
-        }
-    }
-
     /// Captures even when the radio heuristic says no.
     public var forceCapture: Bool {
         get { defaults.bool(forKey: Self.forceCaptureKey) }
@@ -232,6 +195,28 @@ public struct CaptureSettings: Sendable {
         nonmutating set {
             defaults.set(newValue.mapValues(\.timeIntervalSince1970), forKey: Self.artworkMissesKey)
         }
+    }
+
+    /// How far importing the Last.fm history has got, for whichever account it was. Kept on
+    /// this device: the rows sync, and another device's import skips what they cover.
+    /// Stored as JSON. See ``LastFMHistory/Progress``.
+    public var lastFMHistoryProgress: LastFMHistory.Progress? {
+        get {
+            defaults.data(forKey: Self.lastFMHistoryKey)
+                .flatMap { try? JSONDecoder().decode(LastFMHistory.Progress.self, from: $0) }
+        }
+        nonmutating set {
+            defaults.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: Self.lastFMHistoryKey)
+        }
+    }
+
+    /// The progress for this account, or a fresh start if it's never been imported or the
+    /// progress is another account's.
+    public func lastFMHistory(for username: String) -> LastFMHistory.Progress {
+        guard let stored = lastFMHistoryProgress, stored.username == username else {
+            return LastFMHistory.Progress(username: username)
+        }
+        return stored
     }
 
     public func hasForgotten(title: String, artistName: String) -> Bool {

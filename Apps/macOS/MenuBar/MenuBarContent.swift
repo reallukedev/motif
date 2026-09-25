@@ -23,6 +23,8 @@ struct MenuBarContent: View {
                 .environment(model)
                 .environment(capture)
                 .environment(playback)
+                .environment(model.player)
+                .environment(model.playFeed)
         } else {
             ContentUnavailableView {
                 Label("Motif Can't Open Your History", systemImage: "exclamationmark.triangle")
@@ -37,7 +39,9 @@ struct MenuBarContent: View {
 
 private struct MenuBarBody: View {
     let monitor: NowPlayingMonitor
+    @Environment(PlayerModel.self) private var player
     @Environment(CaptureService.self) private var capture
+    @Environment(UnexpectedQuitMonitor.self) private var quitMonitor
     /// Only what the list shows. Today's figures have their own query in ``TodaySummary``,
     /// so opening the menu never loads the whole history.
     @Query private var recent: [Capture]
@@ -56,8 +60,23 @@ private struct MenuBarBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NowPlayingHeader(monitor: monitor, latest: recent.first)
-                .padding(14)
+            // Motif's own player, while it has something on; Music otherwise.
+            Group {
+                if player.hasQueue {
+                    MotifPlayerHeader()
+                } else {
+                    NowPlayingHeader(monitor: monitor, latest: recent.first)
+                }
+            }
+            .padding(14)
+
+            NearbyMenuSection()
+
+            if quitMonitor.notice != nil {
+                UnexpectedQuitNotice()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
 
             if !capture.isRunning {
                 HistoryPausedNote()
@@ -105,7 +124,7 @@ private struct HistoryPausedNote: View {
                 .font(.caption)
                 .foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Resume") { capture.start() }
+            Button("Resume") { Task { await capture.resume() } }
                 .controlSize(.small)
                 .accessibilityLabel("Resume History")
         }
@@ -115,6 +134,89 @@ private struct HistoryPausedNote: View {
 }
 
 // MARK: - Now playing
+
+/// What Motif itself is playing, with its controls, in the shape of Music's card below.
+private struct MotifPlayerHeader: View {
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var previousPresses = 0
+    @State private var nextPresses = 0
+
+    var body: some View {
+        if let track = player.current {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    CoverImage(cover: track.cover, size: 58)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label {
+                            Text(player.context.map { "\($0.title)" } ?? String(localized: "Playing in Motif"))
+                        } icon: {
+                            Image(systemName: "waveform")
+                                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .lineLimit(1)
+                        Text(track.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(track.artistName)
+                                .lineLimit(1)
+                            PlayCountLine(track: track, showsSince: false)
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+                .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: track.id)
+
+                GlassEffectContainer(spacing: 18) {
+                    HStack(spacing: 18) {
+                        Button {
+                            previousPresses += 1
+                            player.skipToPrevious()
+                        } label: {
+                            SkipArrows(direction: .backward, height: 11, trigger: previousPresses)
+                                .frame(width: 18, height: 18)
+                        }
+                        .disabled(player.context?.isStation == true)
+                        .help("Previous")
+                        .accessibilityLabel("Previous")
+
+                        Button {
+                            player.togglePlayPause()
+                        } label: {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                                .frame(width: 24, height: 24)
+                        }
+                        .keyboardShortcut(.space, modifiers: [])
+                        .help(player.isPlaying ? "Pause" : "Play")
+                        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+
+                        Button {
+                            nextPresses += 1
+                            player.skipToNext()
+                        } label: {
+                            SkipArrows(direction: .forward, height: 11, trigger: nextPresses)
+                                .frame(width: 18, height: 18)
+                        }
+                        .help("Next")
+                        .accessibilityLabel("Next")
+                    }
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+            }
+        }
+    }
+}
 
 private struct NowPlayingHeader: View {
     let monitor: NowPlayingMonitor
@@ -555,7 +657,7 @@ private struct RecentRow: View {
 
 // MARK: - Footer
 
-private struct MenuBarFooter: View {
+struct MenuBarFooter: View {
     @Environment(CaptureService.self) private var capture
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
@@ -584,7 +686,7 @@ private struct MenuBarFooter: View {
                 // being kept, like a recording light.
                 Button(capture.isRunning ? "Pause History" : "Resume History",
                        systemImage: capture.isRunning ? "record.circle.fill" : "record.circle") {
-                    capture.isRunning ? capture.stop() : capture.start()
+                    if capture.isPaused { Task { await capture.resume() } } else { capture.pause() }
                 }
                 .foregroundStyle(capture.isRunning ? AnyShapeStyle(.red) : AnyShapeStyle(.orange))
                 .accessibilityValue(capture.isRunning ? "Keeping what you play" : "Paused")

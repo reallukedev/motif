@@ -56,11 +56,39 @@ All screenshots use the built-in sample data
 
 - Connect a Last.fm account and Motif scrobbles every song it keeps, radio and recovered songs included.
 
+### Play (iPhone and Mac)
+
+- A Play tab on iPhone, and Listen Now and Radio in the Mac's sidebar, that play Apple Music
+  inside Motif, so every song is kept even with the app in the background: the library, live
+  radio, your stations, albums, playlists and the catalog, with search.
+- The crate: this hour's mix, Motif Radio and the rest of the day's mixes to flip through,
+  Cover Flow style. Tap the cover in Now Playing and it turns over to your history with the
+  song.
+- On the Mac: a player bar at the foot of the window, Up Next and Your History beside the
+  page, a full player, a Mini Player, a Controls menu with Music's shortcuts, and the song
+  in the menu bar and the Dock.
+- Mixes built from your own history: what you play at each time of day, On Repeat, New
+  Finds, All-Time Favorites, Deep Cuts, Radio Finds, Rediscover and a year ago this week.
+  Songs you skip or ask to hear less of drop out, and shuffle keeps each artist apart.
+- Motif Radio, your own endless station, tunable, picked a song at a time from everything
+  you love and new finds like it. Suggested Songs and Suggested Artists, with finders for
+  songs and artists you've never played and an endless Keep Exploring list.
+- Moods (Feel Good, Energy, Chill, Love, Heartbreak and more) to go with the flow or to find
+  new music in, and New from Your Artists with upcoming releases.
+- Now Playing with your play count for the song, a ring that fills until the song is kept,
+  Up Next, Create Station, AirPlay and a sleep timer. Settings for explicit songs,
+  crossfade (iPhone), the layout, and whether songs elsewhere play in Motif or Apple Music.
+- Your Music: play the FLAC and other files you own, and your own Subsonic-compatible
+  server (Navidrome and others), with downloads for offline, discovery on your servers, and
+  Motif Radio, mixes and moods made from all of it. Suggestions are checked against what you
+  have, and Lidarr can fetch what you don't.
+- Siri ("Play music in Motif") and CarPlay. CarPlay needs Apple's CarPlay Audio
+  entitlement on a device; see `Config/Motif.xcconfig`.
+
 ### Radio
 
-- Songs you hear on stations are added to a "Heard on Radio" playlist in your library,
-  which stops at 250 songs so a station left running can't fill it. The limit is yours to
-  change or turn off.
+- Songs you hear on stations are added to a "Heard on Radio" playlist in your library.
+  Apple Music doesn't let apps take songs back out, so trim it in Music when you like.
 - Play Back plays those songs again through Apple Music so that Apple counts them. It only runs when you're at the device to hear it.
 - You can exclude stations you don't want recorded.
 

@@ -14,23 +14,22 @@ struct BackgroundRefreshNotice: View {
 
     var body: some View {
         if let blocker = availability.blocker {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SettingsSpacing.standard) {
                 Label {
                     Text(message(for: blocker))
+                        .font(.subheadline)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.ink(.orange))
                 }
                 // Opens Motif's page in Settings, which has the Background App Refresh switch.
                 if blocker == .turnedOff, let url = URL(string: UIApplication.openSettingsURLString) {
-                    Button("Open Settings") { openURL(url) }
+                    Button("Open Settings…") { openURL(url) }
                 }
             }
+            .padding(.vertical, 2)
         } else {
-            LabeledContent("Last Background Check") {
-                Text(status)
-                    .foregroundStyle(.secondary)
-            }
+            LabeledContent("Last Background Check", value: status)
         }
     }
 
@@ -38,7 +37,7 @@ struct BackgroundRefreshNotice: View {
     /// it means no wake-up is even pending.
     private var status: String {
         if let lastError { return lastError }
-        guard let lastRun else { return "Not yet" }
+        guard let lastRun else { return String(localized: "Not Yet") }
         return Format.relativeTime(lastRun)
     }
 

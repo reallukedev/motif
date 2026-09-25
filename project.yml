@@ -77,7 +77,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(MOTIF_BUNDLE_ID)
         PRODUCT_NAME: Motif
         INFOPLIST_FILE: Apps/iOS/Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Apps/iOS/Resources/Motif.entitlements
+        # Motif-CarPlay.entitlements, which adds CarPlay Audio to Motif.entitlements. Set in
+        # Config/Motif.xcconfig, so a copy built without the grant can switch back.
+        CODE_SIGN_ENTITLEMENTS: $(MOTIF_IOS_ENTITLEMENTS)
         # The app is main-actor by default. MotifCore isn't, so callers decide where work runs.
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         # iPhone only. Motif ships for iPhone and the Mac; there's no iPad layout to stand
@@ -151,6 +153,26 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO
 
+  # Reopens the Mac app when it stops without being quit. Embedded in the app, which starts
+  # it at launch; see Watchdog/WatchdogMain.swift.
+  MotifWatchdog:
+    type: application
+    platform: macOS
+    sources:
+      - path: Watchdog
+    dependencies:
+      - package: MotifCore
+        product: MotifCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(MOTIF_BUNDLE_ID).Watchdog
+        PRODUCT_NAME: MotifWatchdog
+        INFOPLIST_FILE: Watchdog/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Watchdog/Resources/Watchdog.entitlements
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
   Motif (macOS):
     type: application
     platform: macOS
@@ -159,6 +181,13 @@ targets:
       - path: Apps/Shared
     dependencies:
       - target: MotifWidgets (macOS)
+      # Where helper apps live in a Mac app. Not registered as a login item: the app opens it.
+      - target: MotifWatchdog
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LoginItems
       - package: MotifCore
         product: MotifCore
       - package: MotifCore

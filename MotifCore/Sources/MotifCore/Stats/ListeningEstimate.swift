@@ -20,7 +20,7 @@ public enum ListeningEstimate {
             let capture = ordered[index]
             // Imports are timestamped when we found them, often dozens at once, so their
             // gaps mean nothing. They keep the typical length.
-            guard capture.kind.sourceIsKnown else { continue }
+            guard capture.kind.timeIsKnown else { continue }
             if let next = nextWitnessed {
                 let gap = next.timeIntervalSince(capture.capturedAt)
                 if gap > 0, gap <= longestPlausibleGap { result[index] = gap }

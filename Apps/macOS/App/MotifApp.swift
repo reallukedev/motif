@@ -15,6 +15,7 @@ struct MotifApp: App {
     private var model: AppModel { appDelegate.model }
     private var behaviour: MacAppBehaviour { appDelegate.behaviour }
     private var monitor: NowPlayingMonitor { appDelegate.monitor }
+    private var quitMonitor: UnexpectedQuitMonitor { appDelegate.quitMonitor }
 
     /// Mirrored into `@AppStorage` so the status item redraws when the setting changes.
     /// SwiftUI can't observe `CaptureSettings`.
@@ -43,13 +44,17 @@ struct MotifApp: App {
         WindowGroup("Motif", id: "main") {
             MacRootView(model: model)
                 .environment(behaviour)
+                .environment(quitMonitor)
                 .frame(minWidth: 820, minHeight: 560)
                 // "Open Motif" makes the app `.regular` to bring the window forward. Once the
                 // last main window has gone, hide the Dock icon again if that's the setting.
                 .tracksMainWindow { [behaviour] in behaviour.applyActivationPolicy() }
         }
         .defaultSize(width: 1180, height: 800)
-        .commands { MotifCommands(model: model) }
+        .commands {
+            MotifCommands(model: model)
+            ControlsCommands(player: model.player)
+        }
         .onChange(of: scenePhase) { _, phase in
             // A Mac window can sit closed for days with the app still running, so coming
             // back to it is the moment to catch up with what the iPhone has been doing.
@@ -63,9 +68,12 @@ struct MotifApp: App {
         Window("Menu Bar Preview", id: "menubar-preview") {
             MenuBarContent(model: model, monitor: monitor)
                 .environment(behaviour)
+                .environment(quitMonitor)
         }
         .windowResizability(.contentSize)
         #endif
+
+        MiniPlayerWindow(model: model)
 
         Settings {
             MacSettingsView(model: model)
@@ -78,6 +86,7 @@ struct MotifApp: App {
         MenuBarExtra(isInserted: $showMenuBarExtra) {
             MenuBarContent(model: model, monitor: monitor)
                 .environment(behaviour)
+                .environment(quitMonitor)
         } label: {
             MenuBarLabel(
                 nowPlaying: model.capture?.nowPlaying,
@@ -106,14 +115,16 @@ struct MotifApp: App {
 /// Menu commands. Icons are forced on because macOS 27 hides menu item symbols by default.
 struct MotifCommands: Commands {
     @Bindable var model: AppModel
+    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .summary
 
     var body: some Commands {
         CommandGroup(before: .toolbar) {
-            ForEach(SidebarItem.allCases) { item in
+            // ⌘1 onwards, in the sidebar's order, which Open To decides.
+            ForEach(Array(SidebarItem.leading(opening: openingTab).enumerated()), id: \.element) { index, item in
                 Button(item.title, systemImage: item.symbol) {
                     model.sidebarSelection = item
                 }
-                .keyboardShortcut(item.shortcut, modifiers: .command)
+                .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                 .labelStyle(.titleAndIcon)
             }
             Divider()

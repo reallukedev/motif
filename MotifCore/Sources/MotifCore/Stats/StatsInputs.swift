@@ -16,6 +16,8 @@ public struct CaptureStat: Sendable, Equatable {
     public let stationName: String?
     public let playedBackAt: Date?
     public let kind: CaptureKind
+    /// Apple Music or Your Music.
+    public let source: PlaySource
 
     /// Folded title and artist. We group on this rather than `songKey` because the key
     /// depends on the device (iOS uses the catalog id, macOS the title and artist), so one
@@ -35,7 +37,8 @@ public struct CaptureStat: Sendable, Equatable {
         capturedAt: Date,
         stationName: String? = nil,
         playedBackAt: Date? = nil,
-        kind: CaptureKind = .radio
+        kind: CaptureKind = .radio,
+        source: PlaySource = .appleMusic
     ) {
         self.songKey = songKey
         self.songID = songID
@@ -47,6 +50,7 @@ public struct CaptureStat: Sendable, Equatable {
         self.stationName = stationName
         self.playedBackAt = playedBackAt
         self.kind = kind
+        self.source = source
         self.songIdentity = HistoryImport.key(title: title, artistName: artistName)
         self.artistIdentity = StatsCalculator.folded(artistName)
         let album = albumTitle.map(StatsCalculator.folded) ?? ""
@@ -73,6 +77,7 @@ public struct CaptureStat: Sendable, Equatable {
         self.stationName = stationName
         playedBackAt = other.playedBackAt
         kind = other.kind
+        source = other.source
         songIdentity = other.songIdentity
         artistIdentity = other.artistIdentity
         albumIdentity = other.albumIdentity

@@ -96,6 +96,19 @@ struct CloudSyncMonitorTests {
         #expect(CloudSyncMonitor.serverMessage(in: "Finished operation <CKFetchDatabaseChangesOperation>") == nil)
     }
 
+    @Test("an import or export marks the last sync, setup doesn't")
+    func lastSyncedFollowsTransfers() {
+        let monitor = CloudSyncMonitor()
+
+        monitor.record(.setup, succeeded: true, message: nil, at: start)
+        #expect(monitor.lastSynced == nil)
+
+        monitor.record(.export, succeeded: true, message: nil, at: start.addingTimeInterval(10))
+        monitor.record(.import, succeeded: false, message: "Offline", at: start.addingTimeInterval(20))
+
+        #expect(monitor.lastSynced == start.addingTimeInterval(10))
+    }
+
     @Test("any other error is described as it is")
     func plainError() {
         let error = CKError(.networkUnavailable, userInfo: [NSLocalizedDescriptionKey: "Offline"])

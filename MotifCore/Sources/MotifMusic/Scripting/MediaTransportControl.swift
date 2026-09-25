@@ -28,6 +28,23 @@ public enum MediaTransportControl {
         script.executeAndReturnError(&error)
         return error == nil
     }
+
+    /// Pauses Music if it's playing, and does nothing if it isn't. Unlike `playpause`, safe to
+    /// send twice: Motif sends it when its own player starts, and a start can be reported
+    /// more than once.
+    @discardableResult
+    public static func pause(timeoutSeconds: Int = 2) -> Bool {
+        guard MusicScripting.isMusicRunning else { return false }
+        let source = """
+        with timeout of \(timeoutSeconds) seconds
+            tell application id "com.apple.Music" to pause
+        end timeout
+        """
+        guard let script = NSAppleScript(source: source) else { return false }
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+        return error == nil
+    }
 }
 
 extension TransportCommand {

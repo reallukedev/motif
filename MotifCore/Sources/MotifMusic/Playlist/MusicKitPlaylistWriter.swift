@@ -40,39 +40,6 @@ public struct MusicKitPlaylistWriter: PlaylistWriter {
         _ = try await perform(request)
     }
 
-    /// Counts the playlist a page at a time, stopping as soon as `ceiling` is reached.
-    ///
-    /// A playlist at the limit is the common case, so with a ceiling of 250 this is three
-    /// requests at most, and one when Apple states a total.
-    public func trackCount(inPlaylist playlistID: String, upTo ceiling: Int?) async throws -> Int {
-        let pageSize = 100
-        var counted = 0
-        var offset = 0
-        while true {
-            let request = AppleMusicPlaylistRequestBuilder.playlistTracks(
-                playlistID: playlistID,
-                limit: pageSize,
-                offset: offset
-            )
-            let response: (Data, Int)
-            do {
-                response = try await perform(request)
-            } catch let error as PlaylistWriteError {
-                // An empty playlist, or one Apple has forgotten, answers 404. Nothing in it
-                // is the honest count, and it lets the writes go ahead.
-                if case .permanent(let status, _) = error, status == 404 { return counted }
-                throw error
-            }
-
-            let page = AppleMusicPlaylistRequestBuilder.parseTracksPage(from: response.0)
-            if let total = page.total { return total }
-            counted += page.count
-            if let ceiling, counted >= ceiling { return counted }
-            guard page.hasMore, page.count == pageSize else { return counted }
-            offset += page.count
-        }
-    }
-
     public func playlistExists(_ playlistID: String) async throws -> Bool {
         do {
             _ = try await perform(AppleMusicPlaylistRequestBuilder.playlist(id: playlistID))

@@ -64,6 +64,15 @@ public final class Capture {
     /// playlist. Empty for rows from before sync. See ``DeviceIdentity``.
     public var capturedByDeviceID: String = ""
 
+    /// ``PlaySource`` as its raw value: Apple Music, or Your Music played in Motif. Use
+    /// ``source`` instead.
+    ///
+    /// Nil for plays kept before Motif told them apart, and for plays filled in from Apple
+    /// Music's Recently Played and Last.fm, which all count as Apple Music. Optional because
+    /// CloudKit needs every attribute to be optional or defaulted, and so a store from before
+    /// it existed migrates without a stage of its own.
+    public var sourceRawValue: String?
+
     @Relationship(inverse: \Session.captures)
     public var session: Session?
 
@@ -78,6 +87,7 @@ public final class Capture {
         capturedAt: Date = .now,
         platform: CapturePlatform = .current,
         deviceID: String = DeviceIdentity.current,
+        source: PlaySource? = nil,
         session: Session? = nil
     ) {
         self.songID = songID
@@ -90,6 +100,7 @@ public final class Capture {
         self.capturedAt = capturedAt
         self.platformRawValue = platform.rawValue
         self.capturedByDeviceID = deviceID
+        self.sourceRawValue = source?.rawValue
         // Only radio captures are ever written to the playlist.
         self.needsPlaylistWrite = (kind == .radio)
         self.session = session
@@ -98,6 +109,11 @@ public final class Capture {
     public var kind: CaptureKind {
         get { CaptureKind(rawValue: kindRawValue) ?? .radio }
         set { kindRawValue = newValue.rawValue }
+    }
+
+    public var source: PlaySource {
+        get { PlaySource(stored: sourceRawValue) }
+        set { sourceRawValue = newValue.rawValue }
     }
 
     public var platform: CapturePlatform {

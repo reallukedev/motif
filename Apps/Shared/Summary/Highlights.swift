@@ -81,8 +81,10 @@ struct HighlightSentence: View {
 /// Every highlight for a range, pushed from "Show All".
 struct HighlightsList: View {
     let range: StatsRange
+    var periodOffset = 0
     @Environment(AppModel.self) private var model
     @State private var insights: [Insight] = []
+    private var sources = SourceScopeSetting()
 
     var body: some View {
         ScrollView {
@@ -97,10 +99,16 @@ struct HighlightsList: View {
         }
         .groupedBackground()
         .navigationTitle("Highlights")
-        .task(id: model.library.revision) {
-            let (range, history, sessions) = (range, model.library.history, model.library.sessions)
+        .sourceScopeSubtitle(sources.scope)
+        .task(id: "\(sources.scope.rawValue)|\(model.library.revision)") {
+            let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
             let next = await OffMainActor.run {
-                StatsCalculator.summary(range: range, history: history, sessions: sessions).insights
+                StatsCalculator.summary(
+                    range: range,
+                    history: history.scoped(to: scope),
+                    sessions: scope.includesStations ? sessions : [],
+                    periodOffset: offset
+                ).insights
             }
             guard !Task.isCancelled else { return }
             insights = next

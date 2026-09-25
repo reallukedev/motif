@@ -6,7 +6,11 @@ struct SummaryScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("statsRange") private var range: StatsRange = .month
     @State private var summary: StatsSummary?
+    /// 0 for this week, month or year; -1 for the one before. Back to 0 when the range changes.
+    @State private var periodOffset = LaunchScene.periodOffset
     @State private var showsSettings = LaunchScene.opensSettings
+    @State private var isSearching = LaunchScene.opensSearch
+    private var sources = SourceScopeSetting()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -26,11 +30,7 @@ struct SummaryScreen: View {
                         RangePicker(range: $range)
                         if let summary {
                             if summary.captureCount == 0 {
-                                ContentUnavailableView(
-                                    "Nothing Played \(Text(range.phrase))",
-                                    systemImage: "waveform",
-                                    description: Text("Try a longer range.")
-                                )
+                                NothingPlayedView(summary: summary)
                             } else {
                                 SummaryContent(summary: summary)
                             }
@@ -49,9 +49,15 @@ struct SummaryScreen: View {
             }
         }
         .groupedBackground()
+        .motifSearch(isPresented: $isSearching, scopeKey: "summarySearchScope", defaultScope: .history)
         .navigationTitle("Summary")
+        .sourceScopeSubtitle(sources.scope)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if sources.isOffered {
+                    SourceScopeMenu(scope: sources.selection)
+                }
+                SearchToolbarButton(isPresented: $isSearching)
                 Button("Settings", systemImage: "gearshape") { showsSettings = true }
             }
         }
@@ -61,15 +67,38 @@ struct SummaryScreen: View {
         .refreshable {
             if !model.isShowingSampleData { await model.capture?.catchUp() }
         }
-        .task(id: "\(range.rawValue)|\(model.library.revision)") {
-            let (range, history, sessions) = (range, model.library.history, model.library.sessions)
+        .task(id: "\(range.rawValue)|\(periodOffset)|\(sources.scope.rawValue)|\(model.library.revision)") {
+            let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
             let next = await OffMainActor.run {
-                StatsCalculator.summary(range: range, history: history, sessions: sessions, topLimit: 5)
+                StatsCalculator.summary(
+                    range: range,
+                    history: history.scoped(to: scope),
+                    sessions: scope.includesStations ? sessions : [],
+                    periodOffset: offset,
+                    topLimit: 5
+                )
             }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: summary?.range == range, reduceMotion: reduceMotion) {
+            let isLive = summary?.range == range && summary?.periodOffset == next.periodOffset
+            LiveUpdate.apply(isLive: isLive, reduceMotion: reduceMotion) {
                 summary = next
             }
+        }
+        .onChange(of: range) { periodOffset = 0 }
+        .environment(\.statsPaging, paging)
+    }
+
+    /// Steps through periods from the one on show. A step waits for the summary it asked for,
+    /// so a quick double tap can't run past the first period.
+    private var paging: StatsPeriodPaging? {
+        guard let summary, summary.range != .allTime else { return nil }
+        let isSettled = summary.periodOffset == periodOffset
+        let offset = $periodOffset
+        return StatsPeriodPaging(
+            canGoBack: isSettled && summary.hasEarlierPeriod,
+            canGoForward: isSettled && !summary.isCurrentPeriod
+        ) { step in
+            offset.wrappedValue = min(0, offset.wrappedValue + step)
         }
     }
 }
@@ -93,7 +122,7 @@ struct SummaryContent: View {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionHeader(title: "Highlights") {
                         if summary.insights.count > 3 {
-                            NavigationLink("Show All", value: Route.highlights(summary.range))
+                            NavigationLink("Show All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
                         }
                     }
                     EqualHeightRows(items: Array(summary.insights.prefix(3)), columns: 1) { insight in
