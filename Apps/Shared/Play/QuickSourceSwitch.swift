@@ -128,7 +128,7 @@ extension MusicSource: AppEnum {
 /// your own lossless files at your desk. When the Focus ends, it goes back to what it was.
 struct MusicSourceFocusFilter: SetFocusFilterIntent {
     static let title: LocalizedStringResource = "Set Music Source"
-    static let description = IntentDescription("Choose whether Play plays Apple Music or your own music while this Focus is on.")
+    static let description = IntentDescription("Choose which music source Play uses while this Focus is on.")
 
     @Parameter(title: "Music Source")
     var source: MusicSource?
@@ -162,7 +162,7 @@ struct MusicSourceFocusFilter: SetFocusFilterIntent {
 /// without stopping what's playing.
 struct SwitchMusicSourceIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Music Source"
-    static let description = IntentDescription("Switches Play to Apple Music or to your own music. Leave the source empty to switch to whichever isn't on.")
+    static let description = IntentDescription("Switches the music source that Play uses. Leave the source empty to switch to whichever isn't on.")
 
     @Parameter(title: "Music Source")
     var source: MusicSource?
