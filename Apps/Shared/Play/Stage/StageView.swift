@@ -6,8 +6,8 @@ import AppKit
 
 /// Stage: the song on a screen of its own, for a desk, a TV or a party. The cover, the song's
 /// name and a visualizer over one of Now Playing's backgrounds, laid out one of four ways, and
-/// nothing else until you want it: a tap on iPhone, or moving the mouse on the Mac, brings up
-/// the controls, and they go again when you leave them.
+/// nothing else until you want it: a tap, or a click on the Mac, brings up the controls, and
+/// another puts them away. They stay until then, so they never go while you reach for them.
 struct StageView: View {
     let onClose: () -> Void
     @Environment(PlayerModel.self) private var player
@@ -27,7 +27,6 @@ struct StageView: View {
     @State private var palette: [Color] = []
     @State private var showsControls = LaunchScene.opensStageControls
     @State private var customizing = LaunchScene.opensStageCustomizer
-    @State private var hiding: Task<Void, Never>?
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -78,8 +77,8 @@ struct StageView: View {
         .animation(.smooth(duration: 0.5), value: layout)
         .animation(.smooth(duration: 0.5), value: player.current?.id)
         .contentShape(.rect)
+        .onTapGesture(perform: toggleControls)
         #if os(iOS)
-        .onTapGesture { showsControls ? hideControls() : revealControls() }
         .statusBarHidden(!showsControls)
         .persistentSystemOverlays(.hidden)
         .onChange(of: keepsScreenOn, initial: true) { _, isOn in
@@ -91,15 +90,12 @@ struct StageView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             StagePresenter.shared.updateOrientation()
         }
-        .sheet(isPresented: $customizing, onDismiss: scheduleHide) {
+        .sheet(isPresented: $customizing) {
             StageCustomizer()
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
         #else
-        .onContinuousHover { phase in
-            if case .active = phase { revealControls() }
-        }
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
@@ -111,7 +107,7 @@ struct StageView: View {
         #endif
         .onAppear {
             AudioLevelMeter.shared.startListening()
-            if showsControls { scheduleHide() } else { showHintIfNew() }
+            if !showsControls { showHintIfNew() }
         }
         .onDisappear { AudioLevelMeter.shared.stopListening() }
     }
@@ -404,6 +400,10 @@ struct StageView: View {
                 .padding(.vertical, 22)
                 .frame(maxWidth: 560)
                 .glassEffect(.regular, in: .rect(cornerRadius: 34))
+                // A tap that just misses a button stays on the panel, rather than putting
+                // the controls away from under the finger.
+                .contentShape(.rect(cornerRadius: 34))
+                .onTapGesture {}
             }
         }
         .foregroundStyle(.white)
@@ -413,8 +413,6 @@ struct StageView: View {
             LinearGradient(colors: [.black.opacity(0.45), .clear, .clear, .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         }
-        // Using the controls keeps them up.
-        .simultaneousGesture(TapGesture().onEnded { scheduleHide() })
     }
 
     private func controlButton(_ label: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
@@ -431,21 +429,23 @@ struct StageView: View {
 
     /// A word about the controls the first few times Stage opens, since at first it shows none.
     private var hint: some View {
-        VStack {
-            Spacer()
+        Group {
             #if os(iOS)
             Text("Tap to show controls")
             #else
-            Text("Move the pointer to show controls")
+            Text("Click to show controls")
             #endif
         }
         .font(.callout.weight(.semibold))
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        // Around the words alone: around the whole height, it was a pillar of glass.
         .glassEffect(.regular, in: .capsule)
-        .padding(.bottom, 40)
-        .frame(maxHeight: .infinity, alignment: .bottom)
+        // At the top, where the system says how to leave full screen, and clear of the
+        // progress and what's next along the foot.
+        .padding(.top, 28)
+        .frame(maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
     }
 
@@ -459,29 +459,16 @@ struct StageView: View {
         }
     }
 
-    private func revealControls() {
+    /// A tap or click anywhere but on a control shows the controls, or puts them away. Not
+    /// while Stage is being customized, which keeps them up behind it.
+    private func toggleControls() {
+        guard !customizing else { return }
         showsHint = false
-        showsControls = true
-        scheduleHide()
-    }
-
-    private func hideControls() {
-        hiding?.cancel()
-        showsControls = false
+        showsControls.toggle()
         #if os(macOS)
-        NSCursor.setHiddenUntilMouseMoves(true)
+        // Put away, they take the pointer with them until it's moved.
+        if !showsControls { NSCursor.setHiddenUntilMouseMoves(true) }
         #endif
-    }
-
-    /// Hides the controls a few seconds after they were last used, unless they're being set up.
-    private func scheduleHide() {
-        hiding?.cancel()
-        guard !LaunchScene.opensStageControls else { return }
-        hiding = Task {
-            try? await Task.sleep(for: .seconds(3.5))
-            guard !Task.isCancelled, !customizing else { return }
-            hideControls()
-        }
     }
 }
 

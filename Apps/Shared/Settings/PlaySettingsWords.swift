@@ -321,6 +321,10 @@ enum PlaySettingsWords {
         }
 
         init(_ signals: ListeningSignals, now: Date = .now) {
+            // Skips and "suggest less" only: blocked artists are a list of their own, which
+            // Reset leaves alone.
+            var signals = signals
+            signals.blocked = BlockedArtists()
             let songs = Set(signals.skips.keys).union(signals.suggestLess)
             let excluded = songs.filter { signals.excludes($0, now: now) }
             leftOut = excluded.count

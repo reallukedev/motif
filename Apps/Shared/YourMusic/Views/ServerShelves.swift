@@ -109,7 +109,7 @@ struct ServerExploring: View {
             if SuggestionMode.current != .onlyYours {
                 for server in servers { await discover.loadMore(for: server.id, shelf: .further) }
             }
-            await discover.exploreMore(heard: { feed.facts[$0] != nil })
+            await discover.exploreMore(heard: { [player] in feed.facts[$0] != nil || player.signals.excludes($0) })
         }
     }
 }

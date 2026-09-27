@@ -81,6 +81,8 @@ struct ArtistScaffold<Sections: View, More: View>: View {
                 Menu("More", systemImage: "ellipsis") {
                     actionItems
                     more
+                    Divider()
+                    BlockArtistButton(artist: name)
                 }
             }
         }
@@ -139,13 +141,16 @@ struct ArtistScaffold<Sections: View, More: View>: View {
             }
             .overlay(alignment: .bottom) {
                 HStack(alignment: .bottom, spacing: 16) {
-                    Text(name)
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.6)
-                        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
-                        .accessibilityAddTraits(.isHeader)
+                    VStack(alignment: .leading, spacing: 8) {
+                        BlockedArtistTag(name: name)
+                        Text(name)
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                            .lineLimit(3)
+                            .minimumScaleFactor(0.6)
+                            .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     Spacer(minLength: 0)
                     if let play {
                         ArtistPlayCircle(action: play)
@@ -173,6 +178,8 @@ struct ArtistScaffold<Sections: View, More: View>: View {
                     .minimumScaleFactor(0.7)
                     .accessibilityAddTraits(.isHeader)
                 ArtistSignatureLink(identity: identity, story: story)
+                BlockedArtistTag(name: name)
+                    .padding(.top, 6)
                 HStack(spacing: 10) {
                     if let play {
                         Button("Play", systemImage: "play.fill", action: play)
@@ -192,6 +199,8 @@ struct ArtistScaffold<Sections: View, More: View>: View {
                         Button("Your Stats", systemImage: "chart.bar.xaxis") {
                             openPlayRoute(.stats(.artist(identity)))
                         }
+                        Divider()
+                        BlockArtistButton(artist: name)
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.body.weight(.semibold))
@@ -448,5 +457,25 @@ extension CoverArt {
     static func artistPicture(url: String?, name: String) -> CoverArt? {
         guard let url, !url.isEmpty else { return nil }
         return .url(url, seed: name)
+    }
+}
+
+/// Over a blocked artist's name on their page: why nothing of theirs plays or comes up.
+/// Unblocked from the page's More menu, or Blocked Artists in Settings.
+struct BlockedArtistTag: View {
+    let name: String
+    @Environment(PlayerModel.self) private var player
+
+    var body: some View {
+        if player.isBlocked(artist: name) {
+            Label("Blocked", systemImage: "nosign")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.black.opacity(0.35), in: .capsule)
+                .accessibilityLabel("Blocked. Motif won't play or suggest this artist.")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        }
     }
 }

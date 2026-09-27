@@ -155,7 +155,8 @@ struct SongMenu: View {
     /// Hides Go to Album on the album's own page.
     var showsAlbum = true
     var showsArtist = true
-    /// Off where the menu has its own way to say no, as suggestions do.
+    /// Off where the menu has its own way to say no, as suggestions do, which then offer
+    /// blocking after it.
     var showsSuggestLess = true
 
     @Environment(PlayerModel.self) private var player
@@ -194,6 +195,7 @@ struct SongMenu: View {
         Divider()
         if showsSuggestLess {
             SuggestLessButton(songIdentity: HistoryImport.key(title: song.title, artistName: song.artistName))
+            BlockArtistButton(songBy: song.artistName)
         }
     }
 }
@@ -211,6 +213,41 @@ struct SuggestLessButton: View {
         } else {
             Button("Suggest Less", systemImage: "hand.thumbsdown") {
                 player.setSuggestLess(songIdentity, true)
+            }
+        }
+    }
+}
+
+/// "Block", which stops Motif playing or suggesting an artist anywhere, on every device.
+/// Undone from the same place, or from Blocked Artists in Settings.
+struct BlockArtistButton: View {
+    /// The artist, as their page names them.
+    let artist: String
+    /// Whether the name goes in the item: on a song's menu it says whose; on the artist's
+    /// own page it goes without saying.
+    var namesArtist = true
+    @Environment(PlayerModel.self) private var player
+
+    /// For a song's menu: whoever it's by, before anyone featured.
+    init(songBy credit: String) {
+        artist = BlockedArtists.leadArtist(of: credit)
+    }
+
+    init(artist: String, namesArtist: Bool = false) {
+        self.artist = artist
+        self.namesArtist = namesArtist
+    }
+
+    var body: some View {
+        if !artist.isEmpty {
+            if player.isBlocked(artist: artist) {
+                Button(namesArtist ? "Unblock \(artist)" : "Unblock Artist", systemImage: "person.crop.circle.badge.checkmark") {
+                    player.unblock(artist: artist)
+                }
+            } else {
+                Button(namesArtist ? "Block \(artist)" : "Block Artist", systemImage: "person.crop.circle.badge.xmark", role: .destructive) {
+                    player.block(artist: artist)
+                }
             }
         }
     }
@@ -237,6 +274,7 @@ struct HistorySongMenu: View {
         }
         Divider()
         SuggestLessButton(songIdentity: song.songIdentity)
+        BlockArtistButton(songBy: song.artistName)
     }
 }
 

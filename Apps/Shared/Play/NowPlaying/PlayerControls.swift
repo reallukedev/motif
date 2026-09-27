@@ -271,6 +271,10 @@ struct NowPlayingMenuItems: View {
             .disabled(isAsked)
         }
         SuggestLessButton(songIdentity: track.songIdentity)
+        // Your own songs' menu above already offers it.
+        if track.local == nil {
+            BlockArtistButton(songBy: track.artistName)
+        }
         if let onTuneRadio, player.isPlayingMotifRadio, track.songIdentity == player.current?.songIdentity {
             Divider()
             Button("Tune Motif Radio", systemImage: "slider.horizontal.3", action: onTuneRadio)

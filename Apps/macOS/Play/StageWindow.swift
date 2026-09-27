@@ -9,9 +9,15 @@ struct StageWindow: Scene {
 
     var body: some Scene {
         Window("Stage", id: Self.id) {
+            // Everything Stage's controls and menus read, as the main window has it: without
+            // one, opening Stage stops the app.
             StageWindowContent()
                 .environment(model)
                 .environment(model.player)
+                .environment(model.playFeed)
+                .environment(model.discovery)
+                .environment(model.yourMusic)
+                .environment(model.lidarr)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 800)

@@ -86,6 +86,10 @@ extension SyncedSetting {
         // travel as well as an addition.
         SyncedSetting(key: CaptureSettings.excludedStationsKey),
 
+        // Play. Blocked on the Mac is blocked on the iPhone; and unblocking is as much a
+        // change as blocking, so the newest list wins rather than the two joining.
+        SyncedSetting(key: CaptureSettings.blockedArtistsKey),
+
         // Song statuses. Nothing ever un-forgets a song, so the sets only grow and a union
         // is both safe and order-independent. Newest-wins would undo a removal made on the
         // other device the next time this one forgot anything.

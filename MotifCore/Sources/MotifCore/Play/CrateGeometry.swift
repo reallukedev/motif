@@ -1,0 +1,99 @@
+import Foundation
+
+/// Where each record in Play's crate sits, as Cover Flow laid out its albums: the one in front,
+/// the first either side tucked just behind it, and each one after that the same step further
+/// out, a little smaller and darker, crisp all the way. As many as fit the width show; the
+/// next one out fades as it comes or goes, so there's never a record half there at rest.
+///
+/// Distances are in records from the front (`a`, never negative) and in covers across.
+public enum CrateFan {
+    /// How far a record sits from the front's centre, in covers, `a` records out.
+    public static func reach(_ a: Double) -> Double {
+        min(a, 1) * 0.86 + max(0, a - 1) * step
+    }
+
+    /// How large a record is, `a` records out, the front's size being 1.
+    public static func scale(_ a: Double) -> Double {
+        max(0.5, 1 - 0.14 * min(a, 1) - 0.07 * max(0, a - 1))
+    }
+
+    /// Each record past the first beside the front, in covers.
+    public static let step = 0.34
+
+    /// The most records a side ever shows, however wide the crate.
+    public static let deepest = 12
+
+    /// How many records a side fit in this width, the front's included in none: at least one,
+    /// the one beside the front, which may run under the edge's fade.
+    public static func depth(width: Double, side: Double) -> Double {
+        guard side > 0 else { return 1 }
+        // Inside the fade at either edge.
+        let room = width / 2 * 0.91
+        var count = 1
+        while count < deepest {
+            let next = Double(count + 1)
+            guard (reach(next) + scale(next) / 2) * side <= room else { break }
+            count += 1
+        }
+        return Double(count)
+    }
+}
+
+/// Where the crate is scrolled to, in records: the place passing through its middle, and
+/// whether it's pulled past the first or the last.
+public struct CratePosition: Equatable, Sendable {
+    /// The place in the row in the middle, from 0 for the first; held to the row at the ends.
+    public let place: Int
+    /// Whether the crate is pulled beyond its first or last record, rubber-banding.
+    public let isPastEnd: Bool
+    /// How many places the row has. Part of the position, so records added before the one in
+    /// the middle, which move it along without moving the scroll, count as a change.
+    public let places: Int
+
+    /// How far past an end the crate is pulled, in records, before it counts: a hair, so the
+    /// end is felt as it gives, not on the way to settling at it.
+    public static let endGive = 0.12
+
+    /// - Parameters:
+    ///   - offset: How far the first place's centre has scrolled past the middle.
+    ///   - pitch: From one record's place to the next.
+    ///   - places: How many places the row has.
+    public init(offset: Double, pitch: Double, places: Int) {
+        self.places = places
+        guard pitch > 0, places > 0, offset.isFinite else {
+            place = 0
+            isPastEnd = false
+            return
+        }
+        let position = offset / pitch
+        let last = Double(places - 1)
+        place = Int(min(max(position, 0), last).rounded())
+        isPastEnd = position < -Self.endGive || position > last + Self.endGive
+    }
+}
+
+/// Where the crate comes to rest after a scroll by hand: with a record in the middle. A flick
+/// riffles through a few; a slow drag moves them one at a time.
+public enum CrateRest {
+    /// The most records a single flick carries the crate.
+    public static let flingReach = 4
+
+    /// Where a scroll heading for `proposed` settles.
+    ///
+    /// - Parameters:
+    ///   - proposed: Where the scroll would stop on its own, as an offset.
+    ///   - start: The place in the middle as the scroll began, which it goes no more than
+    ///     ``flingReach`` from; nil for no limit.
+    ///   - pitch: From one record's place to the next.
+    ///   - last: The farthest the crate scrolls, as an offset.
+    /// - Returns: The offset that puts the nearest record in the middle.
+    public static func offset(for proposed: Double, from start: Int?, pitch: Double, last: Double) -> Double {
+        guard pitch > 0, proposed.isFinite else { return proposed }
+        var place = Int((proposed / pitch).rounded())
+        if let start {
+            place = min(max(place, start - flingReach), start + flingReach)
+        }
+        let lastPlace = Int((max(0, last) / pitch).rounded())
+        return Double(min(max(place, 0), lastPlace)) * pitch
+    }
+}

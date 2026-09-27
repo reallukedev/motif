@@ -39,7 +39,7 @@ nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandl
         case .needsSubscription, .accessDenied:
             // Something to sort out in Motif itself.
             return INPlayMediaIntentResponse(code: .failureRequiringAppLaunch, userActivity: nil)
-        case .onlyExplicit, .explicitSong:
+        case .onlyExplicit, .explicitSong, .blockedArtist:
             return INPlayMediaIntentResponse(code: .failureRestrictedContent, userActivity: nil)
         case .nothingToPlay, .notInYourMusic, .needsAppleMusic, .failed:
             return INPlayMediaIntentResponse(code: .failure, userActivity: nil)

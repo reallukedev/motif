@@ -257,7 +257,10 @@ struct LocalTrackMenu: View {
             Button("Your Stats", systemImage: "chart.bar.xaxis") { go(.stats(.song(track.identity))) }
             Divider()
             SuggestLessButton(songIdentity: track.identity)
+        } else {
+            Divider()
         }
+        BlockArtistButton(songBy: track.artist)
         if let onDelete, !track.isFromServer {
             Divider()
             #if os(macOS)

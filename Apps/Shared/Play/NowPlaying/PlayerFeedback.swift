@@ -40,6 +40,13 @@ private struct PlayerFeedback: ViewModifier {
                 case .needsAppleMusic:
                     Button("Use Apple Music") { model.musicSource = .appleMusic }
                     Button("Not Now", role: .cancel) {}
+                case .blockedArtist(let name):
+                    // Stopped for being theirs: unblocked, it plays on from where it stopped.
+                    Button("Unblock and Play") {
+                        player.unblock(artist: name)
+                        if player.hasQueue, !player.isPlaying { player.togglePlayPause() }
+                    }
+                    Button("Cancel", role: .cancel) {}
                 case .nothingToPlay, .onlyExplicit, .explicitSong, .notInYourMusic, .failed:
                     Button("OK", role: .cancel) {}
                 }

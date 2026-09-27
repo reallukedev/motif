@@ -183,6 +183,6 @@ struct YourMusicMoodView: View {
         let played = await OffMainActor.run { MoodMix.songs(for: mood, in: history, signals: signals) }
         let seeds = yours.prefix(3).map { (title: $0.title, artist: $0.artist) }
             + played.prefix(3).map { (title: $0.title, artist: $0.artistName) }
-        await music.discover.loadFinds(for: mood, seeds: seeds, heard: { feed.facts[$0] != nil })
+        await music.discover.loadFinds(for: mood, seeds: seeds, heard: { [player] in feed.facts[$0] != nil || player.signals.excludes($0) })
     }
 }

@@ -93,6 +93,8 @@ struct AvailabilityAccessory: View {
 /// it where it isn't, and go to its artist.
 struct YourMusicSongMenu: View {
     let song: Song
+    /// Off where the menu offers it itself, after its own way to say no.
+    var showsBlock = true
     @Environment(YourMusic.self) private var music
     @Environment(Lidarr.self) private var lidarr
     @Environment(PlayerModel.self) private var player
@@ -139,6 +141,10 @@ struct YourMusicSongMenu: View {
         }
         Button("Go to Album", systemImage: "square.stack") {
             Task { if let album = await SongLinks.album(of: song) { openPlayRoute(.album(album)) } }
+        }
+        if showsBlock {
+            Divider()
+            BlockArtistButton(songBy: song.artistName)
         }
     }
 }

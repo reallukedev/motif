@@ -218,7 +218,8 @@ struct SuggestionMenu: View {
 
     var body: some View {
         if model.musicSource == .yourMusic {
-            YourMusicSongMenu(song: suggestion.song)
+            YourMusicSongMenu(song: suggestion.song, showsBlock: false)
+            Divider()
         } else {
             SongMenu(song: suggestion.song, showsSuggestLess: false)
         }
@@ -229,6 +230,8 @@ struct SuggestionMenu: View {
                 withAnimation(PlayMotion.row) { discovery.dismiss(suggestion) }
             }
         }
+        // The stronger no, after the gentler one.
+        BlockArtistButton(songBy: suggestion.song.artistName)
     }
 }
 
@@ -638,6 +641,7 @@ struct SuggestedArtistMenu: View {
         Button("Not Interested", systemImage: "hand.thumbsdown") {
             withAnimation { discovery.hide(suggestion) }
         }
+        BlockArtistButton(artist: suggestion.artist.name)
     }
 }
 

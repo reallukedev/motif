@@ -149,6 +149,10 @@ public struct LiveMix: Sendable {
     /// a mix that doesn't follow either.
     public let moment: RadioMoment
 
+    /// Artists blocked while the mix plays, whose songs it no longer picks. The mix was made
+    /// without the ones blocked before.
+    public var blocked = BlockedArtists()
+
     /// Songs picked this listen, in order.
     public private(set) var picks: [String] = []
     /// What the mix last changed course for. See ``Steering``.
@@ -257,7 +261,7 @@ public struct LiveMix: Sendable {
         guard !candidates.isEmpty else { return nil }
         if picked.count >= candidates.count { startOver() }
 
-        let open = candidates.filter { !picked.contains($0.song.songIdentity) && include($0.song) }
+        let open = candidates.filter { !picked.contains($0.song.songIdentity) && allows($0.song) && include($0.song) }
         let yours = newFinds == true ? [] : open.filter { !$0.isNew }
         let new = newFinds == false ? [] : open.filter(\.isNew)
         let pool: [Candidate]
@@ -283,12 +287,17 @@ public struct LiveMix: Sendable {
         return choice.song
     }
 
+    /// Whether the song is by no one blocked.
+    private func allows(_ song: MixSong) -> Bool {
+        !blocked.blocks(songBy: song.artistName)
+    }
+
     /// The song a listen opens on: one of yours that passes `include`, drawn as the rest are
     /// but leaning harder toward the strongest, since the first song is the one most often
     /// skipped when it doesn't land. A new find, or a song resting, only when nothing else
     /// passes.
     public mutating func opener(where include: (MixSong) -> Bool) -> MixSong? {
-        let yours = candidates.filter { !$0.isNew && !$0.isResting && !picked.contains($0.song.songIdentity) && include($0.song) }
+        let yours = candidates.filter { !$0.isNew && !$0.isResting && !picked.contains($0.song.songIdentity) && allows($0.song) && include($0.song) }
         guard let choice = draw(from: yours, emphasis: 2) else { return next(playable: include) }
         // As it is now, even when nothing stands out: a song come round again doesn't keep
         // what it was picked for before.
@@ -304,7 +313,7 @@ public struct LiveMix: Sendable {
     /// - Returns: nil only when none passes at all.
     public mutating func next(playable include: (MixSong) -> Bool) -> MixSong? {
         if let song = next(where: include) { return song }
-        let passing = Set(candidates.filter { include($0.song) }.map(\.song.songIdentity))
+        let passing = Set(candidates.filter { allows($0.song) && include($0.song) }.map(\.song.songIdentity))
         guard !passing.isEmpty else { return nil }
         // Every one that passes has been picked: those begin again, keeping the latest few of
         // them out, as a new round of every song does.

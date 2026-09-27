@@ -36,6 +36,8 @@ struct FavoriteArtistTile: View {
             Button("Your Stats", systemImage: "chart.bar.xaxis") {
                 openPlayRoute(.stats(.artist(artist.id)))
             }
+            Divider()
+            BlockArtistButton(artist: artist.name, namesArtist: true)
         }
     }
 

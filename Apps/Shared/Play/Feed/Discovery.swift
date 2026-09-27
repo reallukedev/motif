@@ -267,11 +267,20 @@ final class Discovery {
 
     /// Takes out songs you've played since they were suggested: they aren't new any more.
     func prune() {
-        let heard = { (suggestion: Suggestion) in self.feed.facts[suggestion.identity] != nil }
-        guard songs.contains(where: heard) || fromYourArtists.contains(where: heard) || pendingYours.contains(where: heard) else { return }
-        songs.removeAll(where: heard)
-        fromYourArtists.removeAll(where: heard)
-        pendingYours.removeAll(where: heard)
+        let blocked = player.signals.blocked
+        // Heard now, or by someone just blocked.
+        let gone = { (suggestion: Suggestion) in
+            self.feed.facts[suggestion.identity] != nil || blocked.blocks(songBy: suggestion.song.artistName)
+        }
+        if songs.contains(where: gone) || fromYourArtists.contains(where: gone) || pendingYours.contains(where: gone) {
+            songs.removeAll(where: gone)
+            fromYourArtists.removeAll(where: gone)
+            pendingYours.removeAll(where: gone)
+        }
+        if artists.contains(where: { blocked.contains(artist: $0.artist.name) }) {
+            artists.removeAll { blocked.contains(artist: $0.artist.name) }
+        }
+        frontier.removeAll { blocked.contains(artist: $0.artist.name) }
     }
 
     /// Takes a song out of the suggestions, and has the mixes suggest it less.
@@ -309,6 +318,7 @@ final class Discovery {
     private func isNew(_ artist: Artist) -> Bool {
         let key = StatsCalculator.folded(artist.name)
         return !feed.heardArtists.contains(key) && !hiddenArtists.contains(key)
+            && !player.signals.blocked.contains(artist: artist.name)
     }
 
     /// Spread out so no artist comes twice in a row, the same way all day.

@@ -106,10 +106,12 @@ struct ForYouCrate: View {
 
     var body: some View {
         let supply = supply
+        let blocked = player.signals.blocked
         Crate(
             cards: cards,
             leadID: leadID,
-            songs: supply.songs,
+            // Whoever the suggestions came from, none by someone blocked.
+            songs: supply.songs.filter { !blocked.blocks(songBy: $0.artistName) },
             songsGoOn: supply.goesOn,
             songsGeneration: supply.generation,
             loadMoreSongs: supply.loadMore

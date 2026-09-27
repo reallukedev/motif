@@ -92,14 +92,22 @@ final class PlayFeed {
         }
         // A newer history arrived while this one was built; its own rebuild will land.
         guard !Task.isCancelled else { return }
+        // Blocked artists are no one's to suggest from: not Your Artists, and not where
+        // Discover, New Releases and the suggestions look. Those reload as the artists change;
+        // until then, theirs come out of what's already there.
+        let blocked = signals.blocked
         mixes = built.0
         facts = built.1
-        favoriteArtists = built.2
+        favoriteArtists = built.2.filter { !blocked.contains(artist: $0.name) }
         heardArtists = built.3
-        tasteArtists = built.4
+        tasteArtists = built.4.filter { !blocked.contains(artist: $0) }
         builtRevision = revision
         // A Discover song leaves once it's been played: it isn't new any more.
-        discover.removeAll { facts[HistoryImport.key(title: $0.title, artistName: $0.artistName)] != nil }
+        discover.removeAll { facts[HistoryImport.key(title: $0.title, artistName: $0.artistName)] != nil || blocked.blocks(songBy: $0.artistName) }
+        newReleases.removeAll { $0.subtitle.map(blocked.blocks(songBy:)) ?? false }
+        if artistLookups.contains(where: { blocked.contains(artist: $0.name) }) {
+            artistLookups.removeAll { blocked.contains(artist: $0.name) }
+        }
         hasBuilt = true
         if isDemo { fillDemoStations() }
     }

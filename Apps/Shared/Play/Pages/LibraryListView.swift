@@ -423,5 +423,7 @@ struct LibraryArtistMenu: View {
         if let url = artist?.url {
             ShareLink(item: url) { Label("Share Artist", systemImage: "square.and.arrow.up") }
         }
+        Divider()
+        BlockArtistButton(artist: name)
     }
 }

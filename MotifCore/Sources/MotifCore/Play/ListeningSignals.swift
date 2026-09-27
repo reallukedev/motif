@@ -9,6 +9,14 @@ public struct ListeningSignals: Codable, Sendable, Equatable {
     public private(set) var skips: [String: [Date]] = [:]
     /// Song identities the person asked to hear less of.
     public private(set) var suggestLess: Set<String> = []
+    /// Artists the person blocked. Not kept with the rest: they're a setting of their own,
+    /// shared between devices, and handed in here so everything that asks what to leave out
+    /// leaves them out too.
+    public var blocked = BlockedArtists()
+
+    private enum CodingKeys: String, CodingKey {
+        case skips, suggestLess
+    }
 
     /// How long a skip counts against a song.
     public static let skipMemory: TimeInterval = 60 * 24 * 60 * 60
@@ -44,6 +52,7 @@ public struct ListeningSignals: Codable, Sendable, Equatable {
     /// Whether mixes should leave the song out.
     public func excludes(_ song: String, now: Date = .now) -> Bool {
         suggestLess.contains(song) || recentSkips(of: song, now: now) >= Self.skipsToDrop
+            || blocked.blocks(songIdentity: song)
     }
 
     public mutating func setSuggestLess(_ song: String, _ isOn: Bool) {

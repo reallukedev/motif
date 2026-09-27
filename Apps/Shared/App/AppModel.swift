@@ -414,7 +414,7 @@ final class AppModel {
             let inputs = Observations { FeedInputs(revision: library.revision, isLoaded: library.isLoaded, signals: player.signals) }
             for await input in inputs where input.isLoaded {
                 await feed.rebuild(history: library.history, signals: input.signals, revision: input.revision)
-                // Songs just played aren't suggestions any more.
+                // Songs just played, and blocked artists, aren't suggestions any more.
                 discovery.prune()
             }
         }

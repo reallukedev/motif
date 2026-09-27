@@ -68,9 +68,12 @@ final class PlayerModel {
         self.engine = engine
         self.isDemo = isDemo
         self.signalsStore = signalsStore
-        self.signals = signalsStore.load()
+        var signals = signalsStore.load()
+        signals.blocked = CaptureSettings().blockedArtists
+        self.signals = signals
         listen(to: engine)
         engineChanged()
+        followBlockedArtistsFromOtherDevices()
     }
 
     /// Follows an engine's changes, and takes its remote controls' Next and Previous, so the
@@ -602,10 +605,60 @@ final class PlayerModel {
         confirm(isOn ? String(localized: "Motif Will Suggest This Less") : String(localized: "Motif Will Suggest This Again"))
     }
 
-    /// Forgets every skip and "suggest less".
+    /// Forgets every skip and "suggest less". Blocked artists stay blocked: they're a list of
+    /// their own, in Settings.
     func resetSignals() {
+        let blocked = signals.blocked
         signals = ListeningSignals()
+        signals.blocked = blocked
         signalsStore.save(signals)
+    }
+
+    // MARK: - Blocked artists
+
+    /// Whether the artist is blocked, by their whole name.
+    func isBlocked(artist name: String) -> Bool {
+        signals.blocked.contains(artist: name)
+    }
+
+    /// Never plays or suggests the artist again, on any of your devices: out of every mix,
+    /// Motif Radio, Autoplay and suggestion, out of Up Next now, and skipped if they're on.
+    func block(artist name: String) {
+        var blocked = signals.blocked
+        guard blocked.block(name) else { return }
+        apply(blocked)
+        confirm(String(localized: "Blocked \(name)"))
+    }
+
+    func unblock(artist name: String) {
+        var blocked = signals.blocked
+        guard blocked.contains(artist: name) else { return }
+        blocked.unblock(name)
+        apply(blocked)
+        confirm(String(localized: "Unblocked \(name)"))
+    }
+
+    /// Keeps the list, then takes the artists in it out of what's playing.
+    private func apply(_ blocked: BlockedArtists, saving: Bool = true) {
+        if saving { CaptureSettings().blockedArtists = blocked }
+        // The mixes and suggestions are rebuilt as the signals change.
+        signals.blocked = blocked
+        live?.blocked = blocked
+        guard !blocked.isEmpty else { return }
+        let theirs = IndexSet(upNext.indices.filter { blocked.blocks(songBy: upNext[$0].artistName) })
+        if !theirs.isEmpty { engine.removeUpNext(at: theirs) }
+        skipIfBlocked(current)
+    }
+
+    /// Blocking or unblocking on another device reaches this one, with what it plays.
+    private func followBlockedArtistsFromOtherDevices() {
+        Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: SettingsSync.didChangeNotification) {
+                guard let self else { return }
+                let blocked = CaptureSettings().blockedArtists
+                if blocked != signals.blocked { apply(blocked, saving: false) }
+            }
+        }
     }
 
     // MARK: - Following the engine
@@ -665,7 +718,10 @@ final class PlayerModel {
             if sleepTimer == .endOfSong { sleepTimer = nil }
         }
         // Not straight after the sleep timer stopped the music: a skip would start it again.
-        if !stoppedForSleep { skipIfNotAllowed(next) }
+        if !stoppedForSleep {
+            skipIfNotAllowed(next)
+            skipIfBlocked(next)
+        }
         topUpLiveIfNeeded()
         startAutoplayIfNeeded()
         let onPick = next.map(isAutoplayPick) ?? false
@@ -821,6 +877,43 @@ final class PlayerModel {
         Task { try? await engine.skipToNext() }
     }
 
+    /// Songs by blocked artists in a row skipped. After a few, or when there'd be nothing
+    /// after it, Motif stops and says why rather than skipping through for good.
+    @ObservationIgnored private var blockedSkipsInARow = 0
+    /// The entry last skipped for its artist, so it's skipped once.
+    @ObservationIgnored private var blockedSkippedEntry: String?
+
+    /// Nothing filters a station, an album or a playlist by artist before it plays, so a song
+    /// of a blocked artist's is skipped as it starts. Checked on every change: a station's
+    /// entry only says whose it is once it resolves.
+    private func skipIfBlocked(_ track: PlayerTrack?) {
+        guard let track, !signals.blocked.isEmpty, !track.artistName.isEmpty else { return }
+        guard signals.blocked.blocks(songBy: track.artistName) else {
+            blockedSkipsInARow = 0
+            return
+        }
+        guard blockedSkippedEntry != track.id else { return }
+        blockedSkippedEntry = track.id
+        blockedSkipsInARow += 1
+        // A station or a live mix always has a next song; anything else may not.
+        let hasNext = !upNext.isEmpty || context?.isStation == true || picksLive
+        guard hasNext, blockedSkipsInARow <= 5 else {
+            blockedSkipsInARow = 0
+            intendsToPlay = nil
+            engine.pause()
+            problem = .blockedArtist(Self.blockedName(for: track, in: signals.blocked))
+            return
+        }
+        isAutoSkipping = true
+        Task { try? await engine.skipToNext() }
+    }
+
+    /// The blocked artist a song is credited to, as they were named when blocked.
+    private static func blockedName(for track: PlayerTrack, in blocked: BlockedArtists) -> String {
+        let credited = LocalTrack.creditedArtists(of: track.artistName)
+        return blocked.names.first { credited.contains(StatsCalculator.folded($0)) } ?? track.artistName
+    }
+
     // MARK: - Live mixes
 
     /// What's picking the songs while Motif Radio or a mood plays. Nil for anything else.
@@ -916,6 +1009,7 @@ final class PlayerModel {
             return false
         }
         var picking = mix
+        picking.blocked = signals.blocked
         let ready: (MixSong) -> Bool = { [radioDownloads] song in
             guard MusicSource.current == .yourMusic, let radioDownloads else { return true }
             return radioDownloads.isReady(HistorySong(song))
@@ -947,6 +1041,7 @@ final class PlayerModel {
         else { return }
         // What's been picked while the new mix was made, the song queued next included.
         mix.continueListen(from: current)
+        mix.blocked = signals.blocked
         live = mix
         radioMoment = mix.moment
     }
@@ -962,6 +1057,8 @@ final class PlayerModel {
         // after would end the mix.
         takeOverIfSwitched()
         var mix = mix
+        // Before the first picks, which the rest follow.
+        mix.blocked = signals.blocked
         var songs: [MixSong] = []
         if let first {
             mix.note(picked: first.songIdentity)
@@ -1310,7 +1407,8 @@ final class PlayerModel {
                 return
             }
             for seed in seeds { mix.note(picked: seed.songIdentity) }
-            live = mix
+            mix.blocked = signals.blocked
+        live = mix
             steering = nil
             moreLikeThis = []
             autoplayFollows = context.title

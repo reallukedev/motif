@@ -20,6 +20,7 @@ public struct CaptureSettings: Sendable {
     public static let menuBarLabelFormatKey = "menuBarLabelFormat"
     public static let animatesMenuBarKey = "animatesMenuBar"
     public static let excludedStationsKey = "excludedStations"
+    public static let blockedArtistsKey = "blockedArtists"
     public static let showsUpNextInWidgetKey = "showsUpNextInWidget"
     public static let recentlyPlayedAnchorKey = "recentlyPlayedAnchor"
     public static let artworkMissesKey = "artworkMisses"
@@ -150,6 +151,12 @@ public struct CaptureSettings: Sendable {
     public var excludedStations: Set<String> {
         get { Set(defaults.stringArray(forKey: Self.excludedStationsKey) ?? []) }
         nonmutating set { defaults.set(Array(newValue).sorted(), forKey: Self.excludedStationsKey) }
+    }
+
+    /// Artists never to play or suggest, as they were named when blocked, first blocked first.
+    public var blockedArtists: BlockedArtists {
+        get { BlockedArtists(defaults.stringArray(forKey: Self.blockedArtistsKey) ?? []) }
+        nonmutating set { defaults.set(newValue.names, forKey: Self.blockedArtistsKey) }
     }
 
     /// Apple's recently played list as it was at the last import, as `HistoryImport.key`

@@ -258,7 +258,7 @@ struct NowPlayingBar: View {
     }
 }
 
-/// The song, which opens the full player. Under the pointer it says so: a soft capsule
+/// The song, which opens the full player. Under the pointer it says so: a soft highlight
 /// gathers behind it, the cover lifts, and a chevron rises beside the title.
 private struct BarSong: View {
     let track: PlayerTrack
@@ -266,6 +266,15 @@ private struct BarSong: View {
     let action: () -> Void
     @State private var isHovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Between the cover and the highlight's edge.
+    private static let inset: CGFloat = 5
+
+    /// The highlight's corners follow the cover's, the inset out, rather than rounding off
+    /// into a capsule the square cover sits awkwardly in.
+    private var highlight: RoundedRectangle {
+        RoundedRectangle(cornerRadius: CoverImage.radius(for: coverSize) + Self.inset, style: .continuous)
+    }
 
     var body: some View {
         Button(action: action) {
@@ -300,13 +309,12 @@ private struct BarSong: View {
                     .opacity(isHovering ? 1 : 0)
                     .offset(y: isHovering || reduceMotion ? 0 : 4)
             }
-            .padding(5)
+            .padding(Self.inset)
             .padding(.trailing, 7)
             .background {
-                Capsule()
-                    .fill(.primary.opacity(isHovering ? 0.08 : 0))
+                highlight.fill(.primary.opacity(isHovering ? 0.08 : 0))
             }
-            .contentShape(.capsule)
+            .contentShape(highlight)
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)

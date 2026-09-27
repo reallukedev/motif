@@ -172,6 +172,8 @@ enum PlayerProblem: Error, Equatable {
     case notInYourMusic
     /// Apple Music items asked for while Your Music is the source.
     case needsAppleMusic
+    /// The songs left to play are all by an artist the person blocked, named.
+    case blockedArtist(String)
     case failed(String)
 
     var title: String {
@@ -183,6 +185,7 @@ enum PlayerProblem: Error, Equatable {
         case .explicitSong: String(localized: "Explicit Song")
         case .notInYourMusic: String(localized: "Not in Your Music")
         case .needsAppleMusic: String(localized: "This Is Apple Music")
+        case .blockedArtist(let name): String(localized: "You Blocked \(name)")
         case .failed: String(localized: "Couldn't Play")
         }
     }
@@ -205,6 +208,8 @@ enum PlayerProblem: Error, Equatable {
             String(localized: "These songs aren't in your music, or their server can't be reached. Download songs to play them anywhere.")
         case .needsAppleMusic:
             String(localized: "Motif is playing your own music. Switch Music Source to Apple Music in Settings to play this.")
+        case .blockedArtist:
+            String(localized: "Motif doesn't play or suggest artists you've blocked. Unblock them to play this.")
         case .failed(let detail):
             detail
         }

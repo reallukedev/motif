@@ -54,6 +54,7 @@ struct PlaySettingsPage: View {
                 NowPlayingBackdropSection()
                 devicesSection
                 contentSection
+                BlockedArtistsSection()
                 if !isYourMusic {
                     // Your Music plays gaplessly, with no crossfade, and has its own Play page.
                     transitionSection

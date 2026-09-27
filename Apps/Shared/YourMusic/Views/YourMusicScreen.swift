@@ -170,7 +170,8 @@ struct YourMusicScreen: View {
 
     private func makeShelves() -> Shelves {
         let seed = FreshShuffle.dailySeed(for: .now, salt: "waiting")
-        let unplayed = music.index.tracks.filter { feed.facts[$0.identity] == nil && music.isPlayable($0) }
+        let blocked = player.signals.blocked
+        let unplayed = music.index.tracks.filter { feed.facts[$0.identity] == nil && music.isPlayable($0) && !blocked.blocks(songBy: $0.artist) }
         let onPhone = music.index.tracks.filter { !$0.isFromServer || music.downloads.isDownloaded($0.id) }
         // Songs on this iPhone: ones you haven't played first, then the ones you've played
         // least lately, a fresh order each day.

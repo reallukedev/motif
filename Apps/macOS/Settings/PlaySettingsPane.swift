@@ -59,6 +59,7 @@ struct PlaySettingsPane: View {
             ResumeSettingsSection()
             NowPlayingBackdropSection()
             contentSection
+            BlockedArtistsSection()
             if !isYourMusic {
                 // Your Music has its own Listen Now, without these sections.
                 layoutSection
