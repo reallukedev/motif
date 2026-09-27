@@ -169,7 +169,7 @@ struct FullPlayer: View {
             Spacer(minLength: 24)
 
             if let duration = track.duration, duration > 0 {
-                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, format: track.local?.format) { time in
+                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track) { time in
                     player.seek(to: time)
                 }
             } else {

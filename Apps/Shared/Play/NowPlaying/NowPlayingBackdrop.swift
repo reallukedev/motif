@@ -239,6 +239,9 @@ private struct LivingBackdrop: View {
 ///
 /// Drawn at a third of the size and stretched: soft light looks the same, for a ninth of the
 /// memory and work.
+/// How lively a song is, 0 to 1, by its genres, for anything that keeps time by its feel.
+func songEnergy(_ track: PlayerTrack?) -> Double { PulseBackdrop.energy(of: track) }
+
 private struct PulseBackdrop: View {
     let cover: CoverArt?
     let tint: Color?
@@ -480,10 +483,12 @@ struct NowPlayingBackdropPicker: View {
     private var cover: CoverArt? { player.current?.cover }
 }
 
-/// Settings ▸ Play ▸ Now Playing: the background and how it changes between songs.
+/// Settings ▸ Play ▸ Now Playing: the background, how it changes between songs, and whether
+/// the player shows the quality you're hearing.
 struct NowPlayingBackdropSection: View {
     @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.colour
     @AppStorage(BackdropChange.storageKey) private var change = BackdropChange.crossfade
+    @AppStorage(AudioQualityBadge.showsKey) private var showsQuality = true
 
     var body: some View {
         Section {
@@ -493,11 +498,22 @@ struct NowPlayingBackdropSection: View {
                     Text(option.title).tag(option)
                 }
             }
+            SettingsSwitch(
+                "Show Audio Quality",
+                detail: Text(PlaySettingsWords.audioQualityDetail(isShown: showsQuality)),
+                isOn: $showsQuality
+            )
         } header: {
             Text("Now Playing")
         } footer: {
+            #if os(macOS)
             Text(chosen.footer)
                 .contentTransition(.opacity)
+            #else
+            // The iPhone's switch has no detail line: its sentence follows the background's.
+            Text("\(Text(chosen.footer)) \(PlaySettingsWords.audioQualityDetail(isShown: showsQuality))")
+                .contentTransition(.opacity)
+            #endif
         }
     }
 }

@@ -1,0 +1,118 @@
+import UIKit
+import CarPlay
+import MusicKit
+import MotifCore
+
+/// Radio: everything that plays on its own once started. Motif Radio heads the tab as a
+/// station of its own, every mood sits under it as a tile with Driving first, and Apple's live
+/// stations follow.
+extension CarPlaySceneDelegate {
+    func radioSections() async -> [CPListSection] {
+        let feed = model.playFeed
+        let player = model.player
+        let model = self.model
+        var sections: [CPListSection] = []
+
+        radioRowState = radioState.rawValue
+        if let row = await motifRadioRow() {
+            sections.append(CPListSection(items: [row]))
+        }
+
+        // Every mood, as the phone's tiles, a tap from playing. Driving first: it's the car.
+        let moods = [Mood.drive] + Mood.allCases.filter { $0 != .drive }
+        var tiles: [CPListImageRowItemImageGridElement] = []
+        for mood in moods {
+            let image = await CarPlayImages.mood(mood, side: CPListImageRowItemImageGridElement.maximumImageSize.height, scale: scale)
+            let tile = CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: mood.title, accessorySymbolName: nil)
+            tiles.append(tile)
+        }
+        let row = CPListImageRowItem(text: nil, imageGridElements: tiles, allowsMultipleLines: true)
+        row.listImageRowHandler = { [weak self] _, index, completion in
+            guard moods.indices.contains(index) else { return completion() }
+            let mood = moods[index]
+            self?.play({ await MoodPlayback.start(mood, model: model) }, completion: completion)
+        }
+        sections.append(CPListSection(items: [row], header: String(localized: "Find Your Mood"), sectionIndexTitle: nil))
+
+        // Apple's stations only play from Apple Music. The cover's LIVE tag says what they
+        // are, so a row only has a line when the station has something of its own to say.
+        if model.musicSource == .appleMusic, !feed.liveStations.isEmpty {
+            var items: [CPListItem] = []
+            for station in feed.liveStations {
+                let cover = await CarPlayImages.cover(for: station, side: CPListItem.maximumImageSize.height, scale: scale)
+                let line = station.subtitle.flatMap { $0.isEmpty ? nil : $0 }
+                let item = CPListItem(text: station.title, detailText: line, image: station.isLive ? CarPlayImages.live(cover) : cover)
+                item.isPlaying = isPlaying(station.title)
+                item.handler = { [weak self] _, completion in
+                    self?.play({ await Self.play(station, player: player) }, completion: completion)
+                }
+                items.append(item)
+            }
+            sections.append(CPListSection(items: items, header: String(localized: "Live Radio"), sectionIndexTitle: nil))
+        }
+        return sections
+    }
+
+    /// Redraws Radio when Motif Radio's row would say something else: it's started, paused,
+    /// or become available.
+    func refreshRadioIfNeeded() {
+        guard radioRowState != radioState.rawValue else { return }
+        refreshRadioList()
+    }
+
+    private enum RadioState: String {
+        case off, idle, playing, paused
+    }
+
+    private var radioState: RadioState {
+        guard hasMotifRadio else { return .off }
+        guard isPlaying(PlayContext.motifRadio.title) else { return .idle }
+        return model.player.isPlaying ? .playing : .paused
+    }
+
+    /// Motif Radio as a station: its artwork, and a line that says where it stands, with the
+    /// playing marker while it's on. A tap works out what to do then, so it's never a step
+    /// behind the music: play it, pick it up where it paused, or show it.
+    private func motifRadioRow() async -> CPListItem? {
+        let state = radioState
+        guard state != .off else { return nil }
+        let image = await CarPlayImages.motifRadio(side: CPListItem.maximumImageSize.height, scale: scale)
+        let line = switch state {
+        case .playing: String(localized: "Now Playing")
+        case .paused: String(localized: "Paused")
+        case .idle, .off: String(localized: "Your station, picked as you drive")
+        }
+        let row = CPListItem(text: String(localized: "Motif Radio"), detailText: line, image: image)
+        row.isPlaying = state == .playing
+        row.handler = { [weak self] _, completion in
+            self?.motifRadioTapped(completion: completion)
+        }
+        return row
+    }
+
+    /// Motif Radio from a card or a suggestion: picked up where it paused if it's what's on,
+    /// otherwise started. Never started over while it plays.
+    func startOrResumeMotifRadio() async {
+        let player = model.player
+        if isPlaying(PlayContext.motifRadio.title) {
+            if !player.isPlaying { player.togglePlayPause() }
+        } else {
+            await player.startMotifRadio()
+        }
+    }
+
+    private func motifRadioTapped(completion: @escaping () -> Void) {
+        let player = model.player
+        switch radioState {
+        case .playing:
+            showNowPlaying()
+            completion()
+        case .paused:
+            player.togglePlayPause()
+            showNowPlaying()
+            completion()
+        case .idle, .off:
+            play({ await player.startMotifRadio() }, completion: completion)
+        }
+    }
+}

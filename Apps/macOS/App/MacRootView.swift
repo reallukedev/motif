@@ -119,6 +119,9 @@ struct MacRootView: View {
             // Through the Mac's one voice: Music may be the player your devices are shown.
             .onChange(of: "\(player.current?.id ?? "").\(player.isPlaying)") { Task { await NearbyMac.tell(model) } }
             #if DEBUG
+            .onChange(of: player.hasQueue) { _, hasQueue in
+                if hasQueue, LaunchScene.opensStage { openWindow(id: StageWindow.id) }
+            }
             .task {
                 if UserDefaults.standard.bool(forKey: "MotifMenuBarPreview") {
                     openWindow(id: "menubar-preview")

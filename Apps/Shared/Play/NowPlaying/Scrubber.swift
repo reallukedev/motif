@@ -7,8 +7,8 @@ struct Scrubber: View {
     let duration: TimeInterval
     let isPlaying: Bool
     let time: () -> TimeInterval
-    /// Your own music's format, shown between the times as Music shows Lossless.
-    var format: AudioFormat? = nil
+    /// The song, whose audio quality shows between the times as Music shows Lossless.
+    var track: PlayerTrack? = nil
     let onSeek: (TimeInterval) -> Void
 
     @State private var dragFraction: Double?
@@ -44,19 +44,14 @@ struct Scrubber: View {
                 }
                 .frame(height: 24)
 
-                ZStack {
-                    HStack {
-                        Text(Self.format(elapsed))
-                        Spacer()
-                        Text(verbatim: "-" + Self.format(max(0, duration - elapsed)))
-                    }
-                    .font(.caption.weight(.medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(dragFraction == nil ? 0.6 : 0.9))
-                    if let format {
-                        FormatBadge(format: format, onDark: true)
-                    }
+                HStack {
+                    Text(Self.format(elapsed))
+                    Spacer()
+                    Text(verbatim: "-" + Self.format(max(0, duration - elapsed)))
                 }
+                .font(.caption.weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(dragFraction == nil ? 0.6 : 0.9))
             }
             .accessibilityElement()
             .accessibilityLabel("Position")
@@ -64,6 +59,17 @@ struct Scrubber: View {
             .accessibilityAdjustableAction { direction in
                 let step: TimeInterval = direction == .increment ? 15 : -15
                 onSeek(min(duration, max(0, elapsed + step)))
+            }
+        }
+        // Its own element after the position, since it opens its details, and outside the
+        // timeline, which redraws four times a second. Centred on the times' line: a hidden
+        // line of the times' type is its anchor at every text size.
+        .overlay(alignment: .bottom) {
+            if let track {
+                Text(verbatim: "0")
+                    .font(.caption.weight(.medium))
+                    .hidden()
+                    .overlay { AudioQualityBadge(track: track).fixedSize() }
             }
         }
     }

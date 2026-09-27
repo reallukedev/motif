@@ -38,7 +38,6 @@ nonisolated enum MusicSource: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// How server songs stream when they aren't downloaded.
 /// Automatic Downloads: songs from your servers come down to this iPhone as you play or add
 /// them, so they play at once, and with no connection, from then on.
 enum AutomaticDownloads {
@@ -50,26 +49,59 @@ enum AutomaticDownloads {
     }
 }
 
+/// How good a song from your servers is: as it is on the server, or a smaller copy the server
+/// makes as it sends it. Named as Apple Music names its own choices. One setting each for
+/// streaming on Wi-Fi and on cellular (the Mac has one for every network), and one for new
+/// downloads.
 enum StreamQuality: String, CaseIterable, Identifiable {
     /// The file as it is on the server: FLAC stays FLAC.
     case original
-    /// Re-encoded by the server, for a slower connection.
+    /// An MP3 at 320 kbps, made by the server.
     case high
+    /// An MP3 at 128 kbps, made by the server.
     case dataSaver
 
     var id: String { rawValue }
 
-    static let storageKey = "yourMusicStreamQuality"
+    /// Streaming on cellular. The first streaming setting, so it keeps the first key.
+    static let cellularKey = "yourMusicStreamQuality"
+    /// Streaming on Wi-Fi, and on the Mac on any network.
+    static let wiFiKey = "yourMusicStreamQualityWiFi"
+    /// New downloads. Downloads already made stay as they are.
+    static let downloadKey = "yourMusicDownloadQuality"
 
-    static var current: StreamQuality {
-        UserDefaults.standard.string(forKey: storageKey).flatMap(StreamQuality.init(rawValue:)) ?? .original
+    static var cellular: StreamQuality { stored(cellularKey) }
+    static var wiFi: StreamQuality { stored(wiFiKey) }
+    static var download: StreamQuality { stored(downloadKey) }
+
+    /// The setting for streaming now: the Mac's one setting; on iPhone the cellular one on an
+    /// expensive network (cellular, or a phone's hotspot), otherwise Wi-Fi's.
+    static func streaming(onExpensiveNetwork expensive: Bool) -> (quality: StreamQuality, network: StreamNetwork) {
+        #if os(macOS)
+        (wiFi, .any)
+        #else
+        expensive ? (cellular, .cellular) : (wiFi, .wifi)
+        #endif
+    }
+
+    private static func stored(_ key: String) -> StreamQuality {
+        UserDefaults.standard.string(forKey: key).flatMap(StreamQuality.init(rawValue:)) ?? .original
     }
 
     var title: LocalizedStringKey {
         switch self {
         case .original: "Original"
-        case .high: "High (320 kbps)"
-        case .dataSaver: "Data Saver (128 kbps)"
+        case .high: "High Quality"
+        case .dataSaver: "High Efficiency"
+        }
+    }
+
+    /// Under each choice in its menu.
+    var subtitle: LocalizedStringKey {
+        switch self {
+        case .original: "As it is on your server"
+        case .high: "MP3 at 320 kbps"
+        case .dataSaver: "MP3 at 128 kbps, the smallest"
         }
     }
 
@@ -79,6 +111,27 @@ enum StreamQuality: String, CaseIterable, Identifiable {
         case .original: nil
         case .high: 320
         case .dataSaver: 128
+        }
+    }
+}
+
+/// A quality setting's choices, each with what it means under it, and the row showing the
+/// choice's short name.
+struct StreamQualityPicker: View {
+    let title: LocalizedStringKey
+    @Binding var selection: StreamQuality
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(StreamQuality.allCases) { quality in
+                VStack(alignment: .leading) {
+                    Text(quality.title)
+                    Text(quality.subtitle)
+                }
+                .tag(quality)
+            }
+        } currentValueLabel: {
+            Text(selection.title)
         }
     }
 }

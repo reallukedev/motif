@@ -12,6 +12,10 @@ struct MotifApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
+                // SharePlay sessions: one this iPhone starts, or one it's invited to, which
+                // can be what opened the app.
+                .task { SharePlayController.shared.start(model: model) }
+                .task { SpeedVolume.shared.start(model) }
         }
         .onChange(of: scenePhase) { _, phase in
             guard !model.isDemoLaunch else { return }

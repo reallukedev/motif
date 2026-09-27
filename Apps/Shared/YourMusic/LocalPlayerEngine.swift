@@ -329,6 +329,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
 
     /// Replaces whatever is queued behind the current song with the song that comes next.
     private func refreshNext() {
+        defer { forgetQualities() }
         for item in player.items().dropFirst() {
             itemEntries[ObjectIdentifier(item)] = nil
             itemObservations[ObjectIdentifier(item)] = nil
@@ -345,9 +346,17 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         return repeatMode == .all && !entries.isEmpty ? 0 : nil
     }
 
+    func setLevel(_ level: Float) {
+        player.volume = level
+    }
+
     private func makeItem(_ entry: Entry) -> AVPlayerItem? {
-        guard let url = music.playbackURL(for: entry.track) else { return nil }
-        let item = AVPlayerItem(asset: AVURLAsset(url: url))
+        guard let (url, playback) = music.playback(for: entry.track) else { return nil }
+        let asset = AVURLAsset(url: url)
+        let item = AVPlayerItem(asset: asset)
+        noteQuality(playback, of: asset, for: entry.id)
+        // Stage's visualizer listens in; it costs nothing while Stage is closed.
+        AudioLevelMeter.attach(to: item, asset: asset)
         // FLAC is decoded as it plays; a little buffer keeps a stream steady.
         item.preferredForwardBufferDuration = 20
         let id = ObjectIdentifier(item)
@@ -357,6 +366,27 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             Task { @MainActor in self?.itemFailed(id) }
         }
         return item
+    }
+
+    /// Notes how a song is reaching the player, for the quality badge, then listens to what
+    /// arrived: a server asked for a smaller copy may send the original instead. A file's own
+    /// tags already say what it is.
+    private func noteQuality(_ playback: LocalPlayback, of asset: AVURLAsset, for entryID: String) {
+        music.playbacks[entryID] = playback
+        guard playback.route != .file, playback.actual == nil else { return }
+        Task { [weak self] in
+            guard let found = await AudioQualityProbe.format(of: asset),
+                  let self, var noted = self.music.playbacks[entryID], noted.route == playback.route
+            else { return }
+            noted.actual = found
+            self.music.playbacks[entryID] = noted
+        }
+    }
+
+    /// Forgets how songs no longer queued in the player were reaching it.
+    private func forgetQualities() {
+        let queued = Set(itemEntries.values)
+        music.playbacks = music.playbacks.filter { queued.contains($0.key) }
     }
 
     /// The player moved on to the next item by itself, gaplessly: follow it. By the item, not
@@ -525,6 +555,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         player.pause()
         player.removeAllItems()
         itemEntries = [:]
+        music.playbacks = [:]
         entries = []
         unshuffled = []
         index = 0

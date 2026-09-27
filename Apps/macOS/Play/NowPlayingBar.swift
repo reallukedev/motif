@@ -244,6 +244,7 @@ struct NowPlayingBar: View {
                 PanelToggle(page: .history, systemImage: "clock.arrow.circlepath", title: "Your History", shortcut: "⌥⌘Y", showsPanel: $showsPanel, current: $panelPage)
                 PanelToggle(page: .upNext, systemImage: "list.bullet", title: "Up Next", shortcut: "⌥⌘U", showsPanel: $showsPanel, current: $panelPage)
                 if tier != .compact {
+                    StageBarButton()
                     RoutePickerButton()
                         .frame(width: 30, height: 30)
                         .help("AirPlay")
@@ -281,10 +282,16 @@ private struct BarSong: View {
                             ExplicitBadge()
                         }
                     }
-                    Text(track.artistName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    // The quality beside the artist, as Music's player shows Lossless; the
+                    // artist gives way first in a narrow bar.
+                    HStack(spacing: 5) {
+                        Text(track.artistName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        AudioQualityBadge(track: track, style: .bar)
+                            .fixedSize()
+                    }
                 }
                 .layoutPriority(-1)
                 Image(systemName: "chevron.up")
@@ -633,4 +640,20 @@ struct RoutePickerButton: NSViewRepresentable {
     }
 
     func updateNSView(_ view: AVRoutePickerView, context: Context) {}
+}
+
+/// Opens Stage, the song full screen with a visualizer, for a second display or a TV.
+private struct StageBarButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button {
+            openWindow(id: StageWindow.id)
+        } label: {
+            Label("Stage", systemImage: "tv")
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(BarIconButtonStyle(diameter: 30, isOn: false, onStyle: .backed))
+        .help("Stage (⌥⌘P)")
+    }
 }

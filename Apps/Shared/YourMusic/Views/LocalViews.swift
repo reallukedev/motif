@@ -62,7 +62,8 @@ struct LocalCover: View {
 }
 
 /// How a song is encoded, as Music marks Lossless: "Hi-Res Lossless", "Lossless", or the
-/// codec and bit rate of anything else.
+/// codec and bit rate of anything else. The file's own format, for album and song pages; what
+/// Now Playing is actually playing at is ``AudioQualityBadge``'s to say.
 struct FormatBadge: View {
     let format: AudioFormat
     /// On Now Playing's coloured field rather than the page.
@@ -70,20 +71,9 @@ struct FormatBadge: View {
     var showsDetail = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            if format.isLossless {
-                Image(systemName: "waveform")
-                    .font(.caption2.weight(.bold))
-            }
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .foregroundStyle(onDark ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(.secondary))
-        .background(onDark ? AnyShapeStyle(.white.opacity(0.14)) : AnyShapeStyle(Color(.tertiarySystemFill)), in: .capsule)
-        .accessibilityLabel(Text(spoken))
+        QualityCapsule(label: label, showsWaveform: format.isLossless, onDark: onDark)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(spoken))
     }
 
     private var label: String {

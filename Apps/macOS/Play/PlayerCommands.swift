@@ -78,6 +78,7 @@ struct ControlsCommands: Commands {
     @FocusedValue(\.playerWindow) private var window
     @Environment(\.openWindow) private var openWindow
     @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
 
     var body: some Commands {
         CommandGroup(after: .textEditing) {
@@ -120,6 +121,11 @@ struct ControlsCommands: Commands {
                 Label("Repeat", systemImage: "repeat")
             }
             .disabled(!canReorder)
+
+            // Music's ∞: once the queue runs out, songs like it carry on.
+            Toggle(isOn: Binding(get: { autoplay }, set: { player.setAutoplay($0) })) {
+                Label("Autoplay", systemImage: "infinity")
+            }
 
             Menu {
                 SleepTimerItems(player: player)
@@ -165,6 +171,13 @@ struct ControlsCommands: Commands {
                 openWindow(id: MiniPlayerWindow.id)
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
+            .disabled(!player.hasQueue)
+
+            Button("Stage", systemImage: "tv") {
+                openWindow(id: StageWindow.id)
+            }
+            // Keynote's Play Slideshow: the song, presented.
+            .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!player.hasQueue)
         }
     }

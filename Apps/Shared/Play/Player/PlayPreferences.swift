@@ -36,6 +36,13 @@ enum PlayPreferences {
         UserDefaults.standard.object(forKey: radioDownloadsFirstKey) as? Bool ?? true
     }
 
+    /// Louder at Speed: your own music follows the car's speed while driving. Off by default.
+    static let volumeFollowsSpeedKey = "playVolumeFollowsSpeed"
+
+    static var volumeFollowsSpeed: Bool {
+        UserDefaults.standard.bool(forKey: volumeFollowsSpeedKey)
+    }
+
     /// Shaking iPhone plays a song Motif thinks you'd like, then Motif Radio. On by default.
     static let shakeToPlayKey = "shakeToPlay"
 
@@ -49,6 +56,14 @@ enum PlayPreferences {
 
     static var radioDeletesAfterPlaying: Bool {
         UserDefaults.standard.bool(forKey: radioDeletesAfterPlayingKey)
+    }
+
+    /// Once the queue runs out, songs like the last few played carry on, as Music's Autoplay
+    /// does. On by default.
+    static let autoplayKey = "playAutoplay"
+
+    static var autoplay: Bool {
+        UserDefaults.standard.object(forKey: autoplayKey) as? Bool ?? true
     }
 
     static var radioTuning: RadioTuning {

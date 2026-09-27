@@ -16,6 +16,9 @@ struct PlaySettingsPane: View {
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
     @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
     @AppStorage(AutomaticDownloads.storageKey) private var automaticDownloads = true
+    /// The Mac's one streaming setting, for every network.
+    @AppStorage(StreamQuality.wiFiKey) private var streamingQuality = StreamQuality.original
+    @AppStorage(StreamQuality.downloadKey) private var downloadQuality = StreamQuality.original
     @AppStorage(PlayPreferences.radioDownloadsFirstKey) private var radioDownloadsFirst = true
     @AppStorage(PlayPreferences.radioDeletesAfterPlayingKey) private var radioDeletesAfterPlaying = false
     @AppStorage(QuickSwitch.storageKey) private var quickSwitch = false
@@ -180,8 +183,18 @@ struct PlaySettingsPane: View {
                     : Text("Songs download only when you ask."),
                 isOn: $automaticDownloads
             )
+            SettingsDetailRow(title: Text("Streaming"), detail: Text(AudioQualityWords.streamingDetail(streamingQuality.maxBitRate))) {
+                StreamQualityPicker(title: "Streaming", selection: $streamingQuality)
+                    .labelsHidden()
+                    .fixedSize()
+            }
+            SettingsDetailRow(title: Text("Download Quality"), detail: Text(AudioQualityWords.downloadDetail(downloadQuality.maxBitRate))) {
+                StreamQualityPicker(title: "Download Quality", selection: $downloadQuality)
+                    .labelsHidden()
+                    .fixedSize()
+            }
         } header: {
-            Text("Downloads")
+            Text("Downloads and Streaming")
         }
     }
 

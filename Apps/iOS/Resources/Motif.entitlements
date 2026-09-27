@@ -37,6 +37,11 @@
     <key>com.apple.developer.siri</key>
     <true/>
 
+    <!-- SharePlay, so passengers can add songs to the queue from their own iPhones. Automatic
+         signing adds Group Activities to the App ID. -->
+    <key>com.apple.developer.group-session</key>
+    <true/>
+
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 </dict>

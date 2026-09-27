@@ -68,7 +68,10 @@ struct Crate: View {
                         if front == card.id { open(record) } else { move(to: card.id) }
                     } label: {
                         record.cover(side)
-                            .shadow(color: .black.opacity(0.3), radius: 22, y: 14)
+                            // Flattened first, so the shadow falls from the cover's outline
+                            // rather than from each of the layers drawn on it.
+                            .compositingGroup()
+                            .shadow(color: .black.opacity(0.26), radius: Self.shadowRadius, y: Self.shadowDrop)
                     }
                     .buttonStyle(CrateCoverStyle(isFront: front == card.id))
                     .frame(width: side, height: side)
@@ -199,7 +202,12 @@ struct Crate: View {
 
     // MARK: - Geometry
 
-    static let shadowRoom: CGFloat = 30
+    static let shadowRadius: CGFloat = 20
+    static let shadowDrop: CGFloat = 12
+    /// Room above and below the records for their shadow, inside the scroll view's clip and
+    /// the fade's mask. A blur fades out over about twice its radius, and the drop pushes it
+    /// that much further down: any less and the shadow stops at a hard line across the page.
+    static let shadowRoom: CGFloat = shadowDrop + shadowRadius * 2
 
     /// A cover's side. A wide Mac window gets bigger records, so the crate still leads the
     /// page on an ultra-wide display rather than sitting small in the middle of it.
@@ -497,7 +505,7 @@ struct CrateRecord {
     }
 
     @MainActor var isPlayingThis: Bool {
-        player.hasQueue && player.context == context
+        player.hasQueue && player.context == context && !player.isOnAutoplayPick
     }
 
     @MainActor func play() {

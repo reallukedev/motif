@@ -32,6 +32,9 @@ nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandl
         let problem = await MediaRequestResolver.play(identifier, shuffled: shuffled)
         switch problem {
         case nil:
+            let search = intent.mediaSearch
+            let asked = [search?.mediaName, search?.artistName]
+            await Self.remember(asked)
             return INPlayMediaIntentResponse(code: .success, userActivity: nil)
         case .needsSubscription, .accessDenied:
             // Something to sort out in Motif itself.
@@ -41,6 +44,23 @@ nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandl
         case .nothingToPlay, .notInYourMusic, .needsAppleMusic, .failed:
             return INPlayMediaIntentResponse(code: .failure, userActivity: nil)
         }
+    }
+}
+
+extension PlayMediaIntentHandler {
+    /// Keeps what was asked for with the phone's recent searches, so Search in the car and on
+    /// the phone shows it, as Music does with what you ask Siri for.
+    @MainActor
+    static func remember(_ asked: [String?]) {
+        let term = asked
+            .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        // "Play music" and "something chill" aren't searches.
+        guard !term.isEmpty, MediaRequestResolver.motifChoice(named: term) == nil else { return }
+        let key = MusicSource.current == .yourMusic ? "recentYourMusicSearches" : "recentMusicSearches"
+        let defaults = UserDefaults.standard
+        defaults.set(RecentSearches.adding(term, to: defaults.string(forKey: key) ?? ""), forKey: key)
     }
 }
 
@@ -220,6 +240,7 @@ enum MediaRequestResolver {
             ("workout", .workout), ("gym", .workout), ("running", .workout), ("party", .party), ("danc", .party),
             ("sleep", .sleep), ("love", .love), ("romantic", .love), ("sad", .heartbreak), ("heartbr", .heartbreak),
             ("happy", .feelGood), ("feel good", .feelGood), ("upbeat", .feelGood), ("energ", .energy), ("pump", .energy),
+            ("driv", .drive), ("road trip", .drive), ("roadtrip", .drive),
         ]
         return starts.first { spoken.contains(" " + $0.0) }?.1
     }
@@ -237,6 +258,7 @@ enum MediaRequestResolver {
             ("chill music", .chill), ("something chill", .chill), ("love songs", .love),
             ("sad songs", .heartbreak), ("heartbreak songs", .heartbreak), ("party music", .party),
             ("sleep music", .sleep), ("something to sleep to", .sleep),
+            ("driving music", .drive), ("something to drive to", .drive), ("road trip music", .drive),
         ]
         return names.first { folded == $0.0 }?.1
     }

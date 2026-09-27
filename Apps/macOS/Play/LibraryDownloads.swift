@@ -19,7 +19,7 @@ struct LibraryDownloadsPage: View {
 
     var body: some View {
         let downloads = music.downloads
-        let songs = downloads.items.values.map { DownloadedSong(track: $0.track, bytes: $0.bytes, downloadedAt: $0.downloadedAt) }
+        let songs = downloads.items.values.map { DownloadedSong(track: $0.keptTrack, bytes: $0.bytes, downloadedAt: $0.downloadedAt) }
         let stats = DownloadReport.stats(songs, facts: feed.facts)
         let unplayed = DownloadReport.unplayed(songs, facts: feed.facts)
         let rows = songs.map { song in

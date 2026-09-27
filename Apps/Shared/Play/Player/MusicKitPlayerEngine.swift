@@ -501,3 +501,30 @@ final class MusicKitPlayerEngine: PlayerEngine {
         FreshShuffle.order(songs, artist: { StatsCalculator.folded($0.artistName) }, seed: .random(in: 0...UInt64.max))
     }
 }
+
+// MARK: - Audio quality
+
+extension MusicKitPlayerEngine {
+    /// What Apple Music is playing at, as the player reports it: Lossless, Dolby Atmos and the
+    /// like. The player's state is observable, so a view reading this follows it. Nil when the
+    /// player doesn't say, and on the Mac until Motif has played something, since reaching the
+    /// player at all can take the media keys from Music.
+    static var playingVariant: AppleMusicVariant? {
+        guard MotifPlayerContext.isInUse, let variant = ApplicationMusicPlayer.shared.state.audioVariant else { return nil }
+        return AppleMusicVariant(variant)
+    }
+}
+
+extension AppleMusicVariant {
+    init?(_ variant: AudioVariant) {
+        switch variant {
+        case .lossless: self = .lossless
+        case .highResolutionLossless: self = .hiResLossless
+        case .dolbyAtmos: self = .dolbyAtmos
+        case .dolbyAudio: self = .dolbyAudio
+        case .spatialAudio: self = .spatialAudio
+        case .lossyStereo: self = .aac
+        @unknown default: return nil
+        }
+    }
+}

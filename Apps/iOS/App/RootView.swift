@@ -48,6 +48,8 @@ struct RootView: View {
             .sheet(item: Bindable(model.yourMusic.playlists).picking) { PlaylistPickerSheet(pick: $0) }
             // Under Now Playing while it's open; it shows its own.
             .playerFeedback(isActive: !showsNowPlaying)
+            // Someone else's SharePlay, joined from Messages.
+            .sharePlayGuestPage(closing: $showsNowPlaying)
             .opensDeepLinks(in: model)
             // A song from a widget. Summary is the tab whose stack can be pushed from here.
             // Initial too, for a link that launched the app.
@@ -64,6 +66,9 @@ struct RootView: View {
                 if model.musicSource == .yourMusic { model.prepareYourMusic() }
                 LaunchScene.startDemoPlayback(model)
                 LaunchScene.openMix(model)
+                #if DEBUG
+                Task { await CarPlayImages.writeSampleSheet(model) }
+                #endif
             }
             .task { await model.playFeed.followSubscription() }
             .onChange(of: player.hasQueue) { _, hasQueue in

@@ -41,10 +41,14 @@ protocol PlayerEngine: AnyObject {
     func activate()
     /// Stops and hands them back, for another player to take over.
     func deactivate()
+    /// The player's own level, 0 to 1, under the phone's volume. Only a player that plays
+    /// the audio itself can change it.
+    func setLevel(_ level: Float)
 }
 
 extension PlayerEngine {
     var playsByName: Bool { false }
     func activate() {}
     func deactivate() {}
+    func setLevel(_ level: Float) {}
 }

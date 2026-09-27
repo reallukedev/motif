@@ -171,6 +171,7 @@ final class AppModel {
         }
         player.makeMotifRadio = MotifRadioSource.make(library: library, discovery: discovery, yourMusic: yourMusic, player: player)
         player.radioDownloads = yourMusic
+        player.makeAutoplay = AutoplaySource.make(library: library, yourMusic: yourMusic, player: player)
         followLibraryAndMixes()
         nearby.onCommand = { [weak player] command in
             switch command {

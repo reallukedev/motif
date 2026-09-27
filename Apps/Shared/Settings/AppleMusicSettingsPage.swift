@@ -2,8 +2,9 @@ import SwiftUI
 import MusicKit
 import MotifCore
 
-/// Apple Music access: what it's for, and asking for it or turning it back on. An iPhone
-/// page; on the Mac, the same section sits in the General pane.
+/// Apple Music access: what it's for, and asking for it or turning it back on; and the audio
+/// quality it's playing at, with where that's chosen. An iPhone page; on the Mac, the same
+/// section sits in the General pane.
 struct AppleMusicSettingsPage: View {
     @Environment(AppModel.self) private var model
 
@@ -17,6 +18,9 @@ struct AppleMusicSettingsPage: View {
                 tint: .pink
             )
             AppleMusicAccessSection()
+            #if os(iOS)
+            AppleMusicQualitySection()
+            #endif
         }
         #if os(iOS)
         .settingsPage("Apple Music")
@@ -41,6 +45,8 @@ struct AppleMusicAccessSection: View {
             ) {
                 control
             }
+            // The Mac's General pane holds this one section, so the quality row joins it.
+            AppleMusicQualityRow()
             #else
             // Allowed needs no row: the status line above already says so.
             control
@@ -109,6 +115,53 @@ struct AppleMusicAccessSection: View {
     private var turnOffPath: LocalizedStringKey { "You can turn access off in System Settings ▸ Privacy & Security ▸ Media & Apple Music." }
     #endif
 }
+
+/// What Apple Music is playing at right now, from its player, or that it isn't playing.
+private struct AppleMusicNowPlayingQuality: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let player = model.player
+        let quality = player.current.flatMap { AudioQualityBadge.appleMusicQuality(of: $0, in: player) }
+        HStack(spacing: 4) {
+            if quality?.showsWaveform == true {
+                Image(systemName: "waveform")
+                    .accessibilityHidden(true)
+            }
+            Text(AudioQualityWords.appleMusicNowPlaying(quality))
+        }
+        .foregroundStyle(.secondary)
+    }
+}
+
+#if os(iOS)
+/// Apple Music's audio quality on iPhone: what's playing now, and where Lossless and the
+/// Wi-Fi, cellular and download choices live. MusicKit has no way to change them, so there
+/// are no controls here that couldn't work.
+struct AppleMusicQualitySection: View {
+    var body: some View {
+        Section {
+            LabeledContent("Now Playing") {
+                AppleMusicNowPlayingQuality()
+            }
+        } header: {
+            Text("Audio Quality")
+        } footer: {
+            Text(AudioQualityWords.appleMusicWhere)
+        }
+    }
+}
+#else
+/// Apple Music's audio quality on the Mac, a row of the Apple Music section in General:
+/// what's playing now, and where Music chooses it.
+struct AppleMusicQualityRow: View {
+    var body: some View {
+        SettingsDetailRow(title: Text("Audio Quality"), detail: Text(AudioQualityWords.appleMusicWhere)) {
+            AppleMusicNowPlayingQuality()
+        }
+    }
+}
+#endif
 
 extension MusicAccessStatus {
     init(_ authorization: MusicAuthorization.Status) {

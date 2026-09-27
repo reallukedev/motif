@@ -3,7 +3,8 @@ import Observation
 import MotifCore
 
 /// Songs downloaded from your servers to play without a connection: the original files, FLAC
-/// and all. Downloads carry on in the background, and with the app closed.
+/// and all, or a smaller copy the server makes, as Download Quality asks. Downloads carry on
+/// in the background, and with the app closed.
 @MainActor
 @Observable
 final class Downloads {
@@ -14,6 +15,27 @@ final class Downloads {
         let fileName: String
         let bytes: Int64
         let downloadedAt: Date
+        /// The bit rate the download asked the server for. Nil asked for the original file, as
+        /// every download did before Download Quality.
+        var requestedBitRate: Int?
+        /// What the file turned out to be, read once it landed. Nil for downloads from before
+        /// that was read, which are the original files.
+        var format: AudioFormat?
+
+        /// The song as it is on this iPhone: its format the file's, where that's known.
+        var keptTrack: LocalTrack {
+            guard let format else { return track }
+            var kept = track
+            kept.format = format
+            return kept
+        }
+
+        /// A smaller copy rather than the original.
+        var isSmallerCopy: Bool {
+            guard let format else { return false }
+            return AudioQuality(LocalPlayback(route: .downloaded(requestedBitRate: requestedBitRate), original: track.format, actual: format))
+                .map { if case .converted = $0.reason { true } else { false } } ?? false
+        }
     }
 
     private(set) var items: [String: Item] = [:]
@@ -37,6 +59,8 @@ final class Downloads {
     struct Pending: Codable, Sendable {
         let track: LocalTrack
         let attempt: String
+        /// The bit rate asked for, or nil for the original file.
+        var requestedBitRate: Int?
     }
 
     @ObservationIgnored private var pending: [String: Pending] = [:]
@@ -81,6 +105,13 @@ final class Downloads {
         items[trackID].map { Self.fileURL($0.fileName) }
     }
 
+    /// How a downloaded song reaches the player, for the quality badge.
+    func playback(for trackID: String) -> LocalPlayback? {
+        items[trackID].map {
+            LocalPlayback(route: .downloaded(requestedBitRate: $0.requestedBitRate), original: $0.track.format, actual: $0.format)
+        }
+    }
+
     var totalBytes: Int64 { items.values.map(\.bytes).reduce(0, +) }
 
     /// Every downloaded song, as your own.
@@ -88,21 +119,24 @@ final class Downloads {
 
     // MARK: - Downloading
 
-    /// Starts downloading songs from their servers, the ones not already here.
+    /// Starts downloading songs from their servers, the ones not already here, at the Download
+    /// Quality set now: the original file, or a smaller copy the server makes as it sends it.
     func download(_ tracks: [LocalTrack]) {
         let allowsCellular = Self.allowsCellular
+        let bitRate = StreamQuality.download.maxBitRate
         for track in tracks {
             guard case .server(let serverID, let songID) = track.origin,
                   items[track.id] == nil, progress[track.id] == nil,
                   let client = servers.client(for: serverID)
             else { continue }
-            var request = URLRequest(url: client.downloadURL(songID: songID))
+            let url = bitRate.map { client.streamURL(songID: songID, maxBitRate: $0) } ?? client.downloadURL(songID: songID)
+            var request = URLRequest(url: url)
             request.allowsCellularAccess = allowsCellular
             request.allowsExpensiveNetworkAccess = allowsCellular
             let attempt = UUID().uuidString
             let task = session.downloadTask(with: request)
             task.taskDescription = Self.describe(trackID: track.id, attempt: attempt)
-            pending[track.id] = Pending(track: track, attempt: attempt)
+            pending[track.id] = Pending(track: track, attempt: attempt, requestedBitRate: bitRate)
             progress[track.id] = 0
             failures[track.id] = nil
             task.resume()
@@ -187,10 +221,11 @@ final class Downloads {
         case .finished:
             // After a relaunch the attempt may be gone from memory; the library still knows the song.
             guard let fileName, let track = current?.track ?? catalogTrack(trackID) else { return }
-            items[trackID] = Item(track: track, fileName: fileName, bytes: bytes, downloadedAt: .now)
+            items[trackID] = Item(track: track, fileName: fileName, bytes: bytes, downloadedAt: .now, requestedBitRate: current?.requestedBitRate)
             failures[trackID] = nil
             Self.save(items, to: Self.recordURL)
             onDownloaded?(track)
+            readFormat(of: trackID, fileName: fileName)
         case .failed(let reason):
             failures[trackID] = reason
         }
@@ -199,6 +234,19 @@ final class Downloads {
     enum Outcome: Sendable {
         case finished
         case failed(String)
+    }
+
+    /// Reads what a download turned out to be, so it's shown truthfully: the original, or the
+    /// smaller copy the server made, or the original sent when a copy was asked for.
+    private func readFormat(of trackID: String, fileName: String) {
+        let url = Self.fileURL(fileName)
+        Task {
+            guard let found = await AudioQualityProbe.format(of: url),
+                  let item = items[trackID], item.fileName == fileName
+            else { return }
+            items[trackID]?.format = AudioFormat.settled(actual: found, original: item.track.format)
+            Self.save(items, to: Self.recordURL)
+        }
     }
 
     private func catalogTrack(_ id: String) -> LocalTrack? {
@@ -307,17 +355,20 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
         Task { @MainActor in self.owner?.didFinishBackgroundEvents() }
     }
 
-    /// The file's own extension, from the server's name for it or its type.
+    /// The file's own extension, from its type, or else the server's name for it. The type
+    /// comes first: a smaller copy is an MP3 whatever the original was called, and a file
+    /// with the wrong extension won't play.
     private static func suffix(for response: URLResponse?) -> String {
+        switch response?.mimeType {
+        case "audio/flac", "audio/x-flac": return "flac"
+        case "audio/mpeg", "audio/mp3": return "mp3"
+        case "audio/mp4", "audio/aac", "audio/x-m4a": return "m4a"
+        case "audio/wav", "audio/x-wav": return "wav"
+        default: break
+        }
         if let name = response?.suggestedFilename, let ext = name.split(separator: ".").last, ext.count <= 5, name.contains(".") {
             return ext.lowercased()
         }
-        switch response?.mimeType {
-        case "audio/flac", "audio/x-flac": return "flac"
-        case "audio/mpeg": return "mp3"
-        case "audio/mp4", "audio/aac", "audio/x-m4a": return "m4a"
-        case "audio/wav", "audio/x-wav": return "wav"
-        default: return "audio"
-        }
+        return "audio"
     }
 }

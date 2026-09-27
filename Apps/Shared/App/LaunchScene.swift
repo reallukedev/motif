@@ -8,12 +8,20 @@ import MotifCore
 ///     -MotifSearch YES            open search on the first tab (iPhone)
 ///     -MotifDemoPlaying YES       with sample data, start the Play tab's first mix (iPhone);
 ///                                 "station" for Motif Radio, or a mood such as "chill"
+///     -MotifDemoPlaying one       or just its first song, for Autoplay to follow on from
+///     -MotifDemoSkips 3           then skip that many songs in a row, a few seconds apart
 ///     -MotifNowPlaying YES        open Now Playing once something plays (iPhone)
 ///     -MotifQueue YES             and show Up Next in it (iPhone), or the panel (Mac)
+///     -MotifQualityDetails YES    and open the audio quality badge's details
+///     -MotifStage YES             and open Stage (iPhone, from Now Playing), or its window (Mac)
+///     -MotifStageControls YES     with its controls up, and kept up
+///     -MotifStageCustomize YES    with Customize Stage open
 ///     -MotifSleeve YES            and turn the cover over to Your History
 ///     -MotifMix onRepeat          open one of the Play tab's mixes by id (iPhone)
 ///     -MotifSampleAlbum YES       open an invented Apple Music album page (iPhone)
 ///     -MotifMood chill            open a mood's page (iPhone)
+///     -MotifParty YES             open Party, or "dinnerParty" to open it on that party
+///     -MotifPartyDelay 60         with sample data, how long Party's playlists take to come
 ///     -MotifPage songs            open the Song Finder (or "songs.chill" for a lens), the
 ///                                 Artist Finder ("artists") or New from Your Artists
 ///                                 ("releases") (iPhone)
@@ -45,6 +53,9 @@ import MotifCore
 ///     -MotifNearbyDemo YES        a device nearby playing a song (or "paused", or "control"
 ///                                 to show it in the player)
 ///     -MotifDevices YES           open Your Devices
+///     -MotifSharePlayDemo host    a pretend SharePlay with sample data (iPhone): "host", or
+///                                 "guest" and its states (see SharePlayDemo)
+///     -MotifSharePlaySearch "sun" and search for this on the guest page
 enum LaunchScene {
     static var tab: String? { value("MotifTab") }
     static var sidebar: String? { value("MotifSidebar") }
@@ -63,8 +74,15 @@ enum LaunchScene {
     static var searchText: String? { value("MotifSearchText") }
     static var opensNowPlaying: Bool { value("MotifNowPlaying") == "YES" }
     static var opensQueue: Bool { value("MotifQueue") == "YES" }
+    static var opensQualityDetails: Bool { value("MotifQualityDetails") == "YES" }
+    static var opensStage: Bool { value("MotifStage") == "YES" }
+    static var opensStageControls: Bool { value("MotifStageControls") == "YES" }
+    static var opensStageCustomizer: Bool { value("MotifStageCustomize") == "YES" }
     static var opensSleeve: Bool { value("MotifSleeve") == "YES" }
     static var opensRadioTuner: Bool { value("MotifRadioTuner") == "YES" }
+    /// A pretend SharePlay session's scene, with sample data.
+    static var sharePlayDemo: String? { value("MotifSharePlayDemo") }
+    static var sharePlaySearch: String? { value("MotifSharePlaySearch") }
     /// The day Top Charts starts on, as yyyy-MM-dd.
     static var chartDate: Date? {
         value("MotifChartDate").flatMap { try? Date($0, strategy: .iso8601.year().month().day()) }
@@ -108,6 +126,7 @@ extension LaunchScene {
         if playing == "station" {
             hasStartedDemoPlayback = true
             model.player.playMotifRadio()
+            skipForDemo(model)
             return
         }
         if playing == "local", let album = model.yourMusic.index.recentlyAdded.first {
@@ -120,9 +139,25 @@ extension LaunchScene {
             Task { await MoodPlayback.start(mood, model: model) }
             return
         }
-        guard playing == "YES", let mix = model.playFeed.mixes.rightNow ?? model.playFeed.mixes.mixes.first else { return }
+        guard playing == "YES" || playing == "one", let mix = model.playFeed.mixes.rightNow ?? model.playFeed.mixes.mixes.first else { return }
         hasStartedDemoPlayback = true
-        model.player.play(.history(model.player.songs(in: mix)), from: PlayContext(kind: .mix, title: mix.kind.title))
+        let songs = model.player.songs(in: mix)
+        model.player.play(.history(playing == "one" ? Array(songs.prefix(1)) : songs), from: PlayContext(kind: .mix, title: mix.kind.title))
+        skipForDemo(model)
+    }
+
+    /// `-MotifDemoSkips`: skips that many songs soon after each starts, as someone who isn't
+    /// feeling it would, to see a live mix or Autoplay steer.
+    @MainActor
+    private static func skipForDemo(_ model: AppModel) {
+        guard let skips = value("MotifDemoSkips").flatMap(Int.init), skips > 0 else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            for _ in 0..<skips {
+                model.player.skipToNext()
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
     }
 
     @MainActor private static var hasStartedDemoPlayback = false
@@ -134,6 +169,14 @@ extension LaunchScene {
         if let name = value("MotifMood"), let mood = Mood(rawValue: name), !hasOpenedMix {
             hasOpenedMix = true
             show(.mood(mood), in: model)
+            return
+        }
+        if let party = value("MotifParty"), !hasOpenedMix {
+            hasOpenedMix = true
+            if let vibe = PartyVibe(rawValue: party) {
+                UserDefaults.standard.set(vibe.rawValue, forKey: PartyVibe.storageKey)
+            }
+            show(.party, in: model)
             return
         }
         // `-MotifAlbum "night ferry"` or `-MotifArtist "umbra"`: one of yours, by the start of its name.

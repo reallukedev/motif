@@ -192,6 +192,9 @@
     "%@ min" : {
 
     },
+    "%@ Mix" : {
+
+    },
     "%@ new" : {
 
     },
@@ -257,6 +260,16 @@
     "%@ plays" : {
 
     },
+    "%@ songs · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ songs · %2$@"
+          }
+        }
+      }
+    },
     "%@ songs from %@" : {
       "localizations" : {
         "en" : {
@@ -303,6 +316,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
           }
         }
       }
@@ -399,6 +422,9 @@
     "A new find’s download goes once it’s played, unless you keep it." : {
 
     },
+    "A smart playlist fills itself with the songs that fit its rules, and keeps up as your music changes." : {
+
+    },
     "About" : {
 
     },
@@ -417,7 +443,13 @@
     "Add songs from Play, or put them in On My iPhone ▸ Motif ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers." : {
 
     },
+    "Added by SharePlay" : {
+
+    },
     "Adding Artists" : {
+
+    },
+    "Adds it to the end of their Up Next" : {
 
     },
     "Ahead of %@" : {
@@ -444,6 +476,9 @@
     "All Your Music" : {
 
     },
+    "and %@ more" : {
+
+    },
     "And %@ more" : {
 
     },
@@ -459,6 +494,9 @@
     "Apple Music couldn't be reached, and none of your songs suit it yet. As Motif learns the genres of what you play, they'll show up here." : {
 
     },
+    "Apple Music didn't have any playlists for this party just now." : {
+
+    },
     "Around Motif" : {
 
     },
@@ -472,6 +510,12 @@
 
     },
     "As much as %@" : {
+
+    },
+    "Audio Quality" : {
+
+    },
+    "Autoplay" : {
 
     },
     "Average length of ^[%@ session](inflect: true)" : {
@@ -574,6 +618,9 @@
     "Devices" : {
 
     },
+    "Disc %@" : {
+
+    },
     "Disconnect" : {
 
     },
@@ -613,13 +660,13 @@
     "Every song Motif keeps goes to Last.fm, radio included." : {
 
     },
-    "Every song you play here is kept in your history, just like Apple Music's." : {
-
-    },
     "Everyone Else" : {
 
     },
     "Everything, as you play it. Pick genres to hear more of them." : {
+
+    },
+    "Explicit songs are skipped as it plays." : {
 
     },
     "Filing" : {
@@ -655,6 +702,9 @@
     "For when Motif misses a station. Stays on this Mac." : {
 
     },
+    "Free Up Space removes the ^[%@ song](inflect: true) you haven't played in three months. They stay on your servers, to download again whenever you like." : {
+
+    },
     "From Settings › General in Lidarr" : {
 
     },
@@ -673,6 +723,9 @@
     "History" : {
 
     },
+    "How calm or lively Motif Radio plays in each part of the day." : {
+
+    },
     "How Lidarr files the artists and albums you add from Motif." : {
 
     },
@@ -680,6 +733,9 @@
 
     },
     "If You Like %@" : {
+
+    },
+    "Import songs or connect a server, and search them here." : {
 
     },
     "in %@" : {
@@ -946,10 +1002,16 @@
     "None in the last year" : {
 
     },
+    "None of your music suits it yet, and none of your playlists look like party ones. Motif goes by each song's genre." : {
+
+    },
     "Not available while Motif shows sample data." : {
 
     },
     "Not connected" : {
+
+    },
+    "Not in your music yet" : {
 
     },
     "Not merged yet. Motif merges each time it opens." : {
@@ -978,6 +1040,9 @@
 
     },
     "Nothing you play is kept until you turn this off." : {
+
+    },
+    "Nothing's queued after this song. Search for one to play next." : {
 
     },
     "Now Playing" : {
@@ -1067,6 +1132,12 @@
     "Opens a calendar to pick a date." : {
 
     },
+    "Parts of the Day" : {
+
+    },
+    "Party" : {
+
+    },
     "Peak" : {
 
     },
@@ -1142,7 +1213,7 @@
     "Recently Searched" : {
 
     },
-    "Removes the ^[%@ song](inflect: true) you haven't played in three months. They stay on your servers, to download again whenever you like." : {
+    "Relaxing at night, gentle in the morning, brightest in the afternoon, and easing through the evening." : {
 
     },
     "Removes the songs you haven't played in three months. They stay on your servers, to download again whenever you like." : {
@@ -1251,6 +1322,9 @@
     "Songs stay in the playlist until you remove them in Apple Music. Motif can add songs but can’t take them out." : {
 
     },
+    "Songs you added stay in their Up Next." : {
+
+    },
     "Songs you choose are kept alongside radio." : {
 
     },
@@ -1282,6 +1356,9 @@
 
     },
     "Songs you put in the Music folder, or import from Listen Now’s Add Music menu, play with their tags and covers. FLAC, ALAC, MP3, AAC, WAV and AIFF all play." : {
+
+    },
+    "Songs, Albums and Artists" : {
 
     },
     "Songs, Artists and Albums" : {
@@ -1371,7 +1448,13 @@
     "This playlist is empty." : {
 
     },
+    "Through the Day" : {
+
+    },
     "Time and Driving" : {
+
+    },
+    "Top Pick" : {
 
     },
     "Top Songs" : {
@@ -1447,12 +1530,6 @@
 
     },
     "You can also drop music into On My iPhone › Motif › Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play." : {
-
-    },
-    "You can also put music in Motif's Music folder: choose Show Music Folder in Finder from Add Music." : {
-
-    },
-    "You can also put music in On My iPhone › Motif › Music in the Files app." : {
 
     },
     "You discovered ^[%@ new artist](inflect: true)." : {

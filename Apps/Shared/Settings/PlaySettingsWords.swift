@@ -196,14 +196,13 @@ enum PlaySettingsWords {
     }
 
     /// iPhone's footer for Downloads and Streaming. The Mac's rows say it in their details.
-    static func downloadsFooter(automatic: Bool, quality: StreamQuality) -> String {
-        let downloads = automatic
-            ? String(localized: "Songs you play or add from your servers download to this iPhone, so they start at once and play with no connection.")
-            : String(localized: "Songs download only when you ask.")
-        let streaming = quality == .original
-            ? String(localized: "On Wi-Fi and cellular, songs stream as they are on your server, FLAC included.")
-            : String(localized: "On Wi-Fi, songs stream as they are on your server. On cellular, your server makes a smaller copy as they play.")
-        return downloads + " " + streaming
+    static func downloadsFooter(automatic: Bool, wiFi: StreamQuality, cellular: StreamQuality, download: StreamQuality) -> String {
+        AudioQualityWords.downloadsFooter(automatic: automatic, wiFi: wiFi.maxBitRate, cellular: cellular.maxBitRate, download: download.maxBitRate)
+    }
+
+    /// Show Audio Quality's detail on the Mac, and its sentence in iPhone's footer.
+    static func audioQualityDetail(isShown: Bool) -> String {
+        AudioQualityWords.showsAudioQuality(isShown)
     }
 
     // MARK: - Motif Radio

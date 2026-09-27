@@ -188,38 +188,9 @@ struct PlayCountLine: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Whether Motif will keep this song at all: on-demand plays can be switched off in
-    /// Settings, which leaves stations only.
-    private var willBeKept: Bool {
-        !capture.isPaused && (player.context?.isStation == true || CaptureSettings().capturesOnDemand)
-    }
-
-    /// Whether Motif has kept this playing of it: the last capture is this song, made since it
-    /// started. With sample data nothing is really kept, so the ring filling stands in.
-    private var isKept: Bool {
-        guard let last = capture.lastCapture,
-              HistoryImport.key(title: last.title, artistName: last.artistName) == track.songIdentity,
-              let started = player.trackStartedAt
-        else { return false }
-        // With no minimum, the capture can land a moment before the player reports the song.
-        let slack: TimeInterval = CaptureSettings().minimumListenSeconds > 0 ? 0 : 5
-        return last.capturedAt >= started.addingTimeInterval(-slack)
-    }
-
-    /// Whether Motif has already decided not to keep this playing: it heard the song moments
-    /// ago, so this counts as the same play, or its station is excluded. The ring would fill
-    /// and never turn into a check, so it isn't shown.
-    private var isPassedOver: Bool {
-        guard !isKept,
-              let heard = capture.nowPlaying,
-              HistoryImport.key(title: heard.title, artistName: heard.artistName) == track.songIdentity,
-              case .ignore(let reason) = capture.lastDecision
-        else { return false }
-        switch reason {
-        case .duplicate, .excludedStation, .onDemand: return true
-        default: return false
-        }
-    }
+    private var willBeKept: Bool { KeepStatus.willBeKept(player: player, capture: capture) }
+    private var isKept: Bool { KeepStatus.isKept(track, player: player, capture: capture) }
+    private var isPassedOver: Bool { KeepStatus.isPassedOver(track, player: player, capture: capture) }
 
     /// "since March 2024", or "since today".
     private static func since(_ date: Date) -> String {
@@ -237,6 +208,12 @@ struct NowPlayingMenu: View {
 
     var body: some View {
         Menu {
+            #if os(iOS)
+            // At the top, where Music has it.
+            SharePlayMenuItem()
+            Button("Stage", systemImage: "tv") { StagePresenter.shared.isShowing = true }
+            Divider()
+            #endif
             NowPlayingMenuItems(track: track, onNavigate: onNavigate)
         } label: {
             Image(systemName: "ellipsis")
@@ -356,8 +333,6 @@ struct KeepIndicator: View {
     let isKept: Bool
     @Environment(PlayerModel.self) private var player
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Settings' minimum listening time, 30 seconds unless changed.
-    private let minimum = CaptureSettings().minimumListenSeconds
     @ScaledMetric(relativeTo: .subheadline) private var side: CGFloat = 15
 
     var body: some View {
@@ -387,12 +362,7 @@ struct KeepIndicator: View {
         }
     }
 
-    /// How far through the minimum listening time the song is. Counted as the capture counts
-    /// it, from when the song first played, so neither loading nor scrubbing fills the ring
-    /// ahead of the check.
     private func progress(at date: Date) -> Double {
-        guard minimum > 0 else { return 1 }
-        let elapsed = player.trackStartedAt.map { date.timeIntervalSince($0) } ?? 0
-        return min(1, max(0, elapsed / minimum))
+        KeepStatus.progress(player: player, at: date)
     }
 }

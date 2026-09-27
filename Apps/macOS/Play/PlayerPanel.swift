@@ -62,6 +62,7 @@ struct PlayerPanel: View {
 struct UpNextList: View {
     @Environment(PlayerModel.self) private var player
     @Environment(YourMusic.self) private var music
+    @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
     @State private var selection: Set<String> = []
     @State private var isDropTarget = false
 
@@ -73,7 +74,19 @@ struct UpNextList: View {
                         .selectionDisabled()
                 }
             } header: {
-                if let context = player.context {
+                if player.isOnAutoplayPick {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Autoplay")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(.secondary)
+                        Text(player.autoplayFollows.map { "Songs Like \($0)" } ?? "Similar Songs")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                    .padding(.bottom, 4)
+                } else if let context = player.context {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(context.isStation ? "Playing from Radio" : "Playing From")
                             .font(.caption.weight(.semibold))
@@ -92,15 +105,21 @@ struct UpNextList: View {
                 if player.context?.isStation == true {
                     note("A station picks as it goes, so nothing is queued. Skip to hear the next song.")
                 } else if player.upNext.isEmpty {
-                    note(player.isLive ? "Picking the next song…" : "Nothing is queued after this song. Choose Play Next on any song to add it here.")
-                } else {
-                    ForEach(Array(player.upNext.enumerated()), id: \.element.id) { index, upcoming in
-                        UpNextRow(track: upcoming, isGettingReady: isGettingReady(upcoming))
-                            .tag(upcoming.id)
-                            .contextMenu { menu(for: upcoming, at: index) }
+                    if player.isLive || player.isAutoplaying {
+                        note("Picking the next song…")
+                    } else if autoplay, player.repeatMode == .off {
+                        note("Autoplay will play songs like these once this one ends.")
+                    } else {
+                        note("Nothing is queued after this song. Choose Play Next on any song to add it here.")
                     }
-                    .onMove { player.moveUpNext(from: $0, to: $1) }
-                    .onDelete { player.removeUpNext(at: $0) }
+                } else {
+                    ForEach(queued, id: \.track.id) { entry in
+                        UpNextRow(track: entry.track, isGettingReady: isGettingReady(entry.track))
+                            .tag(entry.track.id)
+                            .contextMenu { menu(for: entry.track, at: entry.index) }
+                    }
+                    .onMove { player.moveUpNext(from: UpNextParts.indices($0, in: queued), to: UpNextParts.index(before: $1, in: queued)) }
+                    .onDelete { player.removeUpNext(at: UpNextParts.indices($0, in: queued)) }
                 }
             } header: {
                 HStack(alignment: .firstTextBaseline) {
@@ -114,18 +133,58 @@ struct UpNextList: View {
                             .monospacedDigit()
                     }
                     Spacer()
-                    if !player.upNext.isEmpty, !player.isLive, player.context?.isStation != true {
-                        Button("Clear") { player.removeUpNext(at: IndexSet(player.upNext.indices)) }
+                    if !queued.isEmpty, !player.isLive, player.context?.isStation != true {
+                        Button("Clear") { player.removeUpNext(at: IndexSet(queued.map(\.index))) }
                             .buttonStyle(.link)
                             .font(.subheadline)
-                            .help("Remove every song from Up Next")
+                            .help("Remove every song you queued from Up Next")
+                    }
+                    if !player.isLive, player.context?.isStation != true {
+                        Toggle(isOn: Binding(get: { autoplay }, set: { player.setAutoplay($0) })) {
+                            Label("Autoplay", systemImage: "infinity")
+                        }
+                        .toggleStyle(.button)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help(autoplay ? "Autoplay is on: songs like these play once the queue ends" : "Autoplay is off")
                     }
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 4)
             } footer: {
                 if player.isLive, !player.upNext.isEmpty {
-                    note("\(player.context?.title ?? "") picks each song as the one before starts, so what you skip and what you let play steer what comes next.")
+                    if let steering = player.steering {
+                        steeringNote(steering)
+                    } else {
+                        note("\(player.context?.title ?? "") picks each song as the one before starts, so what you skip and what you let play steer what comes next.")
+                    }
+                }
+            }
+
+            if !picks.isEmpty {
+                Section {
+                    ForEach(picks, id: \.track.id) { entry in
+                        UpNextRow(track: entry.track, isGettingReady: false)
+                            .tag(entry.track.id)
+                            .contextMenu { menu(for: entry.track, at: entry.index) }
+                    }
+                    .onDelete { player.removeUpNext(at: UpNextParts.indices($0, in: picks)) }
+                } header: {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Autoplay")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(player.autoplayFollows.map { "Songs like \($0), picked as they play" } ?? "Songs like these, picked as they play")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                } footer: {
+                    if let steering = player.steering {
+                        steeringNote(steering)
+                    }
                 }
             }
 
@@ -217,6 +276,18 @@ struct UpNextList: View {
         guard let local = track.local, local.isFromServer else { return false }
         let copy = music.resolved(local)
         return music.downloads.isDownloading(copy.id) || music.servers.isWaitingToKeep(copy)
+    }
+
+    /// What you queued, and after it Autoplay's picks.
+    private var queued: [UpNextParts.Entry] { UpNextParts.split(player).queued }
+    private var picks: [UpNextParts.Entry] { UpNextParts.split(player).picks }
+
+    private func steeringNote(_ steering: LiveMix.Steering) -> some View {
+        Label(steering.line, systemImage: steering.isTurningAway ? "arrow.triangle.turn.up.right.circle.fill" : "scope")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .selectionDisabled()
     }
 
     private func note(_ text: LocalizedStringKey) -> some View {

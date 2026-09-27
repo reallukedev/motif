@@ -126,7 +126,8 @@ struct MoodTile: View {
     var fillsWidth = false
 
     var body: some View {
-        NavigationLink(value: PlayRoute.mood(mood)) {
+        // Party opens its own page, for finding a party's playlist.
+        NavigationLink(value: mood == .party ? PlayRoute.party : PlayRoute.mood(mood)) {
             ZStack(alignment: .bottomLeading) {
                 MoodField(mood: mood)
                 Image(systemName: mood.symbol)

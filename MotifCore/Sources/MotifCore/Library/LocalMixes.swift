@@ -18,7 +18,7 @@ extension LiveMix {
         let played = MixBuilder.aggregate(history, signals: signals, now: now, calendar: calendar)
         let fit = RadioMomentFit(moment: moment, songs: played, drives: drives)
         return local(
-            tracks, played: played, signals: signals, now: now, seed: seed,
+            tracks, played: played, metadata: history.songMetadata, signals: signals, now: now, seed: seed,
             newShare: fit.newShare(tuning.discovery.newShare), moment: moment
         ) { track, aggregate in
             let genre = track.genre ?? history.songMetadata[track.identity]?.genre
@@ -45,7 +45,32 @@ extension LiveMix {
             (track.genre ?? history.songMetadata[track.identity]?.genre).map { mood.suits(genre: $0) } ?? false
         }
         let played = MixBuilder.aggregate(history, signals: signals, now: now, calendar: .current)
-        return local(suited + finds, played: played, signals: signals, now: now, seed: seed, newShare: finds.isEmpty ? 0.3 : 0.4) { _, _ in 1 }
+        return local(
+            suited + finds, played: played, metadata: history.songMetadata, signals: signals, now: now, seed: seed,
+            newShare: finds.isEmpty ? 0.3 : 0.4
+        ) { _, _ in 1 }
+    }
+
+    /// Autoplay from your own music: your songs like the last few played, the ones you've
+    /// never played as its new finds. See ``autoplay(after:from:signals:newFinds:now:calendar:seed:)``.
+    public static func autoplay(
+        after seeds: [AutoplaySeed],
+        from tracks: [LocalTrack],
+        history: ListeningHistory,
+        signals: ListeningSignals = ListeningSignals(),
+        now: Date = .now,
+        calendar: Calendar = .current,
+        seed: UInt64
+    ) -> LiveMix {
+        let affinity = AutoplayAffinity(seeds: seeds, history: history)
+        let seedIdentities = Set(seeds.map(\.songIdentity))
+        let played = MixBuilder.aggregate(history, signals: signals, now: now, calendar: calendar)
+        let others = tracks.filter { !seedIdentities.contains($0.identity) }
+        let mix = local(others, played: played, metadata: history.songMetadata, signals: signals, now: now, seed: seed, newShare: 0.25) { track, _ in
+            let known = history.songMetadata[track.identity]
+            return affinity.likeness(artistName: track.artist, genre: track.genre ?? known?.genre, releaseYear: track.year ?? known?.releaseYear)
+        }
+        return LiveMix(candidates: mix.candidates, newShare: affinity.newShare(closeMatches: mix.candidates.filter { !$0.isNew }), seed: seed)
     }
 
     /// Your songs as candidates: one per song, the file before a server's copy, played ones
@@ -53,6 +78,7 @@ extension LiveMix {
     private static func local(
         _ tracks: [LocalTrack],
         played: [MixBuilder.Aggregate],
+        metadata: [String: SongMetadata],
         signals: ListeningSignals,
         now: Date,
         seed: UInt64,
@@ -67,14 +93,18 @@ extension LiveMix {
             .sorted { !$0.isFromServer && $1.isFromServer }
             .compactMap { track in
                 guard seen.insert(track.identity).inserted, !signals.excludes(track.identity, now: now) else { return nil }
+                let known = metadata[track.identity]
+                let genre = track.genre ?? known?.genre
                 if let aggregate = played[track.identity] {
                     return Candidate(
                         song: track.mixSong(plays: aggregate.dates.count, lastHeard: aggregate.lastHeard),
                         weight: weight(plays: aggregate.dates.count, lastHeard: aggregate.lastHeard, now: now) * factor(track, aggregate),
-                        isResting: aggregate.lastHeard >= rested
+                        isResting: aggregate.lastHeard >= rested,
+                        genre: genre,
+                        releaseYear: track.year ?? known?.releaseYear
                     )
                 }
-                return Candidate(song: track.mixSong(), weight: factor(track, nil), isNew: true)
+                return Candidate(song: track.mixSong(), weight: factor(track, nil), isNew: true, genre: genre, releaseYear: track.year ?? known?.releaseYear)
             }
         return LiveMix(candidates: candidates, newShare: newShare, moment: moment, seed: seed)
     }

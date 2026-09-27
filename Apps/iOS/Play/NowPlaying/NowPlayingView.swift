@@ -43,6 +43,13 @@ struct NowPlayingView: View {
         .onChange(of: player.current?.songIdentity) { showsBack = false }
         .sensoryFeedback(.selection, trigger: turns)
         .playerFeedback()
+        .fullScreenCover(isPresented: Bindable(StagePresenter.shared).isShowing) {
+            StageView { StagePresenter.shared.isShowing = false }
+                .environment(player)
+        }
+        .onChange(of: player.hasQueue, initial: true) { _, hasQueue in
+            if hasQueue, LaunchScene.opensStage { StagePresenter.shared.isShowing = true }
+        }
     }
 
     // MARK: - Layout
@@ -74,7 +81,15 @@ struct NowPlayingView: View {
     private var topBar: some View {
         ZStack {
             VStack(spacing: 1) {
-                if let context = player.context {
+                if player.isOnAutoplayPick {
+                    Text("Autoplay")
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.white.opacity(0.6))
+                    Text(player.autoplayFollows.map { "Songs Like \($0)" } ?? "Similar Songs")
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                } else if let context = player.context {
                     Text(context.isStation ? "Playing from Radio" : "Playing From")
                         .font(.caption2.weight(.semibold))
                         .textCase(.uppercase)
@@ -171,7 +186,7 @@ struct NowPlayingView: View {
     private func controls(_ track: PlayerTrack) -> some View {
         VStack(spacing: 22) {
             if let duration = track.duration, duration > 0 {
-                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, format: track.local?.format) { time in
+                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track) { time in
                     player.seek(to: time)
                 }
             } else {

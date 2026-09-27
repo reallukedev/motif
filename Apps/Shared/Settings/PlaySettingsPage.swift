@@ -14,11 +14,14 @@ struct PlaySettingsPage: View {
     @AppStorage(PlayPreferences.radioTuningKey) private var storedTuning = ""
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
     @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
-    @AppStorage(StreamQuality.storageKey) private var streamQuality = StreamQuality.original
+    @AppStorage(StreamQuality.wiFiKey) private var wiFiQuality = StreamQuality.original
+    @AppStorage(StreamQuality.cellularKey) private var cellularQuality = StreamQuality.original
+    @AppStorage(StreamQuality.downloadKey) private var downloadQuality = StreamQuality.original
     @AppStorage(AutomaticDownloads.storageKey) private var automaticDownloads = true
     @AppStorage(PlayPreferences.radioDownloadsFirstKey) private var radioDownloadsFirst = true
     @AppStorage(PlayPreferences.radioDeletesAfterPlayingKey) private var radioDeletesAfterPlaying = false
     @AppStorage(PlayPreferences.shakeToPlayKey) private var shakeToPlay = true
+    @AppStorage(PlayPreferences.volumeFollowsSpeedKey) private var volumeFollowsSpeed = false
     @AppStorage(QuickSwitch.storageKey) private var quickSwitch = false
     @AppStorage(NearbyDevices.storageKey) private var showsNearby = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
@@ -40,6 +43,10 @@ struct PlaySettingsPage: View {
                 sourceSection
                 if isYourMusic {
                     yourMusicSections
+                    #if os(iOS)
+                    drivingSection
+                        .id(DebugScroll.driving)
+                    #endif
                 } else {
                     offlineSection
                 }
@@ -79,7 +86,7 @@ struct PlaySettingsPage: View {
 
     /// Places `-MotifSettingsScroll` can open the page at.
     private enum DebugScroll: String {
-        case radio, mixes
+        case radio, mixes, driving
     }
 
     private var standing: PlaySettingsWords.Standing {
@@ -181,13 +188,13 @@ struct PlaySettingsPage: View {
                 LabeledContent("Downloaded", value: LocalFormat.bytes(music.downloads.totalBytes))
             }
             Toggle("Automatic Downloads", isOn: $automaticDownloads)
-            Picker("Streaming on Cellular", selection: $streamQuality) {
-                ForEach(StreamQuality.allCases) { Text($0.title).tag($0) }
-            }
+            StreamQualityPicker(title: "Streaming on Wi-Fi", selection: $wiFiQuality)
+            StreamQualityPicker(title: "Streaming on Cellular", selection: $cellularQuality)
+            StreamQualityPicker(title: "Download Quality", selection: $downloadQuality)
         } header: {
             Text("Downloads and Streaming")
         } footer: {
-            Text(PlaySettingsWords.downloadsFooter(automatic: automaticDownloads, quality: streamQuality))
+            Text(PlaySettingsWords.downloadsFooter(automatic: automaticDownloads, wiFi: wiFiQuality, cellular: cellularQuality, download: downloadQuality))
                 .contentTransition(.opacity)
         }
     }
@@ -232,6 +239,33 @@ struct PlaySettingsPage: View {
             deletesAfterPlaying: radioDeletesAfterPlaying
         )
     }
+
+    // MARK: - Driving
+
+    #if os(iOS)
+    private var drivingSection: some View {
+        Section {
+            Toggle("Louder at Speed", isOn: $volumeFollowsSpeed)
+                .onChange(of: volumeFollowsSpeed) { _, isOn in
+                    if isOn { SpeedVolume.shared.askForLocation() }
+                }
+        } header: {
+            Text("Driving")
+        } footer: {
+            Text(drivingFooter)
+                .contentTransition(.opacity)
+        }
+        .onAppear { SpeedVolume.shared.refreshAuthorization() }
+    }
+
+    private var drivingFooter: String {
+        let status = SpeedVolume.shared.authorization
+        if volumeFollowsSpeed, status == .denied || status == .restricted {
+            return String(localized: "Motif can't see how fast you're going. Allow Location for Motif in Settings ▸ Privacy & Security ▸ Location Services.")
+        }
+        return String(localized: "While you drive, your music comes up as the car speeds up and eases back down as it slows, so the road never drowns it out. Motif uses only your speed, only while driving, and it stays on this iPhone.")
+    }
+    #endif
 
     // MARK: - Around Motif
 

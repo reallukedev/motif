@@ -110,19 +110,44 @@ final class YourMusic {
         return index.tracks(withIdentity: track.identity).first { $0.serverID == serverID } ?? track
     }
 
-    /// Where to play a song from: the file, the download, or the server's stream.
-    func playbackURL(for track: LocalTrack) -> URL? {
+    /// Where to play a song from, and how it reaches the player: the file, the download, or
+    /// the server's stream at the quality set for the network it's on.
+    func playback(for track: LocalTrack) -> (url: URL, playback: LocalPlayback)? {
         let track = resolved(track)
         switch track.origin {
         case .file(let path):
-            return LibraryFolders.music.appending(path: path)
+            return (LibraryFolders.music.appending(path: path), LocalPlayback(route: .file, original: track.format))
         case .server(let serverID, let songID):
-            if let file = downloads.fileURL(for: track.id) { return file }
-            guard network.isOnline else { return nil }
-            let quality = network.isExpensive ? StreamQuality.current : .original
-            return servers.client(for: serverID)?.streamURL(songID: songID, maxBitRate: quality.maxBitRate)
+            if let file = downloads.fileURL(for: track.id), let playback = downloads.playback(for: track.id) {
+                return (file, playback)
+            }
+            guard network.isOnline, let client = servers.client(for: serverID) else { return nil }
+            let setting = StreamQuality.streaming(onExpensiveNetwork: network.isExpensive)
+            let playback = LocalPlayback(
+                route: .stream(server: servers.server(serverID)?.name ?? "", network: setting.network, requestedBitRate: setting.quality.maxBitRate),
+                original: track.format
+            )
+            return (client.streamURL(songID: songID, maxBitRate: setting.quality.maxBitRate), playback)
         }
     }
+
+    /// How each song queued in the player is reaching it, by queue entry, for the quality
+    /// badge. Kept by the player as it loads each song and hears what arrived.
+    var playbacks: [String: LocalPlayback] = [:]
+
+    #if DEBUG
+    /// How a sample song would reach the player, for the demo's badge: sample songs have no
+    /// file to play, so this is worked out as the player would, without the address.
+    func demoPlayback(for track: LocalTrack) -> LocalPlayback {
+        guard case .server(let serverID, _) = track.origin else { return LocalPlayback(route: .file, original: track.format) }
+        if let playback = downloads.playback(for: track.id) { return playback }
+        let setting = StreamQuality.streaming(onExpensiveNetwork: false)
+        return LocalPlayback(
+            route: .stream(server: servers.server(serverID)?.name ?? "", network: setting.network, requestedBitRate: nil),
+            original: track.format
+        )
+    }
+    #endif
 
     /// A cover's address: a saved picture, or the server's. A server's is always asked for at
     /// one size, drawn smaller where it's small: one download for every place it's shown, and

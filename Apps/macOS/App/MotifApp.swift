@@ -74,6 +74,7 @@ struct MotifApp: App {
         #endif
 
         MiniPlayerWindow(model: model)
+        StageWindow(model: model)
 
         Settings {
             MacSettingsView(model: model)

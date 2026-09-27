@@ -11,6 +11,8 @@ enum PlayRoute: Hashable {
     case artist(Artist)
     case library(LibrarySection)
     case mood(Mood)
+    /// Finding a playlist for a party: Party's own page, rather than the mood's.
+    case party
     /// Songs you've never played, through one lens or another.
     case songFinder(SongLens)
     /// Artists you've never played, like the ones you do.
@@ -104,6 +106,7 @@ private struct PlayDestination: View {
             } else {
                 MoodView(mood: mood)
             }
+        case .party: PartyView()
         case .songFinder(let lens): SongFinder(lens: lens)
         case .artistFinder: ArtistFinder()
         case .newReleases: NewReleasesPage()

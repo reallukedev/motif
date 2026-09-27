@@ -65,6 +65,12 @@ If you choose Your Music as the music source, Motif plays audio files you put in
 
 Songs you play from your own music are recorded in your listening history just like Apple Music's.
 
+## Your speed while driving (iPhone, optional)
+
+Louder at Speed is off until you turn it on. When it's on and you're driving with your own music playing, Motif asks iOS for your location about once a second and uses only the speed from it, to set how loud the music plays. The location isn't stored, isn't added to your history, and never leaves your iPhone. Motif stops asking when the drive ends or the music stops. While it's following your speed, iOS shows that Motif is using your location.
+
+You can turn Louder at Speed off in Motif's Play settings, and withdraw location access at any time in Settings → Privacy & Security → Location Services.
+
 ## On the Mac: controlling Music
 
 On the Mac, Motif asks Music what is playing and sends it playback commands (play, pause, next, previous) from the menu bar. macOS asks for your permission the first time, and you can change your answer in System Settings → Privacy & Security → Automation.

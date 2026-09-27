@@ -21,6 +21,7 @@ private struct DownloadsList: View {
     @Environment(PlayerModel.self) private var player
     @AppStorage(Downloads.cellularKey) private var allowsCellular = true
     @AppStorage(AutomaticDownloads.storageKey) private var automaticDownloads = true
+    @AppStorage(StreamQuality.downloadKey) private var downloadQuality = StreamQuality.original
     @AppStorage("downloadsOrder") private var order = DownloadReport.Order.recent
     @AppStorage("downloadsShowsSongs") private var showsSongs = false
     @State private var confirmsRemoveAll = false
@@ -30,7 +31,8 @@ private struct DownloadsList: View {
 
     var body: some View {
         let downloads = music.downloads
-        let songs = downloads.items.values.map { DownloadedSong(track: $0.track, bytes: $0.bytes, downloadedAt: $0.downloadedAt) }
+        // Each song as its file is, so a smaller copy isn't counted as lossless.
+        let songs = downloads.items.values.map { DownloadedSong(track: $0.keptTrack, bytes: $0.bytes, downloadedAt: $0.downloadedAt) }
         let stats = DownloadReport.stats(songs, facts: feed.facts)
         let unplayed = DownloadReport.unplayed(songs, facts: feed.facts)
         let active = downloads.progress.keys.sorted().compactMap { id in music.index.track(id: id).map { ($0, downloads.progress[id] ?? 0) } }
@@ -160,10 +162,13 @@ private struct DownloadsList: View {
             Section {
                 Toggle("Automatic Downloads", isOn: $automaticDownloads)
                 Toggle("Download over Cellular", isOn: $allowsCellular)
+                StreamQualityPicker(title: "Download Quality", selection: $downloadQuality)
             } footer: {
+                let quality = AudioQualityWords.downloadDetail(downloadQuality.maxBitRate)
                 Text(allowsCellular
-                    ? "With Automatic Downloads, songs you play or add from your servers come down to this iPhone. Downloads are the original files, so FLAC stays lossless, and they don't count against iCloud backup."
-                    : "Downloads wait for Wi-Fi, and start by themselves when you're back on it. With Automatic Downloads, songs you play or add from your servers come down to this iPhone as the original files.")
+                    ? "With Automatic Downloads, songs you play or add from your servers come down to this iPhone. \(quality) They don’t count against iCloud backup."
+                    : "Downloads wait for Wi-Fi, and start by themselves when you’re back on it. \(quality)")
+                    .contentTransition(.opacity)
             }
 
             if !songs.isEmpty {
@@ -239,7 +244,8 @@ private struct DownloadsList: View {
         } label: {
             HStack(spacing: 8) {
                 LocalTrackRow(track: song.track, isCurrent: player.current?.local?.id == song.track.id)
-                Text(LocalFormat.bytes(song.bytes))
+                // A smaller copy says so beside its size: "MP3 · 128 kbps · 3.1 MB".
+                Text(sizeLine(song))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
@@ -250,6 +256,15 @@ private struct DownloadsList: View {
             Button("Remove", systemImage: "trash", role: .destructive) { music.downloads.remove([song.id]) }
         }
         .contextMenu { LocalTrackMenu(track: song.track) }
+    }
+
+    /// The room a song takes, after its format when it's a smaller copy than the original.
+    private func sizeLine(_ song: DownloadedSong) -> String {
+        let size = LocalFormat.bytes(song.bytes)
+        guard let item = music.downloads.items[song.id], item.isSmallerCopy,
+              let quality = music.downloads.playback(for: song.id).flatMap(AudioQuality.init)
+        else { return size }
+        return "\(quality.label) · \(size)"
     }
 
     private func albumRow(_ album: LocalAlbum) -> some View {
