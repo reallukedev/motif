@@ -104,25 +104,11 @@ extension PartyVibe {
     }
 }
 
-/// The party's colours, deep in one corner and light in the other, as a mood's field is.
+/// The party's colour, lit a little from the top, as a mood's field is.
 struct PartyField: View {
     let vibe: PartyVibe
 
     var body: some View {
-        let (deep, mid, light) = (vibe.palette[0], vibe.palette[1], vibe.palette[2])
-        MeshGradient(
-            width: 3,
-            height: 3,
-            points: [
-                [0, 0], [0.5, 0], [1, 0],
-                [0, 0.5], [0.55, 0.4], [1, 0.5],
-                [0, 1], [0.5, 1], [1, 1],
-            ],
-            colors: [
-                deep, mid, light,
-                deep, mid, mid,
-                deep, deep, mid,
-            ]
-        )
+        HueField(color: vibe.palette[1])
     }
 }

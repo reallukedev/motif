@@ -47,6 +47,16 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     private var awaitingArrival: String?
     /// A moment's message for the person, shown by the player.
     var onNotice: ((String) -> Void)?
+    /// Next and Previous from the lock screen, CarPlay, the steering wheel or headphones. Set
+    /// by the player, which does what its own buttons do: waits for a live mix's next pick,
+    /// and doesn't take going back for a skip. Unset, the engine skips by itself.
+    var onRemoteNext: (() -> Void)?
+    var onRemotePrevious: (() -> Void)?
+    /// Called as a song that couldn't play is skipped, so the skip isn't taken for yours.
+    var onAutoSkip: (() -> Void)?
+    /// The queue ran out: the last song ended, or Next went past it. A song added now plays,
+    /// rather than waiting behind a song that's over.
+    private var ranOut = false
     private var observations: [NSKeyValueObservation] = []
     private var notifications: [any NSObjectProtocol] = []
     private var timeObserver: Any?
@@ -152,6 +162,10 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         loadItems(startPlaying: true)
     }
 
+    func canPlayNow(_ song: MixSong) -> Bool {
+        music.canPlay(song)
+    }
+
     func enqueue(_ request: PlayRequest, next: Bool) async throws {
         let (tracks, _) = try resolve(request)
         let added = tracks.map { Entry(id: UUID().uuidString, track: $0) }
@@ -170,6 +184,13 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             unshuffled.insert(contentsOf: added, at: at + 1)
         } else {
             unshuffled += added
+        }
+        // The queue had run out: carry on with what's just been added.
+        if ranOut, entries.indices.contains(position) {
+            index = position
+            failuresInARow = 0
+            loadItems(startPlaying: true)
+            return
         }
         refreshNext()
         onChange?()
@@ -211,8 +232,13 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
 
     func resume() async throws {
         guard !entries.isEmpty else { throw PlayerProblem.nothingToPlay }
+        ranOut = false
         activate()
-        if player.currentItem == nil { loadItems(startPlaying: false) }
+        // Loaded afresh, which moves on if the song can't be reached now.
+        guard player.currentItem != nil else {
+            loadItems(startPlaying: true)
+            return
+        }
         player.play()
     }
 
@@ -226,6 +252,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             // Past the end: stop on the last song, back at its start.
             player.pause()
             await player.seek(to: .zero)
+            ranOut = true
             return
         }
         loadItems(startPlaying: true)
@@ -234,6 +261,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     func skipToPrevious() async throws {
         guard !entries.isEmpty else { return }
         if playbackTime > 3 || index == 0 {
+            ranOut = false
             await player.seek(to: .zero)
             publish()
             return
@@ -243,6 +271,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     }
 
     func seek(to time: TimeInterval) {
+        ranOut = false
         player.seek(to: CMTime(seconds: time, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             Task { @MainActor in self?.updateNowPlayingInfo() }
         }
@@ -304,6 +333,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     /// Puts the current song, and the one after it, in the player.
     private func loadItems(startPlaying: Bool) {
         awaitingArrival = nil
+        ranOut = false
         player.removeAllItems()
         itemEntries = [:]
         itemObservations = [:]
@@ -312,10 +342,17 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             updateStatus()
             return
         }
-        if let item = makeItem(entries[index]) {
-            currentItemID = ObjectIdentifier(item)
-            player.insert(item, after: nil)
+        guard let item = makeItem(entries[index]) else {
+            // Can't be reached right now (a server's song, offline): on to the next that can,
+            // rather than waiting on nothing.
+            onChange?()
+            publish()
+            updateNowPlayingInfo()
+            if startPlaying { skipPastFailure() }
+            return
         }
+        currentItemID = ObjectIdentifier(item)
+        player.insert(item, after: nil)
         refreshNext()
         if startPlaying {
             player.play()
@@ -421,10 +458,18 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             serverScrobble = nil
             return
         }
-        // The last song ended: stay on it, back at the start.
-        if nextIndex(after: index) == nil {
+        guard let next = nextIndex(after: index) else {
+            // The last song ended: stay on it, back at the start.
             player.pause()
             loadItems(startPlaying: false)
+            ranOut = true
+            return
+        }
+        // The next song couldn't be queued behind this one, as it couldn't be reached then:
+        // move on to it now, which skips it if it still can't play.
+        if !itemEntries.values.contains(entries[next].id) {
+            index = next
+            loadItems(startPlaying: true)
         }
     }
 
@@ -440,11 +485,18 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             onNotice?(String(localized: "\u{201C}\(track.title)\u{201D} Will Play Once Your Server Has It"))
             return
         }
+        skipPastFailure()
+    }
+
+    /// A song that couldn't play: on to the next, unless a run of them couldn't either.
+    private func skipPastFailure() {
         failuresInARow += 1
         guard failuresInARow < entries.count, failuresInARow < 10 else {
             player.pause()
+            onNotice?(String(localized: "Couldn't Play These Songs"))
             return
         }
+        onAutoSkip?()
         Task { try? await skipToNext() }
     }
 
@@ -478,6 +530,8 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         }
         guard next != status else { return }
         status = next
+        // A song playing ends a run of ones that wouldn't.
+        if next == .playing { failuresInARow = 0 }
         onChange?()
         publish()
         updateNowPlayingInfo()
@@ -520,7 +574,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         isActive = true
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.player.play() }
+            MainActor.assumeIsolated { self?.playFromRemote() }
             return .success
         }
         center.pauseCommand.addTarget { [weak self] _ in
@@ -530,16 +584,22 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if self.status == .playing { self.pause() } else { self.player.play() }
+                if self.status == .playing { self.pause() } else { self.playFromRemote() }
             }
             return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { _ = Task { try? await self?.skipToNext() } }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let onRemoteNext = self.onRemoteNext { onRemoteNext() } else { Task { try? await self.skipToNext() } }
+            }
             return .success
         }
         center.previousTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { _ = Task { try? await self?.skipToPrevious() } }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let onRemotePrevious = self.onRemotePrevious { onRemotePrevious() } else { Task { try? await self.skipToPrevious() } }
+            }
             return .success
         }
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
@@ -548,6 +608,16 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             MainActor.assumeIsolated { self?.seek(to: time) }
             return .success
         }
+    }
+
+    /// Play from the lock screen, CarPlay or headphones: the song on plays, from where it is.
+    private func playFromRemote() {
+        ranOut = false
+        guard player.currentItem != nil || entries.isEmpty else {
+            loadItems(startPlaying: true)
+            return
+        }
+        player.play()
     }
 
     /// Hands everything back, for Apple Music to take over.
@@ -559,6 +629,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         entries = []
         unshuffled = []
         index = 0
+        ranOut = false
         status = .stopped
         publish()
         guard isActive else { return }

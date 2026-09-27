@@ -10,6 +10,7 @@ import MotifCore
 ///                                 "station" for Motif Radio, or a mood such as "chill"
 ///     -MotifDemoPlaying one       or just its first song, for Autoplay to follow on from
 ///     -MotifDemoSkips 3           then skip that many songs in a row, a few seconds apart
+///     -MotifDemoMoreLikeThis YES  or ask for more like the song on, a few seconds in
 ///     -MotifNowPlaying YES        open Now Playing once something plays (iPhone)
 ///     -MotifQueue YES             and show Up Next in it (iPhone), or the panel (Mac)
 ///     -MotifQualityDetails YES    and open the audio quality badge's details
@@ -25,7 +26,10 @@ import MotifCore
 ///     -MotifPage songs            open the Song Finder (or "songs.chill" for a lens), the
 ///                                 Artist Finder ("artists") or New from Your Artists
 ///                                 ("releases") (iPhone)
-///     -MotifRadioTuner YES        open Motif Radio's tuning from its card (iPhone)
+///     -MotifCrate 4               start Play's crate that many records from the lead, or back
+///                                 with a negative number, into the suggested songs
+///     -MotifRadioTuner YES        open Motif Radio's tuning from its card (iPhone), or
+///                                 "queue" from Up Next, with -MotifQueue
 ///     -MotifSettings play         open Settings at one of its pages: play, history, radio,
 ///                                 appleMusic, lastFM or iCloud (iPhone)
 ///     -MotifEditPlay YES          open Edit Play (iPhone)
@@ -80,6 +84,9 @@ enum LaunchScene {
     static var opensStageCustomizer: Bool { value("MotifStageCustomize") == "YES" }
     static var opensSleeve: Bool { value("MotifSleeve") == "YES" }
     static var opensRadioTuner: Bool { value("MotifRadioTuner") == "YES" }
+    /// Records from the crate's lead to start on.
+    static var crateOffset: Int? { value("MotifCrate").flatMap(Int.init) }
+    static var opensRadioTunerFromQueue: Bool { value("MotifRadioTuner") == "queue" }
     /// A pretend SharePlay session's scene, with sample data.
     static var sharePlayDemo: String? { value("MotifSharePlayDemo") }
     static var sharePlaySearch: String? { value("MotifSharePlaySearch") }
@@ -127,6 +134,7 @@ extension LaunchScene {
             hasStartedDemoPlayback = true
             model.player.playMotifRadio()
             skipForDemo(model)
+            askForMoreForDemo(model)
             return
         }
         if playing == "local", let album = model.yourMusic.index.recentlyAdded.first {
@@ -144,6 +152,17 @@ extension LaunchScene {
         let songs = model.player.songs(in: mix)
         model.player.play(.history(playing == "one" ? Array(songs.prefix(1)) : songs), from: PlayContext(kind: .mix, title: mix.kind.title))
         skipForDemo(model)
+    }
+
+    /// `-MotifDemoMoreLikeThis`: asks for more like the song on, a few seconds in, as someone
+    /// who likes what they hear would from its menu.
+    @MainActor
+    private static func askForMoreForDemo(_ model: AppModel) {
+        guard value("MotifDemoMoreLikeThis") == "YES" else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            model.player.playMoreLikeThis()
+        }
     }
 
     /// `-MotifDemoSkips`: skips that many songs soon after each starts, as someone who isn't

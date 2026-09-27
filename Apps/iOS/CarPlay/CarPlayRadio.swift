@@ -66,8 +66,10 @@ extension CarPlaySceneDelegate {
 
     private var radioState: RadioState {
         guard hasMotifRadio else { return .off }
-        guard isPlaying(PlayContext.motifRadio.title) else { return .idle }
-        return model.player.isPlaying ? .playing : .paused
+        // By what's playing, not its name: a playlist called Motif Radio isn't it.
+        guard model.player.isPlayingMotifRadio else { return .idle }
+        // A song still coming from your server is playing, not paused.
+        return model.player.isPlaying || model.player.status == .loading ? .playing : .paused
     }
 
     /// Motif Radio as a station: its artwork, and a line that says where it stands, with the
@@ -94,7 +96,7 @@ extension CarPlaySceneDelegate {
     /// otherwise started. Never started over while it plays.
     func startOrResumeMotifRadio() async {
         let player = model.player
-        if isPlaying(PlayContext.motifRadio.title) {
+        if player.isPlayingMotifRadio {
             if !player.isPlaying { player.togglePlayPause() }
         } else {
             await player.startMotifRadio()

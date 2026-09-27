@@ -164,9 +164,21 @@ struct RadioMomentTests {
     func anytime() throws {
         let songs = aggregates(habits())
         let fit = RadioMomentFit(moment: .anytime, songs: Array(songs.values), drives: DriveLog())
-        #expect(fit.factor(for: try #require(songs["Evening 0"]), genre: "Ambient", recentSkips: 1) == 1)
+        #expect(fit.factor(for: try #require(songs["Evening 0"]), genre: "Ambient", recentSkips: 0) == 1)
         #expect(fit.factor(for: try #require(songs["Morning 0"]), genre: "Metal", recentSkips: 0) == 1)
         #expect(fit.newShare(0.25) == 0.25)
+    }
+
+    @Test("a song skipped lately comes up less at any hour, and less still on the road")
+    func skippedLately() throws {
+        let songs = aggregates(habits())
+        let song = try #require(songs["Evening 0"])
+        let anytime = RadioMomentFit(moment: .anytime, songs: Array(songs.values), drives: DriveLog())
+        let road = RadioMomentFit(moment: RadioMoment(isDriving: true), songs: Array(songs.values), drives: DriveLog())
+        #expect(anytime.factor(for: song, genre: nil, recentSkips: 1) < anytime.factor(for: song, genre: nil, recentSkips: 0))
+        let offRoad = anytime.factor(for: song, genre: nil, recentSkips: 1) / anytime.factor(for: song, genre: nil, recentSkips: 0)
+        let onRoad = road.factor(for: song, genre: nil, recentSkips: 1) / road.factor(for: song, genre: nil, recentSkips: 0)
+        #expect(onRoad < offRoad)
     }
 
     // MARK: - Energy

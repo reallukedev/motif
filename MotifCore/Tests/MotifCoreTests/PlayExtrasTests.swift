@@ -92,8 +92,16 @@ struct PlayLayoutTests {
     func upgrade() {
         // "discover" was a section once; it's gone, and dropped.
         let layout = PlayLayout(stored: "forYou,recentlyPlayed,mixes,discover,radio,-library,appleMusic")
-        #expect(layout.order == [.forYou, .suggestedSongs, .suggestedArtists, .recentlyPlayed, .yourArtists, .mixes, .moods, .newReleases, .radio, .charts, .library, .appleMusic])
+        #expect(layout.order == [.forYou, .suggestedSongs, .suggestedArtists, .recentlyPlayed, .yourArtists, .mixes, .moods, .genres, .newReleases, .radio, .charts, .library, .appleMusic])
         #expect(!layout.isVisible(.library))
+    }
+
+    @Test("a layout saved before Genres existed shows it right after the moods, wherever they were moved")
+    func genresJoinAfterMoods() {
+        let layout = PlayLayout(stored: "moods,forYou,-suggestedSongs,suggestedArtists,recentlyPlayed,yourArtists,mixes,newReleases,radio,charts,library,appleMusic")
+        #expect(layout.order.prefix(3) == [.moods, .genres, .forYou])
+        #expect(layout.isVisible(.genres))
+        #expect(layout.isVisible(.suggestedSongs) == false)
     }
 
     @Test("sections a newer version added are placed where they sit by default")

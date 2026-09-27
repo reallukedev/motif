@@ -52,70 +52,172 @@ extension Mood {
     /// The mood's deepest colour, for type and tints over white.
     var color: Color { palette[0] }
 
-    /// Three colours for the mood's field, deep to light, all dark enough for white type.
-    var palette: [Color] {
+    /// The mood's own colour, one no other mood shares, rich enough for white type.
+    var base: Color {
         switch self {
-        case .feelGood: [Color(red: 0.78, green: 0.36, blue: 0.02), Color(red: 0.95, green: 0.55, blue: 0.08), Color(red: 0.98, green: 0.72, blue: 0.2)]
-        case .energy: [Color(red: 0.72, green: 0.12, blue: 0.08), Color(red: 0.93, green: 0.3, blue: 0.1), Color(red: 1, green: 0.52, blue: 0.16)]
-        case .workout: [Color(red: 0.55, green: 0.04, blue: 0.16), Color(red: 0.85, green: 0.1, blue: 0.24), Color(red: 0.98, green: 0.35, blue: 0.2)]
-        case .focus: [Color(red: 0.1, green: 0.16, blue: 0.48), Color(red: 0.2, green: 0.34, blue: 0.72), Color(red: 0.3, green: 0.56, blue: 0.82)]
-        case .chill: [Color(red: 0.02, green: 0.36, blue: 0.36), Color(red: 0.08, green: 0.55, blue: 0.5), Color(red: 0.36, green: 0.72, blue: 0.56)]
-        case .love: [Color(red: 0.62, green: 0.06, blue: 0.3), Color(red: 0.88, green: 0.2, blue: 0.44), Color(red: 0.98, green: 0.45, blue: 0.52)]
-        case .drive: [Color(red: 0.04, green: 0.16, blue: 0.28), Color(red: 0.08, green: 0.4, blue: 0.5), Color(red: 0.96, green: 0.56, blue: 0.28)]
-        case .heartbreak: [Color(red: 0.26, green: 0.12, blue: 0.46), Color(red: 0.44, green: 0.26, blue: 0.64), Color(red: 0.58, green: 0.46, blue: 0.76)]
-        case .party: [Color(red: 0.46, green: 0.06, blue: 0.56), Color(red: 0.8, green: 0.14, blue: 0.62), Color(red: 0.98, green: 0.4, blue: 0.5)]
-        case .sleep: [Color(red: 0.04, green: 0.08, blue: 0.26), Color(red: 0.12, green: 0.2, blue: 0.44), Color(red: 0.3, green: 0.3, blue: 0.56)]
+        case .feelGood: Color(red: 0.93, green: 0.47, blue: 0.04)
+        case .energy: Color(red: 0.92, green: 0.27, blue: 0.1)
+        case .workout: Color(red: 0.84, green: 0.1, blue: 0.27)
+        case .focus: Color(red: 0.16, green: 0.38, blue: 0.84)
+        case .chill: Color(red: 0.05, green: 0.56, blue: 0.5)
+        case .love: Color(red: 0.9, green: 0.2, blue: 0.46)
+        case .drive: Color(red: 0.03, green: 0.47, blue: 0.72)
+        case .heartbreak: Color(red: 0.45, green: 0.28, blue: 0.68)
+        case .party: Color(red: 0.8, green: 0.14, blue: 0.62)
+        case .sleep: Color(red: 0.15, green: 0.18, blue: 0.44)
         }
     }
+
+    /// The mood's colour deep to light, for what needs a shade of it.
+    var palette: [Color] { HueField.shades(of: base) }
 }
 
-/// The mood's colours, deep in one corner and light in the other, like light through glass.
+/// A mood's field: its colour, lit a little from the top as Apple's tiles are.
 struct MoodField: View {
     let mood: Mood
 
     var body: some View {
-        let (deep, mid, light) = (mood.palette[0], mood.palette[1], mood.palette[2])
-        MeshGradient(
-            width: 3,
-            height: 3,
-            points: [
-                [0, 0], [0.5, 0], [1, 0],
-                [0, 0.5], [0.55, 0.4], [1, 0.5],
-                [0, 1], [0.5, 1], [1, 1],
-            ],
-            colors: [
-                deep, mid, light,
-                deep, mid, mid,
-                deep, deep, mid,
-            ]
-        )
+        HueField(color: mood.base)
     }
+}
+
+/// One colour, lit a little from the top as Apple's own tiles are: a mood's field, and
+/// Handpicked's, each genre's and each party's.
+struct HueField: View {
+    let color: Color
+
+    var body: some View {
+        Rectangle().fill(color.gradient)
+    }
+
+    /// A colour deep to light: darker for type over white, lighter for a highlight.
+    static func shades(of color: Color) -> [Color] {
+        [color.mix(with: .black, by: 0.3), color, color.mix(with: .white, by: 0.25)]
+    }
+}
+
+/// The colour behind a page's header, as a mood's, Handpicked's and each genre's have: its
+/// field with its symbol large and faint in the corner, up under the bar and into any pull
+/// past the top, melting into the page below the header's last button over a long, eased
+/// fade, as a collection's header does, rather than stopping at a line.
+struct HeroField: View {
+    let color: Color
+    let symbol: String
+
+    var body: some View {
+        HueField(color: color)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: symbol)
+                    .font(.system(size: 220, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.1))
+                    .rotationEffect(.degrees(-12))
+                    .offset(x: 60, y: 10)
+                    .accessibilityHidden(true)
+            }
+            .clipped()
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(
+                        stops: Self.easedStops.map { .init(color: .black.opacity(1 - $0.opacity), location: $0.location) },
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: Self.fadeReach)
+                }
+            }
+            .padding(.top, -400)
+            .accessibilityHidden(true)
+    }
+
+    /// Below the header's last button, where the page shows through at last.
+    static let fade: CGFloat = 40
+    /// How far up the fade reaches: from behind the last button down, clear of the words
+    /// above it.
+    static let fadeReach: CGFloat = 150
+
+    /// Smoothstep, so the fade has no start or end to see.
+    private static let easedStops: [(opacity: Double, location: Double)] = (0...10).map { step in
+        let t = Double(step) / 10
+        return (opacity: t * t * (3 - 2 * t), location: t)
+    }
+}
+
+extension View {
+    /// The page's name in the bar once its header's big name has scrolled away under it, as
+    /// Music's pages do. Put on the scroll view. The Mac's window title says it already.
+    func heroTitle(_ title: String) -> some View {
+        modifier(HeroTitle(title: title))
+    }
+}
+
+private struct HeroTitle: ViewModifier {
+    let title: String
+    @State private var isShown = false
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > Self.threshold
+            } action: { _, shown in
+                withAnimation(.easeOut(duration: 0.2)) { isShown = shown }
+            }
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .opacity(isShown ? 1 : 0)
+                        .accessibilityHidden(!isShown)
+                }
+            }
+        #else
+        content
+        #endif
+    }
+
+    /// About where the big name has gone under the bar.
+    private static let threshold: CGFloat = 110
 }
 
 // MARK: - On Play
 
-/// Find Your Mood, on Play: every mood in two rows to scroll through.
+/// Find Your Mood, on Play: Handpicked, then every mood, in a row to scroll through.
 struct MoodShelf: View {
-    @ScaledMetric(relativeTo: .headline) private var height: CGFloat = 86
+    @ScaledMetric(relativeTo: .headline) private var height: CGFloat = Self.height
 
     var body: some View {
         let height = min(height, 130)
-        VStack(alignment: .leading, spacing: 10) {
-            ShelfHeader(title: String(localized: "Find Your Mood")) { EmptyView() }
-                .padding(.horizontal, PlayMetrics.margin)
-            ScrollView(.horizontal) {
-                LazyHGrid(rows: [GridItem(.fixed(height), spacing: 10), GridItem(.fixed(height))], spacing: 10) {
-                    ForEach(Mood.allCases) { mood in
-                        MoodTile(mood: mood, height: height)
-                    }
-                }
-                .scrollTargetLayout()
+        Shelf(title: String(localized: "Find Your Mood"), items: MoodShelfItem.all) { EmptyView() } tile: { item in
+            switch item {
+            // Your own mood first: a station from songs you choose.
+            case .handpicked: HandpickedTile(height: height)
+            case .mood(let mood): MoodTile(mood: mood, height: height)
             }
-            .contentMargins(.horizontal, PlayMetrics.margin, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.hidden)
         }
     }
+
+    #if os(macOS)
+    static let height: CGFloat = 96
+    #else
+    static let height: CGFloat = 86
+    #endif
+}
+
+/// A tile on Find Your Mood.
+enum MoodShelfItem: Identifiable {
+    case handpicked
+    case mood(Mood)
+
+    var id: String {
+        switch self {
+        case .handpicked: "handpicked"
+        case .mood(let mood): mood.rawValue
+        }
+    }
+
+    static let all: [MoodShelfItem] = [.handpicked] + Mood.allCases.map(MoodShelfItem.mood)
 }
 
 /// A mood on the shelf: its field, its symbol large and faint in the corner, and its name.
@@ -151,23 +253,6 @@ struct MoodTile: View {
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(mood.title)
-    }
-}
-
-/// Every mood at once, filling the width, as the Mac shows them on Listen Now and Radio.
-struct MoodGrid: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Find Your Mood")
-                .font(.title3.bold())
-                .accessibilityAddTraits(.isHeader)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
-                ForEach(Mood.allCases) { mood in
-                    MoodTile(mood: mood, height: 92, fillsWidth: true)
-                }
-            }
-        }
-        .padding(.horizontal, PlayMetrics.margin)
     }
 }
 
@@ -238,6 +323,7 @@ struct MoodView: View {
             }
             .padding(.bottom, 24)
         }
+        .heroTitle(mood.title)
         #if os(macOS)
         .navigationTitle(mood.title)
         // The mood's field runs on under the toolbar, which says nothing the field doesn't.
@@ -284,9 +370,16 @@ struct MoodView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .tint(mood.palette[1])
+                    .tint(mood.base)
                     .environment(\.colorScheme, .dark)
                 }
+
+                // What Play does, above it, clear of the fade below.
+                Text(flowLine)
+                    .font(.footnote)
+                    .opacity(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
 
                 #if os(macOS)
                 Button {
@@ -309,12 +402,6 @@ struct MoodView: View {
                 .buttonStyle(.pressable)
                 .disabled(!canPlay)
                 #endif
-
-                Text(flowLine)
-                    .font(.footnote)
-                    .opacity(0.85)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
             }
             // A line's worth of controls on the Mac, not the window's width.
             .frame(maxWidth: Self.controlsWidth, alignment: .leading)
@@ -322,31 +409,10 @@ struct MoodView: View {
         .foregroundStyle(.white)
         .padding(.horizontal, PlayMetrics.margin)
         .padding(.top, Self.heroTop)
-        .padding(.bottom, 36)
+        .padding(.bottom, 24 + HeroField.fade)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            MoodField(mood: mood)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: mood.symbol)
-                        .font(.system(size: 220, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.1))
-                        .rotationEffect(.degrees(-12))
-                        .offset(x: 60, y: 40)
-                        .accessibilityHidden(true)
-                }
-                .clipped()
-                // Into the page at its foot, rather than stopping at an edge.
-                .mask {
-                    // A fade of fixed length at the foot, below the words, however tall the
-                    // field is.
-                    VStack(spacing: 0) {
-                        Color.black
-                        LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 44)
-                    }
-                }
-                // Up under the bar and into any pull past the top.
-                .padding(.top, -400)
+            HeroField(color: mood.base, symbol: mood.symbol)
         }
         .animation(.snappy, value: flow)
     }

@@ -13,6 +13,9 @@ struct NowPlayingView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var showsQueue = LaunchScene.opensQueue
     @State private var showsBack = LaunchScene.opensSleeve
+    /// Motif Radio's tuning, from Up Next or the song's menu. Presented from here, outside the
+    /// stage's dark look, so the sheet reads as Settings does.
+    @State private var showsTuner = LaunchScene.opensRadioTunerFromQueue
     /// Turns of the sleeve, for the haptic: only the person turns it.
     @State private var turns = 0
     @State private var tint: Color?
@@ -33,8 +36,10 @@ struct NowPlayingView: View {
                     // Music stops growing its player here too: past it, the song's own name
                     // no longer fits beside the cover and the controls.
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .environment(\.openRadioTuner, OpenRadioTunerAction { showsTuner = true })
             }
         }
+        .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
         .coverTint(of: player.current?.cover, into: $tint)
         .onChange(of: player.hasQueue) { _, hasQueue in
             if !hasQueue { dismiss() }

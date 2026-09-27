@@ -122,6 +122,16 @@ final class Downloads {
     /// Starts downloading songs from their servers, the ones not already here, at the Download
     /// Quality set now: the original file, or a smaller copy the server makes as it sends it.
     func download(_ tracks: [LocalTrack]) {
+        onAsked?(tracks)
+        start(tracks)
+    }
+
+    /// Called with the songs each ``download(_:)`` asks for, before they start: Your Music
+    /// hears which ones are wanted to keep, as against the ones Motif Radio gets ready.
+    @ObservationIgnored var onAsked: (([LocalTrack]) -> Void)?
+
+    /// Downloads songs, as asked already: again after a change of setting, or a retry.
+    private func start(_ tracks: [LocalTrack]) {
         let allowsCellular = Self.allowsCellular
         let bitRate = StreamQuality.download.maxBitRate
         for track in tracks {
@@ -156,7 +166,7 @@ final class Downloads {
         let notStarted = pending.filter { progress[$0.key] == 0 }
         guard !notStarted.isEmpty else { return }
         cancel(Set(notStarted.keys))
-        download(notStarted.values.map(\.track))
+        start(notStarted.values.map(\.track))
     }
 
     /// Stops a download under way.
@@ -197,7 +207,7 @@ final class Downloads {
     func retryFailed() {
         let tracks = failures.keys.compactMap { id in pending[id]?.track ?? catalogTrack(id) }
         failures = [:]
-        download(tracks)
+        start(tracks)
     }
 
     // MARK: - From the session

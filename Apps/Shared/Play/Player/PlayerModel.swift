@@ -69,9 +69,19 @@ final class PlayerModel {
         self.isDemo = isDemo
         self.signalsStore = signalsStore
         self.signals = signalsStore.load()
-        engine.onChange = { [weak self] in self?.engineChanged() }
-        (engine as? LocalPlayerEngine)?.onNotice = { [weak self] in self?.confirm($0) }
+        listen(to: engine)
         engineChanged()
+    }
+
+    /// Follows an engine's changes, and takes its remote controls' Next and Previous, so the
+    /// car and the lock screen skip as the app's own buttons do.
+    private func listen(to engine: any PlayerEngine) {
+        engine.onChange = { [weak self] in self?.engineChanged() }
+        guard let local = engine as? LocalPlayerEngine else { return }
+        local.onNotice = { [weak self] in self?.confirm($0) }
+        local.onRemoteNext = { [weak self] in self?.skipToNext() }
+        local.onRemotePrevious = { [weak self] in self?.skipToPrevious() }
+        local.onAutoSkip = { [weak self] in self?.isAutoSkipping = true }
     }
 
     var hasQueue: Bool { current != nil }
@@ -120,8 +130,7 @@ final class PlayerModel {
         self.engine.onChange = nil
         self.engine = engine
         engine.setLevel(level)
-        engine.onChange = { [weak self] in self?.engineChanged() }
-        (engine as? LocalPlayerEngine)?.onNotice = { [weak self] in self?.confirm($0) }
+        listen(to: engine)
         // A request still starting on the old player is no longer the latest, and the song
         // that was on isn't being skipped: the source changed under it.
         latestRequest += 1
@@ -131,6 +140,7 @@ final class PlayerModel {
         liveGetsReady = false
         livePick?.cancel()
         livePick = nil
+        cancelPickAgain()
         endAutoplay()
         context = nil
         intendsToPlay = nil
@@ -169,6 +179,7 @@ final class PlayerModel {
         // and adding to a queue as it starts cuts its start short.
         livePick?.cancel()
         livePick = nil
+        cancelPickAgain()
         // A new queue plays through before Autoplay follows on from it. A live mix has ended
         // it already, as it set its own mix up.
         if context.kind != .endless { endAutoplay() }
@@ -222,12 +233,25 @@ final class PlayerModel {
         }
         Task {
             do {
+                let before = upNext.count
                 try await engine.enqueue(request, next: next)
+                if !next { playBeforeLivePicks(added: upNext.count - before) }
                 confirm(next ? String(localized: "Playing Next") : String(localized: "Added to Queue"))
             } catch {
                 report(error)
             }
         }
+    }
+
+    /// On a live mix, songs added to the end play before the songs it has picked, as they do
+    /// before Autoplay's, and it carries on picking after them. Only with your own music,
+    /// whose player adds them at once: Apple Music's looks them up first, and a pick could
+    /// land in between.
+    private func playBeforeLivePicks(added: Int) {
+        guard isLive, !isAutoplaying, engine is LocalPlayerEngine, added > 0, let live, upNext.count >= added else { return }
+        let start = upNext.count - added
+        guard let firstPick = upNext.firstIndex(where: { live.hasPicked($0.songIdentity) }), firstPick < start else { return }
+        engine.moveUpNext(from: IndexSet(start..<upNext.count), to: firstPick)
     }
 
     /// Adds to the end of the queue quietly, for songs still loading behind a playlist.
@@ -242,6 +266,10 @@ final class PlayerModel {
         self.level = level
         engine.setLevel(level)
     }
+
+    /// Whether Motif plays the audio itself and can set its level: your own music, or the
+    /// pretend player. Apple Music's level is the system's.
+    var setsOwnLevel: Bool { !(engine is MusicKitPlayerEngine) }
 
     func togglePlayPause() {
         guard waitingSession == nil else {
@@ -461,9 +489,10 @@ final class PlayerModel {
         let was = favorites[song.id]
         favorites[song.id] = isFavorite
         // Loving the song on now tells a live mix or Autoplay to play more like it.
-        if isFavorite, picksLive, let current, current.song?.id == song.id {
+        if isFavorite, canAskForMoreLikeThis, let current, current.song?.id == song.id {
             live?.noteLoved(current.songIdentity)
             followSteering()
+            repickNext(unlessBy: current.artistName)
         }
         // With sample data there's no Apple Music to tell; the star still shows what happens.
         guard !isDemo else { return }
@@ -673,11 +702,41 @@ final class PlayerModel {
             }, startingAt: index)
         }
         let time = index == 0 ? session.time : 0
-        let context = session.context ?? .songs(String(localized: "Where You Left Off"))
+        var context = session.context ?? .songs(String(localized: "Where You Left Off"))
+        let first = MixSong(tracks[index])
         Task {
+            if context.kind == .endless {
+                // Picked up live, so it carries on picking as it did before Motif closed.
+                guard !(await resumeLive(context, startingWith: first)) else {
+                    seekIfStill(on: first.songIdentity, to: time)
+                    return
+                }
+                // Can't be made now: the songs it had queued play, as a mix.
+                context = PlayContext(kind: .mix, title: context.title)
+            }
             await start(request, from: context)
-            if time > 0, waitingSession == nil, current != nil { seek(to: time) }
+            seekIfStill(on: first.songIdentity, to: time)
         }
+    }
+
+    /// Back to where the song was left, if it's the one that started: one that can't play now
+    /// is passed over, and the song after it starts from the top.
+    private func seekIfStill(on songIdentity: String, to time: TimeInterval) {
+        guard time > 0, waitingSession == nil, current?.songIdentity == songIdentity else { return }
+        seek(to: time)
+    }
+
+    /// Starts Motif Radio or a mood again from the song it was on, for one left paused when
+    /// Motif last closed. False when it can't be made now: Motif Radio turned off, say.
+    private func resumeLive(_ context: PlayContext, startingWith first: MixSong) async -> Bool {
+        if context == .motifRadio {
+            guard PlayPreferences.isMotifRadioOn, let mix = await makeMotifRadio?(), !mix.isEmpty else { return false }
+            await startLive(mix, from: .motifRadio, startingWith: first)
+        } else {
+            guard let restartMood else { return false }
+            await restartMood(context.title, first)
+        }
+        return waitingSession == nil
     }
 
     @ObservationIgnored private var pendingSave: Task<Void, Never>?
@@ -772,6 +831,9 @@ final class PlayerModel {
     @ObservationIgnored private var livePickCount = 0
     /// Builds Motif Radio from the history, with its tuning. Set by the app, which has both.
     @ObservationIgnored var makeMotifRadio: (() async -> LiveMix)?
+    /// Starts a mood again by its name, from a song: for one left paused when Motif last
+    /// closed. Set by the app, which knows how each mood is made.
+    @ObservationIgnored var restartMood: ((_ title: String, _ first: MixSong) async -> Void)?
     /// Notices driving, for Motif Radio's Drive mode.
     let drive = DriveDetector()
     /// The moment the Motif Radio playing was made for: the hour it follows, and whether it
@@ -858,9 +920,11 @@ final class PlayerModel {
             guard MusicSource.current == .yourMusic, let radioDownloads else { return true }
             return radioDownloads.isReady(HistorySong(song))
         }
-        guard let first = picking.next(newFinds: true, where: ready)
-            ?? picking.next(newFinds: true, where: { _ in true })
-            ?? picking.next()
+        let engine = self.engine
+        let canPlay: (MixSong) -> Bool = { engine.canPlayNow($0) }
+        guard let first = picking.next(newFinds: true, where: { ready($0) && canPlay($0) })
+            ?? picking.next(newFinds: true, where: canPlay)
+            ?? picking.next(playable: canPlay)
         else { return false }
         await startLive(mix, from: .motifRadio, startingWith: first)
         return problem == nil && hasQueue
@@ -869,13 +933,17 @@ final class PlayerModel {
     /// Applies a new tuning to Motif Radio while it plays, keeping what it has already picked
     /// and learned. The song queued next stays; the one after follows the new tuning.
     func retuneMotifRadio() async {
-        guard isPlayingMotifRadio, let makeMotifRadio else { return }
+        // Not while another music source waits to take over: the new mix would be made from
+        // it, and the radio carries on from the one it started on until then.
+        guard isPlayingMotifRadio, nextEngine == nil, let makeMotifRadio else { return }
+        // The moment it's made for now, so following the moment doesn't make it again.
+        followedMoment = MotifRadioSource.moment(drive: drive)
         retunes += 1
         let retune = retunes
         var mix = await makeMotifRadio()
         guard !mix.isEmpty,
               // Only the latest tuning lands, and only on the radio still playing.
-              retune == retunes, isPlayingMotifRadio, let current = live
+              retune == retunes, isPlayingMotifRadio, nextEngine == nil, let current = live
         else { return }
         // What's been picked while the new mix was made, the song queued next included.
         mix.continueListen(from: current)
@@ -890,32 +958,50 @@ final class PlayerModel {
     /// as the one before starts, from what's been skipped and played through so far.
     /// - Parameter first: a song to start with, as when one is tapped on a mood's page.
     func startLive(_ mix: LiveMix, from context: PlayContext, startingWith first: MixSong? = nil) async {
+        // The source switched to takes over now, before the mix is set up for it: switching
+        // after would end the mix.
+        takeOverIfSwitched()
         var mix = mix
         var songs: [MixSong] = []
         if let first {
             mix.note(picked: first.songIdentity)
             songs.append(first)
         }
+        let engine = self.engine
         let getsReady = context == .motifRadio && MusicSource.current == .yourMusic && radioDownloads?.downloadsFirst == true
+        // Opens on one of your strongest songs for the moment, since the first song is the one
+        // most often skipped when it doesn't land: one that plays at once, where that matters.
+        if first == nil {
+            let opener = if getsReady, let radioDownloads {
+                mix.opener(where: { radioDownloads.isReady(HistorySong($0)) && engine.canPlayNow($0) })
+            } else {
+                mix.opener(where: { engine.canPlayNow($0) })
+            }
+            if let opener { songs.append(opener) }
+        }
         // Songs that play at once to start with, so the radio begins without a wait.
         if getsReady, let radioDownloads {
             while songs.count < 2, let next = mix.next(where: { radioDownloads.isReady(HistorySong($0)) }) { songs.append(next) }
         }
-        while songs.count < 2, let next = mix.next() { songs.append(next) }
+        while songs.count < 2, let next = mix.next(playable: { engine.canPlayNow($0) }) { songs.append(next) }
         guard !songs.isEmpty else {
             problem = .nothingToPlay
             return
         }
         livePick?.cancel()
         livePick = nil
+        cancelPickAgain()
         endAutoplay()
         live = mix
         steering = nil
+        moreLikeThis = []
         radioMoment = context == .motifRadio ? mix.moment : .anytime
+        followedMoment = nil
         liveGetsReady = getsReady
         waitingSince = [:]
         // Repeat has no place on a mix without an end, and its button isn't shown there.
         if repeatMode != .off { engine.setRepeat(.off) }
+        lastLivePick = songs.count > 1 ? songs.last?.songIdentity : nil
         await start(.history(songs.map(HistorySong.init)), from: PlayContext(kind: .endless, title: context.title))
         topUpLiveIfNeeded()
     }
@@ -941,26 +1027,59 @@ final class PlayerModel {
         else { return }
         livePickCount += 1
         let pickID = livePickCount
+        let engine = self.engine
         livePick = Task {
             defer { if livePickCount == pickID { livePick = nil } }
-            // A pick Apple Music can't play (gone, or explicit with those off) is passed over.
+            // Only songs that can play right now: your own music's server may be out of reach.
+            // One that still can't (gone, or explicit with those off) is passed over.
             for _ in 0..<5 {
-                guard !Task.isCancelled, picksLive, let song = self.live?.next() else { return }
+                guard !Task.isCancelled, picksLive, let song = self.live?.next(playable: { engine.canPlayNow($0) }) else { break }
                 if isAutoplaying { autoplayPicked.insert(song.songIdentity) }
                 do {
                     try await engine.enqueue(.history([HistorySong(song)]), next: false)
+                    lastLivePick = song.songIdentity
                     return
                 } catch {
                     continue
                 }
             }
+            guard !Task.isCancelled else { return }
+            pickAgainSoon()
         }
     }
+
+    /// Nothing could be queued: tried again in a little while, since the network or a server
+    /// may be back by then. A pick that lands after the song on has ended plays at once.
+    private func pickAgainSoon() {
+        guard pickAgain == nil else { return }
+        pickAgain = Task {
+            try? await Task.sleep(for: .seconds(15))
+            guard !Task.isCancelled else { return }
+            pickAgain = nil
+            topUpLiveIfNeeded()
+        }
+    }
+
+    private func cancelPickAgain() {
+        pickAgain?.cancel()
+        pickAgain = nil
+    }
+
+    /// A pick waiting to be tried again. See ``pickAgainSoon()``.
+    @ObservationIgnored private var pickAgain: Task<Void, Never>?
+    /// The moment Motif Radio last set out to follow, so a moment it couldn't be made for isn't
+    /// tried again on every change, only once the moment changes.
+    @ObservationIgnored private var followedMoment: RadioMoment?
 
     /// Makes Motif Radio again once the moment it was made for has passed: the hour turned, or
     /// a drive started or ended. The song queued next stays; the one after fits the new moment.
     private func followTheMoment() {
-        guard isPlayingMotifRadio, let live, live.moment != MotifRadioSource.moment(drive: drive) else { return }
+        guard isPlayingMotifRadio, nextEngine == nil, let live else { return }
+        let moment = MotifRadioSource.moment(drive: drive)
+        // Once for each moment: a retune under way isn't started again, nor one that found
+        // nothing to play for it.
+        guard live.moment != moment, followedMoment != moment else { return }
+        followedMoment = moment
         Task { await retuneMotifRadio() }
     }
 
@@ -971,6 +1090,8 @@ final class PlayerModel {
         guard livePick == nil, current != nil, live != nil else { return }
         livePickCount += 1
         let pickID = livePickCount
+        let engine = self.engine
+        let canPlay: (MixSong) -> Bool = { engine.canPlayNow($0) }
         livePick = Task {
             defer { if livePickCount == pickID { livePick = nil } }
             // Let go of a find that's waited too long: its server couldn't get it.
@@ -983,24 +1104,58 @@ final class PlayerModel {
                 waitingSince[track.songIdentity] = nil
                 engine.removeUpNext(at: IndexSet(integer: stale))
             }
-            // Next, a song that plays at once, unless what's next already does.
-            if upNext.first.map({ !radio.isReady(HistorySong($0)) }) ?? true {
+            // The radio's own songs in Up Next. Songs you've queued stay ahead of them.
+            let picks = upNext.filter { live?.hasPicked($0.songIdentity) == true }
+            var couldNotPick = false
+            // Next of its own, a song that plays at once, unless its next already does.
+            if picks.first.map({ !radio.isReady(HistorySong($0)) }) ?? true {
                 if let song = live?.next(where: { radio.isReady(HistorySong($0)) }) {
-                    try? await engine.enqueue(.history([HistorySong(song)]), next: true)
-                } else if upNext.isEmpty, let song = live?.next() {
+                    do {
+                        try await engine.enqueue(.history([HistorySong(song)]), next: false)
+                        lastLivePick = song.songIdentity
+                        playAhead(of: picks.first, song)
+                    } catch {
+                        couldNotPick = true
+                    }
+                } else if picks.isEmpty {
                     // Nothing on this iPhone left to pick: the next song streams.
-                    try? await engine.enqueue(.history([HistorySong(song)]), next: false)
+                    if let song = live?.next(playable: canPlay) {
+                        do {
+                            try await engine.enqueue(.history([HistorySong(song)]), next: false)
+                            lastLivePick = song.songIdentity
+                        } catch {
+                            couldNotPick = true
+                        }
+                    } else {
+                        couldNotPick = true
+                    }
                 }
             }
             guard !Task.isCancelled, liveGetsReady else { return }
-            // Behind it, a new find being got ready.
-            if !upNext.contains(where: { !radio.isReady(HistorySong($0)) }),
-               let find = live?.next(newFinds: true, where: { !radio.isReady(HistorySong($0)) }) {
+            // Behind it, a new find being got ready, one at a time.
+            if !upNext.contains(where: { waitingSince[$0.songIdentity] != nil }),
+               let find = live?.next(newFinds: true, where: { !radio.isReady(HistorySong($0)) && canPlay($0) }) {
                 radio.prepare(HistorySong(find))
                 waitingSince[find.songIdentity] = .now
-                try? await engine.enqueue(.history([HistorySong(find)]), next: false)
+                do {
+                    try await engine.enqueue(.history([HistorySong(find)]), next: false)
+                } catch {
+                    radio.decline(HistorySong(find))
+                    waitingSince[find.songIdentity] = nil
+                }
             }
+            if couldNotPick, !Task.isCancelled { pickAgainSoon() }
         }
+    }
+
+    /// Moves a song just added to the end of Up Next ahead of the radio's song still coming
+    /// down, so it plays first, and stays behind any you've queued.
+    private func playAhead(of waiting: PlayerTrack?, _ song: MixSong) {
+        guard let waiting,
+              let from = upNext.lastIndex(where: { $0.songIdentity == song.songIdentity }),
+              let to = upNext.firstIndex(where: { $0.id == waiting.id }), from > to
+        else { return }
+        engine.moveUpNext(from: IndexSet(integer: from), to: to)
     }
 
     /// A new find waiting in Up Next is ready: it plays next, rather than waiting behind the
@@ -1010,7 +1165,9 @@ final class PlayerModel {
               let position = upNext.firstIndex(where: { $0.songIdentity == identity })
         else { return }
         waitingSince[identity] = nil
-        if position > 0 { engine.moveUpNext(from: IndexSet(integer: position), to: 0) }
+        // Ahead of the radio's other songs, and behind any you've queued.
+        let first = live.flatMap { live in upNext.firstIndex { live.hasPicked($0.songIdentity) } } ?? 0
+        if position > first { engine.moveUpNext(from: IndexSet(integer: position), to: first) }
         // Another find to get ready behind it.
         topUpLiveIfNeeded()
     }
@@ -1037,10 +1194,61 @@ final class PlayerModel {
     private static let longestWait: TimeInterval = 20 * 60
 
     /// Tells the live mix how a song went, so the next picks follow.
-    private func noteLive(_ track: PlayerTrack, skipped: Bool) {
+    private func noteLive(_ track: PlayerTrack, _ listen: LiveMix.Listen) {
         guard picksLive else { return }
-        if skipped { live?.noteSkipped(track.songIdentity) } else { live?.noteFinished(track.songIdentity) }
+        live?.note(listen, of: track.songIdentity)
         followSteering()
+    }
+
+    /// Why a song the live mix or Autoplay picked came up, for Up Next to say. Nil for a song
+    /// you queued, or one with nothing that stands out.
+    func pickReason(for track: PlayerTrack) -> LiveMix.Reason? {
+        guard picksLive, let live, live.hasPicked(track.songIdentity) else { return nil }
+        // Autoplay counts the songs it follows on from as picked too; only its own say why.
+        if isAutoplaying, !isAutoplayPick(track) { return nil }
+        return live.reason(for: track.songIdentity)
+    }
+
+    /// The song the live mix last put in Up Next, so only its own pick, never one you queued,
+    /// makes way for another.
+    @ObservationIgnored private var lastLivePick: String?
+
+    /// The songs asked for more like this listen, so asking shows as done.
+    private(set) var moreLikeThis: Set<String> = []
+
+    /// Whether the song on can steer what's picked next: a song of a live mix like Motif Radio,
+    /// or one of Autoplay's own. Not a song of the queue Autoplay follows on from, which its
+    /// mix doesn't know.
+    var canAskForMoreLikeThis: Bool {
+        guard picksLive, let current, let live else { return false }
+        return live.knows(current.songIdentity)
+    }
+
+    /// The song on is one to hear more like: its artist and genre come up more for the rest of
+    /// the listen, as loving it would, without making it a favorite or adding it anywhere.
+    func playMoreLikeThis() {
+        guard canAskForMoreLikeThis, let current, !moreLikeThis.contains(current.songIdentity) else { return }
+        moreLikeThis.insert(current.songIdentity)
+        live?.noteLoved(current.songIdentity)
+        followSteering()
+        repickNext(unlessBy: current.artistName)
+        confirm(String(localized: "More Like This Coming Up"))
+    }
+
+    /// The live mix's song waiting next was picked before what was just asked for: it makes
+    /// way for one picked now, so the answer is heard next rather than a song later. Kept when
+    /// it's already by the artist asked for. Never a song you queued, nor a new find being got
+    /// ready, which is already on its way down.
+    private func repickNext(unlessBy artistName: String) {
+        guard context?.kind == .endless, livePick == nil, requestsStarting == 0,
+              let lastLivePick, waitingSince[lastLivePick] == nil,
+              let index = upNext.lastIndex(where: { $0.songIdentity == lastLivePick }),
+              upNext[index].artistName != artistName
+        else { return }
+        self.lastLivePick = nil
+        live?.release(lastLivePick)
+        // The engine says Up Next has changed, and the mix picks again from there.
+        engine.removeUpNext(at: IndexSet(integer: index))
     }
 
     /// Takes up what the live mix is doing about the songs so far, for Up Next to say. A turn
@@ -1104,6 +1312,7 @@ final class PlayerModel {
             for seed in seeds { mix.note(picked: seed.songIdentity) }
             live = mix
             steering = nil
+            moreLikeThis = []
             autoplayFollows = context.title
             isAutoplaying = true
             topUpLiveIfNeeded()
@@ -1120,9 +1329,11 @@ final class PlayerModel {
         autoplayPicked = []
         autoplayFollows = nil
         steering = nil
+        moreLikeThis = []
         live = nil
         livePick?.cancel()
         livePick = nil
+        cancelPickAgain()
     }
 
     // MARK: - Saving
@@ -1171,9 +1382,9 @@ final class PlayerModel {
         guard !wentBack, !autoSkipped, Date.now > replacingQueueUntil, context?.isStation != true,
               let lastSample, lastSample.trackID == track.id
         else { return }
-        let skipped = ListeningSignals.isSkip(playedFor: lastSample.time, duration: track.duration)
-        noteLive(track, skipped: skipped)
-        guard skipped else { return }
+        let listen = LiveMix.Listen(playedFor: lastSample.time, duration: track.duration)
+        noteLive(track, listen)
+        guard listen == .skipped else { return }
         signals.recordSkip(of: track.songIdentity)
         signalsStore.save(signals)
     }

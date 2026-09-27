@@ -440,6 +440,9 @@
     "Add an Artist" : {
 
     },
+    "Add Songs" : {
+
+    },
     "Add songs from Play, or put them in On My iPhone ▸ Motif ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers." : {
 
     },
@@ -474,6 +477,9 @@
 
     },
     "All Your Music" : {
+
+    },
+    "Amount" : {
 
     },
     "and %@ more" : {
@@ -522,6 +528,9 @@
 
     },
     "avg" : {
+
+    },
+    "Background" : {
 
     },
     "Behind %@" : {
@@ -627,6 +636,9 @@
     "Discovery" : {
 
     },
+    "Download Quality" : {
+
+    },
     "Downloaded" : {
 
     },
@@ -643,6 +655,9 @@
 
     },
     "Drag to change the order. Hidden sections keep their place for when you turn them back on." : {
+
+    },
+    "Driving" : {
 
     },
     "Early bird: %@%% of your listening happens before 9 AM." : {
@@ -685,6 +700,9 @@
 
     },
     "Find Your Mood" : {
+
+    },
+    "Finding More Songs" : {
 
     },
     "Finding songs you don't have yet. This can take a few seconds." : {
@@ -742,6 +760,9 @@
 
     },
     "In %@" : {
+
+    },
+    "iPhone" : {
 
     },
     "It all goes to your private iCloud database. Songs are kept as Apple Music catalog identifiers, never audio." : {
@@ -820,6 +841,9 @@
 
     },
     "Loading %@" : {
+
+    },
+    "Loading Genres" : {
 
     },
     "Look for New Songs" : {
@@ -960,6 +984,9 @@
     "Motif syncs the list of songs on your server each day, so Motif Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them." : {
 
     },
+    "Move the pointer to show controls" : {
+
+    },
     "Music Folder" : {
 
     },
@@ -986,6 +1013,16 @@
     },
     "New to You" : {
 
+    },
+    "Next: %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next: %1$@ · %2$@"
+          }
+        }
+      }
     },
     "Night owl: %@%% of your listening happens after 10 PM." : {
 
@@ -1144,6 +1181,9 @@
     "Pick a few artists you like, and %@ finds songs by them and artists like them, to play straight away and add to your music." : {
 
     },
+    "Pick a Few Songs" : {
+
+    },
     "Picked for You starts from these, then from the artists you play most." : {
 
     },
@@ -1171,6 +1211,9 @@
     "Play something in Apple Music. Motif keeps what you listen to, including radio, and turns it into charts and highlights." : {
 
     },
+    "Play something, and it shows here." : {
+
+    },
     "Played and Removed" : {
 
     },
@@ -1193,6 +1236,9 @@
 
     },
     "Playlists with the same name in Motif and Apple Music become one, and each gets the other’s songs. Songs added in Apple Music are found on your server and downloaded; songs added in Motif are added in Apple Music." : {
+
+    },
+    "Playlists you make or add show up here." : {
 
     },
     "Put both sources a click away." : {
@@ -1263,6 +1309,9 @@
 
     },
     "Search for an Artist" : {
+
+    },
+    "Search for songs you love, or pick from your playlists. Songs you play show up here too." : {
 
     },
     "Search History to look through the sample listening." : {
@@ -1337,9 +1386,6 @@
     "Songs you import or sync from a server show here." : {
 
     },
-    "Songs you play from your servers download here with Automatic Downloads, to play anywhere, even with no connection." : {
-
-    },
     "Songs you play in Apple Music will collect here." : {
 
     },
@@ -1356,6 +1402,9 @@
 
     },
     "Songs you put in the Music folder, or import from Listen Now’s Add Music menu, play with their tags and covers. FLAC, ALAC, MP3, AAC, WAV and AIFF all play." : {
+
+    },
+    "Songs you've never played, like the ones you do" : {
 
     },
     "Songs, Albums and Artists" : {
@@ -1394,6 +1443,9 @@
     "Storage" : {
 
     },
+    "Streaming" : {
+
+    },
     "Suggestions" : {
 
     },
@@ -1401,6 +1453,12 @@
 
     },
     "Tap a %@ to see its chart." : {
+
+    },
+    "Tap to show controls" : {
+
+    },
+    "That's as many as a station takes. Take one out to add another." : {
 
     },
     "The %@ after with listening" : {
@@ -1427,6 +1485,9 @@
     "The new song replaces the old one at once." : {
 
     },
+    "The station starts again from whatever you pick next." : {
+
+    },
     "The Today widget lists the songs Play Back will play next." : {
 
     },
@@ -1443,6 +1504,9 @@
 
     },
     "This can't be undone. Scrobbles already sent stay on Last.fm." : {
+
+    },
+    "This playlist has no songs that can play here." : {
 
     },
     "This playlist is empty." : {
@@ -1481,6 +1545,9 @@
     "Turn this on to collect what you hear on radio in a playlist in your library." : {
 
     },
+    "Two or three you love is plenty. The station plays them, and finds more like them." : {
+
+    },
     "Type at least two letters of their name." : {
 
     },
@@ -1488,6 +1555,9 @@
 
     },
     "Use %@. Long labels are shortened so they can’t push other apps off the menu bar." : {
+
+    },
+    "Visualizer" : {
 
     },
     "Waiting for you to allow it in System Settings ▸ General ▸ Login Items." : {
@@ -1631,6 +1701,12 @@
         }
       }
     },
+    "Your music comes up on the highway and down at the lights, following the car." : {
+
+    },
+    "Your own music moves it as it plays. Apple Music doesn't let Motif hear the song, so for it the visualizer keeps to the song's beat." : {
+
+    },
     "Your own station plays everything you love and new finds like it, picked as it plays." : {
 
     },
@@ -1647,6 +1723,9 @@
 
     },
     "Your Top Songs" : {
+
+    },
+    "Your Volume" : {
 
     }
   },

@@ -5,7 +5,7 @@ import MotifCore
 struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var path: [SettingsPage] = LaunchScene.settingsPageName.flatMap(SettingsPage.init(rawValue:)).map { [$0] } ?? []
+    @State private var path: [SettingsPage] = LaunchScene.settingsPageName.flatMap(SettingsPage.init(rawValue:)).map(\.path) ?? []
     /// Kept here, so an approval pending on Last.fm survives going back to the list.
     @State private var lastFM = LastFMConnection()
     @State private var cloud: CloudSyncSettings?
@@ -73,6 +73,7 @@ struct SettingsSheet: View {
         case .radio: RadioSettingsPage()
         case .appleMusic: AppleMusicSettingsPage()
         case .lastFM: LastFMSettingsPage(connection: lastFM)
+        case .louderAtSpeed: SpeedVolumePage()
         case .iCloud:
             if let cloud {
                 CloudSyncPage(sync: cloud)
@@ -84,6 +85,13 @@ struct SettingsSheet: View {
 /// A page of iPhone Settings. Also what `-MotifSettings <page>` opens on.
 enum SettingsPage: String, Hashable, CaseIterable {
     case play, history, radio, appleMusic, lastFM, iCloud
+    /// Inside Play.
+    case louderAtSpeed
+
+    /// The pages to push to reach this one.
+    var path: [SettingsPage] {
+        self == .louderAtSpeed ? [.play, self] : [self]
+    }
 }
 
 /// History's row, which says whether everything or only radio is kept.

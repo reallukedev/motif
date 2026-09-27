@@ -463,6 +463,41 @@ final class ServerDiscovery {
         Album(album, serverID: serverID)
     }
 
+    // MARK: - Handpicked
+
+    /// Songs your first server that answers calls like the picks, for Handpicked: straight
+    /// from the server for picks that live on it, by way of the song it matches for the rest.
+    /// A few picks at a time as the server's budget allows, and whatever's back within a few
+    /// seconds, so the station doesn't keep you waiting.
+    func similar(to picks: [LocalTrack]) async -> [LocalTrack] {
+        guard let server = music.servers.onlineServers.first, let client = music.servers.client(for: server.id) else { return [] }
+        let budget = budgets[server.id] ?? RequestBudget(capacity: 3, interval: 8)
+        budgets[server.id] = budget
+        let search = Task { @MainActor [music] () -> [LocalTrack] in
+            var found: [LocalTrack] = []
+            for pick in picks.prefix(4) {
+                guard !Task.isCancelled, (try? await budget.wait()) != nil else { break }
+                let id: String? = if case .server(let serverID, let songID) = pick.origin, serverID == server.id {
+                    songID
+                } else {
+                    await music.serverSongs(on: server.id, matching: "\(pick.title) \(pick.artist)")
+                        .flatMap { ServerSongMatcher.bestMatch(title: pick.title, artist: pick.artist, in: $0) }?.id
+                }
+                guard let id else { continue }
+                let like = (try? await music.servers.lookups.run { try await client.similarSongs(to: id, count: 20) }) ?? []
+                found += like.map { self.track(from: $0, serverID: server.id) }
+            }
+            return found
+        }
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(6))
+            search.cancel()
+        }
+        defer { timeout.cancel() }
+        var seen = Set<String>()
+        return await search.value.filter { seen.insert($0.identity).inserted }
+    }
+
     /// A server song as it is in the library, where it's been synced, with its download.
     private func track(from song: SubsonicSong, serverID: String) -> LocalTrack {
         music.index.track(id: LocalTrack.id(for: .server(serverID: serverID, songID: song.id))) ?? song.track(on: serverID)

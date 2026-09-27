@@ -14,6 +14,7 @@ struct YourMusicScreen: View {
     @Environment(Lidarr.self) private var lidarr
     @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
+    @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
     @State private var showsSettings = LaunchScene.opensPlaySettings
     @State private var importMode: ImportMode?
     @State private var addsServer = false
@@ -198,104 +199,129 @@ struct YourMusicScreen: View {
         )
     }
 
+    private var layout: PlayLayout { PlayLayout(stored: storedLayout) }
+
+    /// Motif Radio plays from your music, and from what your servers find for you.
+    private var hasRadio: Bool {
+        isRadioOn && (!music.index.isEmpty || !music.servers.onlineServers.isEmpty)
+    }
+
+    /// The crate leads, as on Apple Music's Play: Motif Radio, this hour's mix, the rest of
+    /// the day's, and songs past them either way.
+    private var crate: [ForYouCard] { crateCards(hasRadio: hasRadio) }
+
+    /// Whether the crate is on the page, with anything in it.
+    private var hasCrate: Bool { layout.isVisible(.forYou) && !crate.isEmpty }
+
+    /// Play's sections in the order chosen in Edit Play, the same layout as Apple Music's,
+    /// with your own music where Apple's would be: what's waiting to be heard where Apple has
+    /// new releases, your downloads where it has charts, your servers' picks where it has its
+    /// own. A server that can't be reached says so first, since it's why its shelves are gone.
     @ViewBuilder
     private var content: some View {
-        // A server that can't be reached says so first, since it's why its shelves are gone.
         ForEach(music.servers.servers.filter { ServerProblem(music.servers.status[$0.id]) != nil }) { server in
             ServerProblemCard(server: server, signIn: { signingIn = server })
                 .padding(.horizontal, PlayMetrics.margin)
         }
-        let servers = music.servers.onlineServers
-        // Motif Radio plays from your music, and from what your servers find for you.
-        let hasRadio = isRadioOn && (!music.index.isEmpty || !servers.isEmpty)
-        let suggests = suggestionMode != .off
-        let crate = crateCards(hasRadio: hasRadio)
-        // The crate leads, as on Apple Music's Play: Motif Radio, this hour's mix, the rest of
-        // the day's. With fewer than two records there's nothing to flip through.
-        let hasCrate = crate.count > 1
-        if hasCrate {
-            Crate(cards: crate, leadID: crate.contains { $0.id == "station" } ? "station" : crate.first { if case .mix = $0 { true } else { false } }?.id)
+        ForEach(layout.visible.filter { $0.isOffered(for: .yourMusic) }) { section in
+            self.section(section)
+                .id(section.rawValue)
         }
-        let radioInSuggestions = hasRadio && !hasCrate
-        if player.isDemo, suggests {
-            // Sample data has no server: its suggestions stand in, from the sample catalog.
-            SuggestedSongsSection(includesRadio: radioInSuggestions)
-        } else if suggests, !servers.isEmpty {
-            // Songs by artists new to you your server found.
-            ForEach(servers) { server in
-                ServerForYouSection(server: server, shelf: .suggested, includesRadio: radioInSuggestions)
-            }
-        } else if radioInSuggestions {
-            MotifRadioRow()
-                .padding(.horizontal, PlayMetrics.margin)
-        }
-
-        if suggests {
-            ForEach(servers) { server in
-                ServerForYouSection(server: server, shelf: .picks)
-            }
-        }
-
-        // As Apple Music's Play has them: what you played lately, and who you play most.
-        if !shelves.recentlyPlayed.isEmpty {
-            Shelf(title: String(localized: "Recently Played"), items: shelves.recentlyPlayed) { album in
-                LocalAlbumTile(album: album)
-            }
-        }
-        if !shelves.artists.isEmpty {
-            Shelf(title: String(localized: "Your Artists"), items: shelves.artists.map(YourArtist.init)) { item in
-                YourArtistTile(artist: item.artist, plays: item.plays)
-            }
-        }
-
-        if !shelves.downloaded.isEmpty {
-            Shelf(title: String(localized: "From Your Downloads"), items: shelves.downloaded) {
-                HStack(spacing: 16) {
-                    ShuffleDownloadsButton()
-                        .labelStyle(.iconOnly)
-                    NavigationLink(String(localized: "Manage"), value: PlayRoute.yourMusic(.downloads))
-                }
-            } tile: { track in
-                LocalTrackTile(track: track, queue: shelves.downloaded, context: .songs(String(localized: "From Your Downloads")))
-            }
-        }
-
-        // The mixes the crate doesn't already hold.
-        let shelfMixes = shelves.mixes.filter { mix in !(hasCrate && crate.contains { $0.id == mix.id }) }
-        if !shelfMixes.isEmpty {
-            Shelf(title: String(localized: "Made from Your Listening"), items: shelfMixes) { mix in
-                MixTile(mix: mix)
-            }
-        }
-
-        #if os(macOS)
-        MoodGrid()
-        #else
-        MoodShelf()
-        #endif
-
-        if !shelves.unplayed.isEmpty {
-            Shelf(title: String(localized: "Waiting to Be Heard"), items: shelves.unplayed) { track in
-                LocalTrackTile(track: track, queue: shelves.unplayed, context: .songs(String(localized: "Waiting to Be Heard")))
-            }
-        }
-
-        ForEach(servers) { server in
-            ServerShelves(server: server)
-        }
-
-        #if os(iOS)
-        // The Mac's library is in its sidebar.
-        LibraryList()
-            .padding(.horizontal, PlayMetrics.margin)
-        #endif
-
         // One endless list at the bottom: what you have and haven't played, and more your
-        // servers find for you.
-        if player.isDemo, suggests {
-            KeepExploringSection()
-        } else if !servers.isEmpty {
+        // servers find for you, as Apple Music's Play ends with Keep Exploring.
+        if player.isDemo, suggestionMode != .off {
+            KeepExploringSection(followsShelf: layout.isVisible(.suggestedSongs))
+        } else if !music.servers.onlineServers.isEmpty {
             ServerExploring()
+        }
+    }
+
+    @ViewBuilder
+    private func section(_ section: PlaySection) -> some View {
+        let servers = music.servers.onlineServers
+        let suggests = suggestionMode != .off
+        switch section {
+        case .forYou:
+            if hasCrate {
+                ForYouCrate(cards: crate, leadID: crate.contains { $0.id == "station" } ? "station" : crate.first { if case .mix = $0 { true } else { false } }?.id)
+            }
+        case .suggestedSongs:
+            // Motif Radio leads the crate; with the crate hidden or empty, it leads these.
+            let radioHere = hasRadio && !hasCrate
+            if player.isDemo, suggests {
+                // Sample data has no server: its suggestions stand in, from the sample catalog.
+                SuggestedSongsSection(includesRadio: radioHere)
+            } else if suggests, !servers.isEmpty {
+                // Songs by artists new to you your server found.
+                ForEach(servers) { server in
+                    ServerForYouSection(server: server, shelf: .suggested, includesRadio: radioHere)
+                }
+            } else if radioHere {
+                MotifRadioRow()
+                    .padding(.horizontal, PlayMetrics.margin)
+            }
+        case .recentlyPlayed:
+            if !shelves.recentlyPlayed.isEmpty {
+                Shelf(title: String(localized: "Recently Played"), items: shelves.recentlyPlayed) { album in
+                    LocalAlbumTile(album: album)
+                }
+            }
+        case .yourArtists:
+            if !shelves.artists.isEmpty {
+                Shelf(title: String(localized: "Your Artists"), items: shelves.artists.map(YourArtist.init)) { item in
+                    YourArtistTile(artist: item.artist, plays: item.plays)
+                }
+            }
+        case .mixes:
+            // The mixes the crate doesn't already hold.
+            let shelfMixes = shelves.mixes.filter { mix in !(hasCrate && crate.contains { $0.id == mix.id }) }
+            if !shelfMixes.isEmpty {
+                Shelf(title: String(localized: "Made from Your Listening"), items: shelfMixes) { mix in
+                    MixTile(mix: mix)
+                }
+            }
+        case .moods:
+            MoodShelf()
+        case .genres:
+            GenreShelf()
+        case .newReleases:
+            if !shelves.unplayed.isEmpty {
+                Shelf(title: String(localized: "Waiting to Be Heard"), items: shelves.unplayed) { track in
+                    LocalTrackTile(track: track, queue: shelves.unplayed, context: .songs(String(localized: "Waiting to Be Heard")))
+                }
+            }
+        case .charts:
+            if !shelves.downloaded.isEmpty {
+                Shelf(title: String(localized: "From Your Downloads"), items: shelves.downloaded) {
+                    HStack(spacing: 16) {
+                        ShuffleDownloadsButton()
+                            .labelStyle(.iconOnly)
+                        NavigationLink(String(localized: "Manage"), value: PlayRoute.yourMusic(.downloads))
+                    }
+                } tile: { track in
+                    LocalTrackTile(track: track, queue: shelves.downloaded, context: .songs(String(localized: "From Your Downloads")))
+                }
+            }
+        case .library:
+            #if os(iOS)
+            // The Mac's library is in its sidebar.
+            LibraryList()
+                .padding(.horizontal, PlayMetrics.margin)
+            #endif
+        case .appleMusic:
+            // What your servers pick for you, and their own shelves, where Apple Music's picks
+            // would be.
+            if suggests {
+                ForEach(servers) { server in
+                    ServerForYouSection(server: server, shelf: .picks)
+                }
+            }
+            ForEach(servers) { server in
+                ServerShelves(server: server)
+            }
+        case .suggestedArtists, .radio:
+            // Apple Music's own: your music has neither.
+            EmptyView()
         }
     }
 }

@@ -7,13 +7,13 @@ import CoreMotion
 import UIKit
 #endif
 
-/// Notices when you're driving, for Motif Radio's Drive mode: from how iPhone moves (Motion &
-/// Fitness), or CarPlay.
+/// Notices when you're driving, for Motif Radio's Drive mode and Louder at Speed: from how
+/// iPhone moves (Motion & Fitness), or CarPlay.
 ///
-/// Nothing is asked until Motif Radio starts with Notice When You're Driving on. Once Motion &
-/// Fitness is allowed it listens whenever Motif runs, and remembers each drive on this iPhone,
-/// so the radio knows the songs you play on the road. The Mac never drives, and there it stays
-/// off.
+/// Nothing is asked until Motif Radio starts with Notice When You're Driving on, or Louder at
+/// Speed is turned on. Once Motion & Fitness is allowed it listens whenever Motif runs, and
+/// remembers each drive on this iPhone, so the radio knows the songs you play on the road. The
+/// Mac never drives, and there it stays off.
 @MainActor
 @Observable
 final class DriveDetector {
@@ -39,7 +39,10 @@ final class DriveDetector {
     #if os(iOS)
     @ObservationIgnored private let motion = CMMotionActivityManager()
     @ObservationIgnored private var sense = DriveSense()
-    @ObservationIgnored private var isListening = false
+    /// Listening for CarPlay, which needs no permission.
+    @ObservationIgnored private var isListeningForCarPlay = false
+    /// Sensing motion, once Motion & Fitness is asked for or allowed.
+    @ObservationIgnored private var isSensingMotion = false
     @ObservationIgnored private var hasLookedBack = false
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
     /// Ends a drive once the car has been still long enough: Core Motion says nothing more
@@ -64,13 +67,13 @@ final class DriveDetector {
     }
 
     /// Starts listening, asking for Motion & Fitness the first time: for Motif Radio starting
-    /// with the setting on.
+    /// with the setting on, or Louder at Speed turned on.
     func start() {
         #if os(iOS)
-        guard PlayPreferences.radioNoticesDriving, !isListening else { return }
-        isListening = true
+        guard PlayPreferences.noticesDriving else { return }
         listenForCarPlay()
-        guard CMMotionActivityManager.isActivityAvailable(), access != .denied else { return }
+        guard !isSensingMotion, CMMotionActivityManager.isActivityAvailable(), access != .denied else { return }
+        isSensingMotion = true
         motion.startActivityUpdates(to: .main) { [weak self] activity in
             guard let activity else { return }
             let reading = DriveSense.Reading(activity)
@@ -80,19 +83,22 @@ final class DriveDetector {
         #endif
     }
 
-    /// At launch: listens only when Motion & Fitness is already allowed, so nothing is asked.
+    /// At launch: senses motion only when Motion & Fitness is already allowed, so nothing is
+    /// asked. CarPlay needs no asking, so it counts from the start.
     func resumeIfAllowed() {
         #if os(iOS)
-        guard access == .allowed else { return }
-        start()
+        guard PlayPreferences.noticesDriving else { return }
+        if access == .allowed { start() } else { listenForCarPlay() }
         #endif
     }
 
-    /// For the setting turned off: stops listening, and any drive under way ends here.
-    func stop() {
+    /// For a setting turned off: stops listening once nothing needs it, and any drive under
+    /// way ends here.
+    func stopIfUnneeded() {
         #if os(iOS)
-        guard isListening else { return }
-        isListening = false
+        guard isListeningForCarPlay || isSensingMotion, !PlayPreferences.noticesDriving else { return }
+        isListeningForCarPlay = false
+        isSensingMotion = false
         motion.stopActivityUpdates()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
@@ -133,6 +139,8 @@ final class DriveDetector {
     }
 
     private func listenForCarPlay() {
+        guard !isListeningForCarPlay else { return }
+        isListeningForCarPlay = true
         let center = NotificationCenter.default
         let changes: [Notification.Name] = [
             AVAudioSession.routeChangeNotification,
@@ -154,7 +162,11 @@ final class DriveDetector {
     private func becameActive() {
         let wasAllowed = access == .allowed
         access = Self.currentAccess
-        if access == .allowed, !wasAllowed { lookBack() }
+        if access == .allowed, !wasAllowed {
+            // Allowed in Settings while away: start sensing, as if it had been allowed here.
+            start()
+            lookBack()
+        }
         checkCarPlay()
     }
 

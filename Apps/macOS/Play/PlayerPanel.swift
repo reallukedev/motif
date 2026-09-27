@@ -65,6 +65,7 @@ struct UpNextList: View {
     @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
     @State private var selection: Set<String> = []
     @State private var isDropTarget = false
+    @State private var showsTuner = false
 
     var body: some View {
         List(selection: $selection) {
@@ -152,11 +153,20 @@ struct UpNextList: View {
                 .padding(.top, 8)
                 .padding(.bottom, 4)
             } footer: {
-                if player.isLive, !player.upNext.isEmpty {
-                    if let steering = player.steering {
-                        steeringNote(steering)
-                    } else {
-                        note("\(player.context?.title ?? "") picks each song as the one before starts, so what you skip and what you let play steer what comes next.")
+                VStack(alignment: .leading, spacing: 8) {
+                    if player.isLive, !player.upNext.isEmpty {
+                        if let steering = player.steering {
+                            steeringNote(steering)
+                        } else {
+                            note("\(player.context?.title ?? "") picks each song as the one before starts.")
+                        }
+                    }
+                    // Tuning opens from the station it changes.
+                    if player.isPlayingMotifRadio {
+                        Button("Tune Motif Radio\u{2026}") { showsTuner = true }
+                            .buttonStyle(.link)
+                            .font(.subheadline)
+                            .help("How adventurous it is, the genres it leans into, and old favorites")
                     }
                 }
             }
@@ -234,6 +244,7 @@ struct UpNextList: View {
             }
         }
         .animation(PlayMotion.hover, value: isDropTarget)
+        .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
     }
 
     private func playLast(_ drops: [SongDrag]) {
@@ -302,6 +313,7 @@ struct UpNextList: View {
 /// The song playing, at the top of Up Next, with your count.
 private struct NowRow: View {
     let track: PlayerTrack
+    @Environment(PlayerModel.self) private var player
 
     var body: some View {
         HStack(spacing: 10) {
@@ -315,6 +327,10 @@ private struct NowRow: View {
                     .lineLimit(1)
                 PlayCountLine(track: track, showsSince: false)
                     .font(.caption)
+                if let reason = player.pickReason(for: track) {
+                    PickReasonLabel(reason: reason)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 0)
             PlayingWaveform()
@@ -327,14 +343,21 @@ private struct NowRow: View {
 private struct UpNextRow: View {
     let track: PlayerTrack
     let isGettingReady: Bool
+    @Environment(PlayerModel.self) private var player
 
     var body: some View {
         HStack(spacing: 10) {
             CoverImage(cover: track.cover, size: 32)
-            TwoLines(
-                title: track.title,
-                subtitle: isGettingReady ? String(localized: "Downloading · \(track.artistName)") : track.artistName
-            )
+            VStack(alignment: .leading, spacing: 1) {
+                TwoLines(
+                    title: track.title,
+                    subtitle: isGettingReady ? String(localized: "Downloading · \(track.artistName)") : track.artistName
+                )
+                if let reason = player.pickReason(for: track) {
+                    PickReasonLabel(reason: reason)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             Spacer(minLength: 0)
             if let local = track.local {
                 DownloadStateIcon(track: local)

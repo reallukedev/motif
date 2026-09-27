@@ -146,6 +146,51 @@ struct RadioSteeringTests {
         #expect(retuned.next().map { genre(of: $0) } != "Country")
     }
 
+    @Test("retuning keeps how far skipped new finds have made them rarer, on top of the new tuning")
+    func retuneKeepsNewShare() {
+        let finds = (0..<10).map { LiveMix.Candidate(song: Self.song("New \($0)", artist: "Newcomer \($0)"), weight: 1, isNew: true) }
+        var mix = LiveMix(candidates: candidates + finds, newShare: 0.3, seed: 1)
+        mix.noteSkipped(finds[0].song.songIdentity)
+        #expect(mix.newShare < 0.3)
+
+        var same = LiveMix(candidates: candidates + finds, newShare: 0.3, seed: 2)
+        same.continueListen(from: mix)
+        #expect(abs(same.newShare - mix.newShare) < 0.0001)
+
+        var bolder = LiveMix(candidates: candidates + finds, newShare: 0.5, seed: 2)
+        bolder.continueListen(from: mix)
+        #expect(bolder.newShare > same.newShare)
+        #expect(bolder.newShare < 0.5)
+    }
+
+    @Test("a listen with nothing learned yet takes the new tuning's share as it is")
+    func retuneWithNothingLearned() {
+        let mix = LiveMix(candidates: candidates, newShare: 0.2, seed: 1)
+        var retuned = LiveMix(candidates: candidates, newShare: 0.45, seed: 2)
+        retuned.continueListen(from: mix)
+        #expect(retuned.newShare == 0.45)
+    }
+
+    @Test("picking only songs that can play goes round those again once they've all been picked")
+    func playableGoesRound() throws {
+        var mix = LiveMix(candidates: candidates, seed: 3)
+        let playable = Set(candidates.prefix(4).map(\.song.songIdentity))
+        var heard: [String] = []
+        for _ in 0..<12 {
+            let next = mix.next(playable: { playable.contains($0.songIdentity) })
+            let pick = try #require(next)
+            heard.append(pick.songIdentity)
+        }
+        #expect(Set(heard) == playable)
+        #expect(zip(heard, heard.dropFirst()).allSatisfy { $0 != $1 })
+    }
+
+    @Test("picking only songs that can play gives nothing when none can")
+    func nothingPlayable() {
+        var mix = LiveMix(candidates: candidates, seed: 3)
+        #expect(mix.next(playable: { _ in false }) == nil)
+    }
+
     @Test("genre spellings fold into one family", arguments: [
         ("Hip-Hop/Rap", "hip-hop"), ("Hip-Hop", "hip-hop"), ("R&B/Soul", "r&b"), ("Singer/Songwriter", "singer"),
     ])

@@ -11,10 +11,11 @@ enum QuickSwitch {
 
     static var isOn: Bool { UserDefaults.standard.bool(forKey: storageKey) }
 
-    /// Both are there to switch between: Apple Music allowed, and music of your own.
+    /// Both are there to switch between: Apple Music allowed, and music of your own. Sample
+    /// data has both.
     @MainActor
     static func isAvailable(_ music: YourMusic) -> Bool {
-        MusicAuthorization.currentStatus == .authorized && music.hasMusic
+        (MusicAuthorization.currentStatus == .authorized || music.isDemo) && music.hasMusic
     }
 }
 
@@ -36,13 +37,21 @@ private struct QuickSourceSwitch: ViewModifier {
         if isOn, QuickSwitch.isAvailable(music) {
             content
                 .navigationSubtitle(model.musicSource.name)
-                .toolbarTitleMenu {
-                    Picker("Music Source", selection: Binding(get: { model.musicSource }, set: { model.switchSource(to: $0) })) {
-                        ForEach(MusicSource.allCases) { source in
-                            Label(source.title, systemImage: source.symbol).tag(source)
-                        }
+                .toolbarTitleMenu { picker }
+                #if os(iOS)
+                // At the top of the page the title is large, and the system gives a large
+                // title no menu: the source under it opens the same one, so switching is a tap
+                // away however far up the page is, the search field showing or not.
+                .toolbar {
+                    ToolbarItem(placement: .largeSubtitle) {
+                        Menu { picker } label: { LargeSourceLabel(source: model.musicSource) }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityLabel("Music Source")
+                            .accessibilityValue(model.musicSource.name)
+                            .accessibilityHint("Switches between Apple Music and your music")
                     }
                 }
+                #endif
                 .safeAreaInset(edge: .bottom) {
                     if let suggestion {
                         SwitchSuggestion(suggestion: suggestion) { model.switchSource(to: suggestion.source) }
@@ -53,6 +62,14 @@ private struct QuickSourceSwitch: ViewModifier {
                 .animation(.snappy, value: suggestion?.source)
         } else {
             content
+        }
+    }
+
+    private var picker: some View {
+        Picker("Music Source", selection: Binding(get: { model.musicSource }, set: { model.switchSource(to: $0) })) {
+            ForEach(MusicSource.allCases) { source in
+                Label(source.title, systemImage: source.symbol).tag(source)
+            }
         }
     }
 
@@ -80,6 +97,29 @@ private struct QuickSourceSwitch: ViewModifier {
         }
     }
 }
+
+#if os(iOS)
+/// The source under Play's large title, as its subtitle is drawn, with the chevron that says
+/// it's a menu.
+private struct LargeSourceLabel: View {
+    let source: MusicSource
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(source.name)
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.bold))
+                .imageScale(.small)
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        // A finger's worth to tap, though the words are small.
+        .frame(minHeight: 28)
+        .contentShape(.rect)
+        .contentTransition(.opacity)
+    }
+}
+#endif
 
 /// A small word at the foot of Play, offering the other source.
 private struct SwitchSuggestion: View {

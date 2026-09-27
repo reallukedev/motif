@@ -11,9 +11,11 @@ enum MotifRadioSource {
     static func make(library: Library, discovery: Discovery, yourMusic: YourMusic, player: PlayerModel) -> () async -> LiveMix {
         followGenres(library: library, player: player)
         player.drive.onChange = { [weak player] in
+            // Only the radio that notices driving plays differently for the road.
+            guard PlayPreferences.radioNoticesDriving else { return }
             Task { await player?.retuneMotifRadio() }
         }
-        if PlayPreferences.radioNoticesDriving { player.drive.resumeIfAllowed() }
+        if PlayPreferences.noticesDriving { player.drive.resumeIfAllowed() }
 
         return { [weak library, weak discovery, weak yourMusic, weak player] in
             guard let library, let discovery, let yourMusic, let player else { return LiveMix(candidates: [], seed: 0) }
@@ -21,12 +23,14 @@ enum MotifRadioSource {
             if PlayPreferences.radioNoticesDriving { player.drive.start() }
             let (history, signals, isDemo, tuning) = (library.history, player.signals, player.isDemo, PlayPreferences.radioTuning)
             let (moment, drives) = (moment(drive: player.drive), player.drive.log)
-            // From your own music: what plays now, and as new finds, the songs you've never
-            // played and the ones your servers picked for you that you don't have yet.
+            // From your own music: every song, and as new finds, the songs you've never played
+            // and the ones your servers picked for you that you don't have yet. All of them,
+            // not only what plays now: the player picks from what it can reach as it goes, so a
+            // radio started offline has everything back once the network is.
             if MusicSource.current == .yourMusic {
                 // Only Music I Have keeps it to what's in your music.
-                let finds = SuggestionMode.current == .onlyYours ? [] : yourMusic.serverFinds.filter(yourMusic.isPlayable)
-                let tracks = yourMusic.playableTracks + finds
+                let finds = SuggestionMode.current == .onlyYours ? [] : yourMusic.serverFinds
+                let tracks = yourMusic.index.tracks + finds
                 return await OffMainActor.run {
                     LiveMix.motifRadio(
                         from: tracks, history: history, signals: signals, tuning: tuning,
@@ -35,9 +39,10 @@ enum MotifRadioSource {
                 }
             }
             let newFinds = discovery.newFinds.map(MixSong.init(catalog:))
+            let reasons = discovery.newFindReasons
             return await OffMainActor.run {
                 LiveMix.motifRadio(
-                    from: history, signals: signals, newFinds: newFinds, tuning: tuning,
+                    from: history, signals: signals, newFinds: newFinds, newFindReasons: reasons, tuning: tuning,
                     moment: moment, drives: drives, seed: .random(in: 0...UInt64.max)
                 )
                 .playable(isDemo: isDemo)

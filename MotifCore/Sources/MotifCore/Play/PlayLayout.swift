@@ -15,6 +15,8 @@ public enum PlaySection: String, CaseIterable, Sendable, Identifiable {
     case yourArtists
     case mixes
     case moods
+    /// Pop, Hip-Hop, Rock and the rest, each with a page of its own, the ones you play first.
+    case genres
     /// New albums and singles from the artists played most.
     case newReleases
     case radio

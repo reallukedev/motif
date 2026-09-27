@@ -46,15 +46,29 @@ public struct RadioTuning: Codable, Sendable, Equatable {
             factor *= genre.map { leansInto($0) } == true ? 4 : 0.2
         }
         if bringsBackOldFavorites, let lastHeard {
-            factor *= now.timeIntervalSince(lastHeard) > 90 * 24 * 60 * 60 ? 2.5 : 0.7
+            factor *= isBringingBack(lastHeard: lastHeard, now: now) ? 2.5 : 0.7
         }
         return factor
     }
 
+    /// Whether a song last heard then is an old favorite this tuning brings back.
+    func isBringingBack(lastHeard: Date, now: Date) -> Bool {
+        bringsBackOldFavorites && now.timeIntervalSince(lastHeard) > Self.oldFavoriteAge
+    }
+
+    /// How long unheard a song must be to count as an old favorite.
+    static let oldFavoriteAge: TimeInterval = 90 * 24 * 60 * 60
+
+    /// The genre picked that takes this one, as it was picked: "Hip-Hop" for "Hip-Hop/Rap".
+    /// Nil when it's not one leaned into.
+    func leaning(_ genre: String) -> String? {
+        let folded = StatsCalculator.folded(genre)
+        return genres.sorted().first { folded.contains(StatsCalculator.folded($0)) || StatsCalculator.folded($0).contains(folded) }
+    }
+
     /// Matched by part and without case, so "Hip-Hop" takes "Hip-Hop/Rap".
     func leansInto(_ genre: String) -> Bool {
-        let folded = StatsCalculator.folded(genre)
-        return genres.contains { folded.contains(StatsCalculator.folded($0)) || StatsCalculator.folded($0).contains(folded) }
+        leaning(genre) != nil
     }
 
     /// The genres to offer: the ones you play most, most played first.

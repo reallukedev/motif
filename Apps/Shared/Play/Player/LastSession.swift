@@ -22,7 +22,9 @@ struct LastSession: Codable {
         case "album": .album
         case "playlist": .playlist
         case "artist": .artist
-        case "mix", "endless": .mix
+        case "mix": .mix
+        // Motif Radio or a mood, which picks up live again when it's played.
+        case "endless": .endless
         default: .songs
         }
         return PlayContext(kind: kind, title: contextTitle)

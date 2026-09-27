@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The sound, drawn: bars that rise with each band of it, a wave, or an orb that breathes
 /// around the cover. It hears your own music; for Apple Music, which Motif can't hear, it
-/// keeps time by the song's feel, as the Pulse background does.
+/// keeps time by the song's feel, as the Halo background does.
 struct StageVisualizerView: View {
     let style: StageVisualizer
     /// The cover's colours, deep to light.

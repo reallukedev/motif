@@ -172,6 +172,10 @@ final class AppModel {
         player.makeMotifRadio = MotifRadioSource.make(library: library, discovery: discovery, yourMusic: yourMusic, player: player)
         player.radioDownloads = yourMusic
         player.makeAutoplay = AutoplaySource.make(library: library, yourMusic: yourMusic, player: player)
+        player.restartMood = { [weak self] title, first in
+            guard let self, let mood = Mood.allCases.first(where: { $0.title == title }) else { return }
+            await MoodPlayback.start(mood, model: self, startingWith: first)
+        }
         followLibraryAndMixes()
         nearby.onCommand = { [weak player] command in
             switch command {

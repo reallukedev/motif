@@ -13,6 +13,10 @@ enum PlayRoute: Hashable {
     case mood(Mood)
     /// Finding a playlist for a party: Party's own page, rather than the mood's.
     case party
+    /// Handpicked: a station made from songs you choose.
+    case handpicked
+    /// A genre's page: its station, its charts, and what you play of it.
+    case genre(MusicGenre)
     /// Songs you've never played, through one lens or another.
     case songFinder(SongLens)
     /// Artists you've never played, like the ones you do.
@@ -107,6 +111,8 @@ private struct PlayDestination: View {
                 MoodView(mood: mood)
             }
         case .party: PartyView()
+        case .handpicked: HandpickedView()
+        case .genre(let genre): GenreView(genre: genre)
         case .songFinder(let lens): SongFinder(lens: lens)
         case .artistFinder: ArtistFinder()
         case .newReleases: NewReleasesPage()

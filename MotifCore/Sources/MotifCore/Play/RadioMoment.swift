@@ -129,17 +129,34 @@ struct RadioMomentFit {
         return byHour * (isWeekend == moment.isWeekend ? 1 : 0.4)
     }
 
-    /// For a song of yours.
+    /// For a song of yours. A song skipped lately comes up less at any time, and less still
+    /// on the road, where a skip takes a hand off the wheel.
     func factor(for song: MixBuilder.Aggregate, genre: String?, recentSkips: Int) -> Double {
         var factor = habit(song) * energy(genre)
+        if recentSkips > 0 { factor *= 0.6 }
         if moment.isDriving {
-            let drivePlays = song.dates.count { drives.contains($0) }
-            factor *= 1 + 0.8 * Double(min(3, drivePlays))
+            factor *= 1 + 0.8 * Double(min(3, drivePlays(song)))
             factor *= roadGenre(genre)
             if song.dates.count >= 3 { factor *= 1.3 }
-            if recentSkips > 0 { factor *= 0.4 }
+            if recentSkips > 0 { factor *= 0.65 }
         }
         return factor
+    }
+
+    /// What the moment makes stand out about a song: that you've played it on drives, while
+    /// driving, or that you play it near this hour far more than your listening overall does.
+    func reason(for song: MixBuilder.Aggregate) -> LiveMix.Reason? {
+        if moment.isDriving, drivePlays(song) > 0 { return .onTheRoad }
+        if moment.hour != nil, song.hours.count >= 3, habit(song) >= Self.aroundNowHabit { return .aroundNow }
+        return nil
+    }
+
+    /// How much likelier the hour makes a song before it's said to be one for around now: well
+    /// over half again as likely, from plays enough to go by.
+    static let aroundNowHabit = 1.6
+
+    private func drivePlays(_ song: MixBuilder.Aggregate) -> Int {
+        song.dates.count { drives.contains($0) }
     }
 
     /// For a new find, which has no history to go by: its genre only.

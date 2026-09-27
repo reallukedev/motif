@@ -11,8 +11,9 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
     case artwork
     /// The cover's colours, flowing into one another while it plays and resting when paused.
     case living
-    /// The cover's colours beating in time with the song's feel, swelling on every beat.
-    case pulse
+    /// Light from behind the cover in its colours, moving with the music. Stored as "pulse",
+    /// the background it took the place of, so anyone who chose that keeps one that moves.
+    case halo = "pulse"
 
     var id: String { rawValue }
 
@@ -23,7 +24,7 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
         case .colour: "Cover Colour"
         case .artwork: "Artwork"
         case .living: "Living Colour"
-        case .pulse: "Pulse"
+        case .halo: "Halo"
         }
     }
 
@@ -32,7 +33,7 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
         case .colour: "The player takes the colour of the cover, as Music's does."
         case .artwork: "The cover fills the player, softly blurred, and drifts while the music plays."
         case .living: "The cover's colours flow into one another while the music plays, and rest when it's paused."
-        case .pulse: "The cover's colours beat with the music: quick and bright for lively songs, slow and deep for calm ones, with a bloom at each new song. Motif can't hear the music, so it keeps time by the song's genre."
+        case .halo: "Light spills from behind the cover in its colours and moves with the music: every beat and note of your own music, and the feel of each Apple Music song, which Motif can't hear."
         }
     }
 }
@@ -90,12 +91,8 @@ struct NowPlayingBackdrop: View {
             ArtworkBackdrop(cover: cover, tint: tint, isMoving: isPlaying && !reduceMotion)
         case .living:
             LivingBackdrop(cover: cover, tint: tint, isMoving: isPlaying && !reduceMotion)
-        case .pulse:
-            if reduceMotion {
-                LivingBackdrop(cover: cover, tint: tint, isMoving: false)
-            } else {
-                PulseBackdrop(cover: cover, tint: tint, isPlaying: isPlaying)
-            }
+        case .halo:
+            HaloBackdrop(cover: cover, tint: tint, isPlaying: isPlaying)
         }
     }
 
@@ -228,47 +225,60 @@ private struct LivingBackdrop: View {
         ]
     }
 }
+/// How lively a song is, 0 to 1, by its genres, for anything that keeps time by its feel.
+func songEnergy(_ track: PlayerTrack?) -> Double {
+    guard let track else { return 0.5 }
+    var genres = track.song?.genreNames ?? []
+    if let genre = track.local?.genre { genres.append(genre) }
+    return RadioMoment.energy(ofGenres: genres) ?? 0.5
+}
 
-/// The cover's colours as light, keeping time with the song.
+/// Halo: light spilling from behind the cover, in its colours, moving with the music. A
+/// corona of soft rays around where the cover sits, each the loudness of one part of the
+/// sound, low notes at the top, turning slowly through the cover's colours; a glow that
+/// swells with the bass; a bloom as each song arrives. The rays below the cover are held
+/// short, so the song's name and the controls stay easy to read.
 ///
-/// MusicKit plays Apple Music out of reach of the app, so nothing here hears the audio. The
-/// tempo comes from the song's genres (calm genres slow, lively ones quick), the beat from the
-/// song's own clock, so it holds still when paused, jumps with a seek and starts again with
-/// each song, which blooms in. Each beat swells the light; each bar sends a ring out from
-/// the cover, as a speaker's cone would.
+/// Your own music is heard, band by band. Apple Music plays where Motif can't hear it, so for
+/// it the rays keep time by the song's feel, as Stage's visualizer does. Paused, the light
+/// settles and the drawing stops. Under Reduce Motion it glows, still, in the cover's colours.
 ///
 /// Drawn at a third of the size and stretched: soft light looks the same, for a ninth of the
 /// memory and work.
-/// How lively a song is, 0 to 1, by its genres, for anything that keeps time by its feel.
-func songEnergy(_ track: PlayerTrack?) -> Double { PulseBackdrop.energy(of: track) }
-
-private struct PulseBackdrop: View {
+private struct HaloBackdrop: View {
     let cover: CoverArt?
     let tint: Color?
     let isPlaying: Bool
     @Environment(PlayerModel.self) private var player: PlayerModel?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var palette: [Color] = []
-    /// When it last started or stopped playing, so the beat fades in and out.
-    @State private var changedPlayingAt = Date.distantPast
-    @State private var isSettled = false
+    @State private var levels = SmoothedLevels()
     /// When this song arrived, for its bloom.
     @State private var arrivedAt = Date.now
-    /// The drift of the light, which keeps its place across pauses.
-    @State private var restingAt: Double = 0
-    @State private var startedAt: Date?
+    /// The slow turn of the colours, which keeps its place across pauses.
+    @State private var turnedBefore: Double = 0
+    @State private var turningSince: Date?
 
     private static let scale: CGFloat = 3
 
     var body: some View {
-        let energy = Self.energy(of: player?.current)
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: isSettled)) { context in
+        let energy = songEnergy(player?.current)
+        let settled = reduceMotion || (!isPlaying && levels.isResting && Date.now.timeIntervalSince(arrivedAt) > 2)
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: settled)) { context in
             let now = context.date
+            let bands = reduceMotion
+                ? [Float](repeating: 0.3, count: AudioLevelMeter.bandCount)
+                : levels.next(
+                    heard: AudioLevelMeter.shared.current(),
+                    time: now.timeIntervalSinceReferenceDate,
+                    energy: energy,
+                    isPlaying: isPlaying,
+                    calm: false
+                )
             let frame = Frame(
-                drift: restingAt + (startedAt.map { now.timeIntervalSince($0) } ?? 0),
-                beats: beats(at: now, energy: energy),
-                strength: strength(at: now) * (0.45 + 0.55 * energy),
-                bloom: max(0, 1 - now.timeIntervalSince(arrivedAt) / 1.6),
-                energy: energy
+                bands: bands,
+                turn: turnedBefore + (turningSince.map { now.timeIntervalSince($0) } ?? 0),
+                bloom: reduceMotion ? 0 : max(0, 1 - now.timeIntervalSince(arrivedAt) / 1.8)
             )
             GeometryReader { proxy in
                 let size = CGSize(width: proxy.size.width / Self.scale, height: proxy.size.height / Self.scale)
@@ -281,74 +291,47 @@ private struct PulseBackdrop: View {
             }
         }
         .overlay {
-            LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+            // Quiet at the foot, where the controls are.
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0), location: 0.45),
+                .init(color: .black.opacity(0.4), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
         }
         .task(id: cover) {
             arrivedAt = .now
-            isSettled = false
             guard let cover else { return }
             let found = await CoverTint.palette(for: cover)
             guard !Task.isCancelled, !found.isEmpty else { return }
             palette = found
         }
         .onChange(of: isPlaying, initial: true) { _, playing in
-            changedPlayingAt = .now
-            isSettled = false
             if playing {
-                startedAt = .now
-            } else if let startedAt {
-                restingAt += Date.now.timeIntervalSince(startedAt)
-                self.startedAt = nil
+                turningSince = .now
+            } else if let turningSince {
+                turnedBefore += Date.now.timeIntervalSince(turningSince)
+                self.turningSince = nil
             }
         }
-        // Once paused and faded, and the bloom done, it stops drawing.
-        .task(id: "\(isPlaying)|\(arrivedAt.timeIntervalSinceReferenceDate)") {
-            guard !isPlaying else { return }
-            try? await Task.sleep(for: .seconds(1.8))
-            guard !Task.isCancelled else { return }
-            isSettled = true
-        }
+        // Your own music is heard only while something's watching it.
+        .onAppear { AudioLevelMeter.shared.startListening() }
+        .onDisappear { AudioLevelMeter.shared.stopListening() }
     }
 
     private struct Frame {
-        let drift: Double
-        let beats: Double
-        let strength: Double
+        let bands: [Float]
+        /// Seconds of turning, for the colours' slow sweep.
+        let turn: Double
+        /// 1 as a song arrives, to 0.
         let bloom: Double
-        let energy: Double
-    }
-
-    /// How lively the song is, 0 to 1, by its genres; the middle when they don't say.
-    static func energy(of track: PlayerTrack?) -> Double {
-        guard let track else { return 0.5 }
-        var genres = track.song?.genreNames ?? []
-        if let genre = track.local?.genre { genres.append(genre) }
-        return RadioMoment.energy(ofGenres: genres) ?? 0.5
-    }
-
-    /// Beats since the song began, by its own clock: 70 a minute for the calmest, 128 for the
-    /// liveliest. Without a song, a clock of its own.
-    private func beats(at date: Date, energy: Double) -> Double {
-        let perMinute = 70 + 58 * energy
-        let time = player.map { $0.current == nil ? date.timeIntervalSinceReferenceDate : $0.playbackTime }
-            ?? date.timeIntervalSinceReferenceDate
-        return time * perMinute / 60
-    }
-
-    /// How hard the beat lands: rising over a moment as it plays, falling away when paused.
-    private func strength(at date: Date) -> Double {
-        let since = date.timeIntervalSince(changedPlayingAt)
-        return isPlaying ? min(1, since / 0.9) : max(0, 1 - since / 1.4)
     }
 
     private var colors: [Color] {
         let base = tint ?? CoverStage.fallback
-        return palette.count >= 4 ? palette : [base, base.mix(with: .white, by: 0.2), base.mix(with: .black, by: 0.25), base.mix(with: .white, by: 0.08)]
+        return palette.count >= 4 ? palette : [base, base.mix(with: .white, by: 0.25), base.mix(with: .black, by: 0.2), base.mix(with: .white, by: 0.1)]
     }
 
     private func draw(_ frame: Frame, in context: inout GraphicsContext, size: CGSize) {
         let colors = colors
-        let rect = CGRect(origin: .zero, size: size)
         let side = min(size.width, size.height)
         // Where the cover sits: high on the iPhone; on the Mac, the player's middle.
         #if os(iOS)
@@ -356,67 +339,73 @@ private struct PulseBackdrop: View {
         #else
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
         #endif
-        context.fill(Path(rect), with: .color(colors[0].mix(with: .black, by: 0.6)))
+        context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(colors[0].mix(with: .black, by: 0.62)))
 
-        // The beat: a sharp swell that dies away before the next, the first of each bar strongest.
-        let beatIndex = floor(frame.beats)
-        let phase = frame.beats - beatIndex
-        let accent = beatIndex.truncatingRemainder(dividingBy: 4) == 0 ? 1.0 : 0.6
-        let kick = exp(-phase * 5.5) * accent * frame.strength
-        let speed = 0.12 + 0.22 * frame.energy
+        let bands = frame.bands
+        let bass = Double(bands.prefix(4).reduce(0, +)) / 4
+        let loudness = Double(bands.reduce(0, +)) / Double(max(1, bands.count))
 
-        // Five lights on their own slow orbits, each swelling with the beat.
-        for index in 0..<5 {
-            let i = Double(index)
-            let angle = frame.drift * speed * (0.7 + 0.13 * i) + i * 1.26
-            let point = CGPoint(
-                x: size.width * (0.5 + 0.34 * cos(angle)),
-                y: size.height * (0.5 + 0.3 * sin(angle * 0.83 + i))
-            )
-            let swell = 1 + kick * (index.isMultiple(of: 2) ? 0.36 : 0.2)
-            let radius = side * (0.5 + 0.08 * sin(frame.drift * 0.4 + i)) * swell
-            let colour = colors[index % colors.count]
-            context.fill(
-                Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)),
-                with: .radialGradient(
-                    Gradient(colors: [colour.opacity(0.9), colour.opacity(0.35), colour.opacity(0)]),
-                    center: point, startRadius: 0, endRadius: radius
-                )
-            )
-        }
-
-        // Light thrown out from behind the cover on the beat.
-        context.blendMode = .plusLighter
-        let glow = side * (0.45 + 0.18 * kick)
+        // A wide, dim wash behind it all, breathing with the song as a whole.
+        let wash = side * (0.95 + 0.12 * loudness)
         context.fill(
-            Path(ellipseIn: CGRect(x: centre.x - glow, y: centre.y - glow, width: glow * 2, height: glow * 2)),
+            Path(ellipseIn: CGRect(x: centre.x - wash, y: centre.y - wash, width: wash * 2, height: wash * 2)),
             with: .radialGradient(
-                Gradient(colors: [colors[1].mix(with: .white, by: 0.15).opacity(0.7 * kick), colors[1].opacity(0)]),
-                center: centre, startRadius: 0, endRadius: glow
+                Gradient(colors: [colors[1].opacity(0.45), colors[2].opacity(0.18), .clear]),
+                center: centre, startRadius: 0, endRadius: wash
             )
         )
 
-        // A ring from each of the last two bars, spreading and fading.
-        let bar = floor(frame.beats / 4)
-        for back in 0..<2 {
-            let progress = (frame.beats / 4 - bar + Double(back)) / 2
-            guard progress < 1, frame.strength > 0 else { continue }
-            let radius = side * (0.2 + progress * 0.95)
-            let opacity = (1 - progress) * (1 - progress) * 0.5 * frame.strength
-            context.stroke(
-                Path(ellipseIn: CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2)),
-                with: .color(colors[3].mix(with: .white, by: 0.5).opacity(opacity)),
-                lineWidth: side * 0.012 * (1 + (1 - progress) * 2)
-            )
+        // The corona: each band twice, mirrored, so it's whole, the low notes at the top. The
+        // rays pointing down stay short, clear of the words below the cover. Wide and blurred
+        // into one another, so it reads as light, not as rays.
+        let spokes = bands + bands.reversed()
+        let edge = side * 0.4
+        let sweep = frame.turn * 0.04
+        context.drawLayer { layer in
+            layer.addFilter(.blur(radius: side * 0.02))
+            layer.blendMode = .plusLighter
+            for (index, level) in spokes.enumerated() {
+                let angle = Double(index) / Double(spokes.count) * 2 * .pi - .pi / 2
+                let downward = max(0, sin(angle))
+                let reach = 1 - 0.75 * downward
+                let length = edge * (0.22 + 0.85 * Double(level)) * reach
+                let direction = CGPoint(x: cos(angle), y: sin(angle))
+                let middle = CGPoint(x: centre.x + direction.x * (edge * 0.92 + length * 0.3), y: centre.y + direction.y * (edge * 0.92 + length * 0.3))
+                let width = edge * 0.5
+                // Through the cover's colours, turning slowly.
+                let hue = (Double(index) / Double(spokes.count) + sweep).truncatingRemainder(dividingBy: 1)
+                let colour = colors[1 + Int(hue * Double(colors.count - 1)) % (colors.count - 1)]
+                var ray = layer
+                ray.translateBy(x: middle.x, y: middle.y)
+                ray.rotate(by: .radians(angle))
+                ray.fill(
+                    Path(ellipseIn: CGRect(x: -length, y: -width / 2, width: length * 2, height: width)),
+                    with: .radialGradient(
+                        Gradient(colors: [colour.mix(with: .white, by: 0.1).opacity(0.14 + 0.34 * Double(level)), colour.opacity(0)]),
+                        center: .zero, startRadius: 0, endRadius: length
+                    )
+                )
+            }
         }
+
+        context.blendMode = .plusLighter
+        // Light from right behind the cover, swelling with the bass.
+        let glow = side * (0.46 + 0.16 * bass)
+        context.fill(
+            Path(ellipseIn: CGRect(x: centre.x - glow, y: centre.y - glow, width: glow * 2, height: glow * 2)),
+            with: .radialGradient(
+                Gradient(colors: [colors[3].mix(with: .white, by: 0.2).opacity(0.25 + 0.35 * bass), .clear]),
+                center: centre, startRadius: side * 0.2, endRadius: glow
+            )
+        )
 
         // A new song blooms in from the cover.
         if frame.bloom > 0 {
-            let radius = side * (0.3 + (1 - frame.bloom) * 1.1)
+            let radius = side * (0.35 + (1 - frame.bloom) * 1.1)
             context.fill(
                 Path(ellipseIn: CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2)),
                 with: .radialGradient(
-                    Gradient(colors: [colors[1].mix(with: .white, by: 0.3).opacity(0.5 * frame.bloom), .clear]),
+                    Gradient(colors: [colors[1].mix(with: .white, by: 0.3).opacity(0.45 * frame.bloom), .clear]),
                     center: centre, startRadius: 0, endRadius: radius
                 )
             )

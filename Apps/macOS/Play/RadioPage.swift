@@ -16,7 +16,7 @@ struct RadioPage: View {
                 } else {
                     radioOff
                 }
-                MoodGrid()
+                MoodShelf()
                 if !feed.liveStations.isEmpty {
                     Shelf(title: String(localized: "Live Radio"), items: feed.liveStations) { item in
                         FeedTile(item: item)

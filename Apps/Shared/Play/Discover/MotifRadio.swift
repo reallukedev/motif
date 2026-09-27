@@ -583,7 +583,7 @@ struct RadioTuner: View {
             get: { noticesDriving },
             set: { value in
                 withAnimation(.snappy) { noticesDriving = value }
-                if !value { player.drive.stop() }
+                if !value { player.drive.stopIfUnneeded() }
                 Task { await player.retuneMotifRadio() }
             }
         )

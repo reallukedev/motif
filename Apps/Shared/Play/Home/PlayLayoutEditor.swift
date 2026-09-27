@@ -10,6 +10,7 @@ extension PlaySection {
         case .recentlyPlayed: "Recently Played"
         case .yourArtists: "Your Artists"
         case .moods: "Find Your Mood"
+        case .genres: "Genres"
         case .newReleases: "New from Your Artists"
         case .charts: "Top Charts"
         case .mixes: "Made from Your Listening"
@@ -31,7 +32,8 @@ extension PlaySection {
         case .forYou: "This hour’s mix, Motif Radio and more, to flip through"
         case .recentlyPlayed: "Albums, playlists and stations"
         case .yourArtists: "The artists you play most lately"
-        case .moods: "Feel Good, Chill, Workout and more"
+        case .moods: "Handpicked, Feel Good, Chill and more"
+        case .genres: "Pop, Hip-Hop, Rock and more, yours first"
         case .newReleases: "New albums and singles, and what’s coming"
         case .charts: "Apple Music’s most played"
         case .mixes: "On Repeat, Deep Cuts, Radio Finds and more"
@@ -49,6 +51,7 @@ extension PlaySection {
         case .recentlyPlayed: "clock"
         case .yourArtists: "person.2"
         case .moods: "face.smiling"
+        case .genres: "guitars"
         case .newReleases: "calendar.badge.plus"
         case .charts: "chart.line.uptrend.xyaxis"
         case .mixes: "square.grid.2x2"
@@ -69,9 +72,60 @@ extension PlaySection {
     }
 }
 
+extension PlaySection {
+    /// What the section is called with this source on. Your own music's Play follows the same
+    /// layout as Apple Music's, with its own music where Apple's would be.
+    func title(for source: MusicSource) -> LocalizedStringKey {
+        guard source == .yourMusic else { return title }
+        switch self {
+        case .newReleases: return "Waiting to Be Heard"
+        case .charts: return "From Your Downloads"
+        case .appleMusic: return "Picked for You"
+        default: return title
+        }
+    }
+
+    func detail(in layout: PlayLayout, for source: MusicSource) -> LocalizedStringKey {
+        guard source == .yourMusic else { return detail(in: layout) }
+        switch self {
+        case .suggestedSongs:
+            return layout.isVisible(.forYou)
+                ? "Songs your server finds that you’ve never played"
+                : "Motif Radio, and songs your server finds"
+        case .recentlyPlayed: return "Albums of yours you’ve played lately"
+        case .genres: return "The genres in your music, the most played first"
+        case .newReleases: return "Songs of yours you’ve never played"
+        case .charts: return "Songs you can play without a connection"
+        case .library: return "Playlists, artists, albums, songs and downloads"
+        case .appleMusic: return "What your servers pick for you, and their shelves"
+        default: return detail(in: layout)
+        }
+    }
+
+    func symbol(for source: MusicSource) -> String {
+        guard source == .yourMusic else { return symbol }
+        switch self {
+        case .newReleases: return "hourglass"
+        case .charts: return "arrow.down.circle"
+        case .appleMusic: return "sparkles.rectangle.stack"
+        default: return symbol
+        }
+    }
+
+    /// Whether Play shows the section with this source on: your own music has no suggested
+    /// artists or live radio from Apple Music.
+    func isOffered(for source: MusicSource) -> Bool {
+        guard isOffered else { return false }
+        return source == .appleMusic || (self != .suggestedArtists && self != .radio)
+    }
+}
+
 extension PlayLayout {
     /// The sections this platform offers, in the chosen order.
     var offered: [PlaySection] { order.filter(\.isOffered) }
+
+    /// The sections offered with this source on, in the chosen order.
+    func offered(for source: MusicSource) -> [PlaySection] { order.filter { $0.isOffered(for: source) } }
 }
 
 /// Editing Play's sections, as a sheet: over the Play tab when launched with `-MotifEditPlay`,
@@ -136,6 +190,7 @@ struct PlayLayoutEditor: View {
 /// reorder, a switch to show or hide. In the sheet, and in Settings.
 struct PlayLayoutList: View {
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
+    @Environment(AppModel.self) private var model
 
     #if os(macOS)
     /// Every row is this tall, so the list's height comes from its rows rather than from
@@ -154,7 +209,7 @@ struct PlayLayoutList: View {
 
     var body: some View {
         let current = layout.wrappedValue
-        let sections = current.offered
+        let sections = current.offered(for: model.musicSource)
         List {
             Section {
                 ForEach(sections) { section in
@@ -196,19 +251,19 @@ struct PlayLayoutList: View {
         )
         #if os(macOS)
         return HStack(spacing: SettingsSpacing.row) {
-            Image(systemName: section.symbol)
+            Image(systemName: section.symbol(for: model.musicSource))
                 .foregroundStyle(.tint)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text(section.title)
-                Text(section.detail(in: current))
+                Text(section.title(for: model.musicSource))
+                Text(section.detail(in: current, for: model.musicSource))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle(section.title, isOn: isVisible)
+            Toggle(section.title(for: model.musicSource), isOn: isVisible)
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
@@ -221,13 +276,13 @@ struct PlayLayoutList: View {
         return Toggle(isOn: isVisible) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(section.title)
-                    Text(section.detail(in: current))
+                    Text(section.title(for: model.musicSource))
+                    Text(section.detail(in: current, for: model.musicSource))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             } icon: {
-                Image(systemName: section.symbol)
+                Image(systemName: section.symbol(for: model.musicSource))
                     .foregroundStyle(.tint)
             }
         }

@@ -35,6 +35,7 @@ struct YourMusicMoodView: View {
             .padding(.bottom, 24)
             .animation(.snappy, value: songs.count)
         }
+        .heroTitle(mood.title)
         .toolbarTitleDisplayMode(.inline)
         .task { await load() }
     }
@@ -70,6 +71,15 @@ struct YourMusicMoodView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 12) {
+                // What Play does, above it, clear of the fade below.
+                Text(hasFinds
+                    ? "Your songs that suit it and new ones like them, picked one at a time as it plays. What you skip steers what comes next."
+                    : "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
+                    .font(.footnote)
+                    .opacity(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+
                 Button {
                     play(startingWith: nil)
                 } label: {
@@ -81,44 +91,15 @@ struct YourMusicMoodView: View {
                 }
                 .buttonStyle(.pressable)
                 .disabled(!canPlay)
-
-                Text(hasFinds
-                    ? "Your songs that suit it and new ones like them, picked one at a time as it plays. What you skip steers what comes next."
-                    : "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
-                    .font(.footnote)
-                    .opacity(0.85)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
             }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, PlayMetrics.margin)
         .padding(.top, 12)
-        .padding(.bottom, 36)
+        .padding(.bottom, 24 + HeroField.fade)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            MoodField(mood: mood)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: mood.symbol)
-                        .font(.system(size: 220, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.1))
-                        .rotationEffect(.degrees(-12))
-                        .offset(x: 60, y: 40)
-                        .accessibilityHidden(true)
-                }
-                .clipped()
-                // Into the page at its foot, as Apple Music's mood pages do.
-                .mask {
-                    // A fade of fixed length at the foot, below the words, however tall the
-                    // field is.
-                    VStack(spacing: 0) {
-                        Color.black
-                        LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 44)
-                    }
-                }
-                // Up under the bar and into any pull past the top.
-                .padding(.top, -400)
+            HeroField(color: mood.base, symbol: mood.symbol)
         }
     }
 

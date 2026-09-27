@@ -8,6 +8,10 @@ struct QueueView: View {
     @Environment(PlayerModel.self) private var player
     @Environment(YourMusic.self) private var music
     @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
+    @AppStorage(PlayPreferences.radioTuningKey) private var storedTuning = ""
+    @Environment(\.openRadioTuner) private var openRadioTuner
+    /// The height of Up Next's rows as drawn, for fitting a live mix's short list to them.
+    @State private var listContentHeight: CGFloat?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -16,6 +20,11 @@ struct QueueView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(track.title).font(.headline).lineLimit(1)
                     Text(track.artistName).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                    if let reason = player.pickReason(for: track) {
+                        PickReasonLabel(reason: reason, lineLimit: 2)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(.top, 1)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -77,6 +86,9 @@ struct QueueView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, height in
+                    listContentHeight = height
+                }
                 .frame(maxHeight: player.isLive ? liveListHeight : .infinity)
 
                 if player.isLive, !player.playedAndRemoved.isEmpty {
@@ -89,14 +101,50 @@ struct QueueView: View {
                     } else if let steering = player.steering {
                         steeringNote(steering)
                     } else {
-                        note("\(player.context?.title ?? "") picks each song as the one before starts, so what you skip and what you let play steer what comes next. Skip as much as you like.")
+                        note("\(player.context?.title ?? "") picks each song as the one before starts.")
                     }
                 } else if !picks.isEmpty, let steering = player.steering {
                     steeringNote(steering)
                 }
             }
+
+            if player.isPlayingMotifRadio, let openRadioTuner {
+                tuneButton(openRadioTuner)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// What Motif Radio is tuned to, and the way to change it, under what it's doing: tuning
+    /// opens from the station it changes.
+    private func tuneButton(_ open: OpenRadioTunerAction) -> some View {
+        Button { open() } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Tune Motif Radio")
+                        .font(.subheadline.weight(.semibold))
+                    Text(RadioTuning(stored: storedTuning).shortSummary)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+            .background(.white.opacity(0.12), in: .rect(cornerRadius: 14, style: .continuous))
+            .contentShape(.rect(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.pressable)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("How adventurous it is, the genres it leans into, and when it follows the time and the road")
     }
 
     private func row(_ upcoming: PlayerTrack, at index: Int, isLast: Bool) -> some View {
@@ -111,6 +159,11 @@ struct QueueView: View {
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
                         .lineLimit(1)
+                    if let reason = player.pickReason(for: upcoming) {
+                        PickReasonLabel(reason: reason)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.top, 1)
+                    }
                 }
                 Spacer(minLength: 0)
                 if let local = upcoming.local {
@@ -128,7 +181,7 @@ struct QueueView: View {
         .listRowBackground(Color.clear)
         .listRowSeparatorTint(.white.opacity(0.15))
         .listRowSeparator(isLast ? .hidden : .automatic, edges: .bottom)
-        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+        .listRowInsets(EdgeInsets(top: Self.rowInsets / 2, leading: 0, bottom: Self.rowInsets / 2, trailing: 0))
         .alignmentGuide(.listRowSeparatorTrailing) { $0.width }
     }
 
@@ -196,9 +249,17 @@ struct QueueView: View {
     }
 
     /// Room for what's queued on a live mix, usually just the next song, so the note sits
-    /// right under it.
+    /// right under it: its rows as drawn, up to four of them, or as they're likely to be until
+    /// they're drawn.
     @ScaledMetric(relativeTo: .body) private var liveRowHeight: CGFloat = 57
-    private var liveListHeight: CGFloat { liveRowHeight * CGFloat(min(player.upNext.count, 4)) }
+    private var liveListHeight: CGFloat {
+        let most = liveRowHeight * 4
+        guard let listContentHeight, listContentHeight > 0 else { return liveRowHeight * CGFloat(min(player.upNext.count, 4)) }
+        return min(listContentHeight, most)
+    }
+
+    /// The row's insets, top and bottom. See ``row(_:at:isLast:)``.
+    private static let rowInsets: CGFloat = 12
 
     /// A new find Motif Radio is getting ready: downloading, or waiting for its server.
     private func isGettingReady(_ track: PlayerTrack) -> Bool {

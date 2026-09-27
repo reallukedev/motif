@@ -30,6 +30,28 @@ struct PlayerTrack: Identifiable, Equatable, Codable {
     var songIdentity: String { HistoryImport.key(title: title, artistName: artistName) }
 }
 
+extension MixSong {
+    /// A song in the player, for a live mix to start from: one of yours as the song it is,
+    /// anything else by its catalog id.
+    init(_ track: PlayerTrack) {
+        if let local = track.local {
+            self = local.mixSong()
+            return
+        }
+        self.init(
+            songIdentity: track.songIdentity,
+            songID: track.song?.id.rawValue ?? "",
+            title: track.title,
+            artistName: track.artistName,
+            albumTitle: track.albumTitle,
+            artworkURL: nil,
+            plays: 0,
+            lastHeard: .distantPast,
+            genre: track.song?.genreNames.first { $0 != "Music" }
+        )
+    }
+}
+
 /// Where the music is coming from, for "Playing from" and for telling captures apart.
 struct PlayContext: Equatable {
     enum Kind: Equatable {

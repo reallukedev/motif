@@ -145,11 +145,9 @@ struct PlayScreen: View {
                 }
             }
         case .moods:
-            #if os(macOS)
-            MoodGrid()
-            #else
             MoodShelf()
-            #endif
+        case .genres:
+            GenreShelf()
         case .newReleases:
             if !feed.newReleases.isEmpty {
                 Shelf(title: String(localized: "New from Your Artists"), items: feed.newReleases) {
@@ -226,7 +224,7 @@ struct PlayScreen: View {
             // Nothing to offer until it can play.
         } else if !cards.isEmpty {
             // Motif Radio in front when there's enough history for it, this hour's mix beside it.
-            Crate(cards: cards, leadID: cards.contains { $0.id == "station" } ? "station" : leadMix?.id)
+            ForYouCrate(cards: cards, leadID: cards.contains { $0.id == "station" } ? "station" : leadMix?.id)
         } else if let station = feed.liveStations.first {
             StationHero(item: station)
                 .padding(.horizontal, PlayMetrics.margin)

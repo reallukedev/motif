@@ -49,7 +49,8 @@ final class YourMusic {
     @ObservationIgnored private var serverQuestions: [String: Task<[SubsonicSong]?, Never>] = [:]
 
     @ObservationIgnored private var files: [String: FileScanner.CachedFile] = [:]
-    @ObservationIgnored private let isDemo: Bool
+    /// Sample data, which has songs of its own and stands in for Apple Music too.
+    @ObservationIgnored let isDemo: Bool
     @ObservationIgnored private var follower: Task<Void, Never>?
 
     init(isDemo: Bool) {
@@ -61,6 +62,7 @@ final class YourMusic {
         servers.onStatusChange = { [weak self] in self?.forgetUnavailable() }
         servers.onKeptArrived = { [weak self] in self?.keptArrived($0) }
         downloads.onDownloaded = { [weak self] in self?.onReady?($0.identity) }
+        downloads.onAsked = { [weak self] in self?.downloadsAsked($0) }
         #if DEBUG
         if isDemo { return }
         #endif
@@ -94,6 +96,16 @@ final class YourMusic {
 
     /// Every song that can play right now.
     var playableTracks: [LocalTrack] { index.tracks.filter(isPlayable) }
+
+    /// Whether a mix's song can play right now, as ``track(for:)`` would find it. Quick enough
+    /// to ask of every song Motif Radio could pick: it goes by the id and name the mix has.
+    func canPlay(_ song: MixSong) -> Bool {
+        let exact = index.track(id: song.songID)
+        if let exact, isPlayable(exact) { return true }
+        let copies = index.tracks(withIdentity: song.songIdentity)
+        guard exact == nil, copies.isEmpty else { return copies.contains(where: isPlayable) }
+        return foundOnServers[song.songIdentity].map(isPlayable) ?? false
+    }
 
     /// Whether a song is in your music, rather than found on a server that doesn't have it
     /// yet: a server like Octo plays those, but can't hand over their files until it's kept
@@ -193,6 +205,9 @@ final class YourMusic {
 
     /// The song in your music a history song stands for, if it's here and can play.
     func track(for song: HistorySong) -> LocalTrack? {
+        // Played from here, by its own id: found without working out its name again, which is
+        // slow to do for every song a mix could pick.
+        if let exact = index.track(id: song.songID), isPlayable(exact) { return exact }
         let identity = HistoryImport.key(title: song.title, artistName: song.artistName)
         guard let track = index.track(forSongID: song.songID, identity: identity) else {
             // Found on a server by searching, when it was suggested.
@@ -479,9 +494,33 @@ final class YourMusic {
     /// and with Automatic Downloads on, or for Motif Radio, they come down.
     private func keptArrived(_ tracks: [LocalTrack]) {
         onSongsArrived?(tracks)
-        let wanted = tracks.filter { AutomaticDownloads.isOn || readyingForRadio.contains($0.identity) }
+        let missing = tracks.filter { !downloads.isDownloaded($0.id) && !downloads.isDownloading($0.id) }
+        let forRadio = missing.filter { readyingForRadio.contains($0.identity) }
+        let wanted = AutomaticDownloads.isOn ? missing.filter { !readyingForRadio.contains($0.identity) } : []
         readyingForRadio.subtract(tracks.map(\.identity))
-        downloads.download(wanted.filter { !downloads.isDownloaded($0.id) && !downloads.isDownloading($0.id) })
+        downloadForRadio(forRadio)
+        downloads.download(wanted)
+    }
+
+    /// Downloads songs Motif Radio is getting ready, which stay the radio's: with Delete After
+    /// Playing on, they go once they've played.
+    private func downloadForRadio(_ tracks: [LocalTrack]) {
+        guard !tracks.isEmpty else { return }
+        isDownloadingForRadio = true
+        defer { isDownloadingForRadio = false }
+        downloads.download(tracks)
+    }
+
+    @ObservationIgnored private var isDownloadingForRadio = false
+
+    /// A download asked for by anything but Motif Radio is one you want: it stays, even once
+    /// the radio has played the song.
+    private func downloadsAsked(_ tracks: [LocalTrack]) {
+        guard !isDownloadingForRadio else { return }
+        let identities = Set(tracks.map(\.identity))
+        guard !radioOnly.isDisjoint(with: identities) else { return }
+        radioOnly.subtract(identities)
+        saveRadioOnly()
     }
 
     /// Songs being got ready, for Motif Radio or a playlist merged with Apple Music: downloaded
@@ -659,7 +698,7 @@ extension YourMusic: RadioDownloads {
         if isInYourMusic(track) {
             guard !downloads.isDownloaded(track.id), !downloads.isDownloading(track.id) else { return }
             noteRadioOnly(track.identity)
-            downloads.download([track])
+            downloadForRadio([track])
         } else {
             noteRadioOnly(track.identity)
             readyingForRadio.insert(track.identity)
@@ -721,7 +760,18 @@ extension YourMusic: RadioDownloads {
     func decline(_ song: HistorySong) {
         let identity = HistoryImport.key(title: song.title, artistName: song.artistName)
         readyingForRadio.remove(identity)
-        let downloading = index.tracks(withIdentity: identity).map(\.id).filter(downloads.isDownloading)
+        let copies = index.tracks(withIdentity: identity).map(\.id)
+        let downloading = copies.filter(downloads.isDownloading)
         if !downloading.isEmpty { downloads.cancel(Set(downloading)) }
+        // No longer the radio's: a download of it you make later is yours, and stays.
+        guard radioOnly.remove(identity) != nil else { return }
+        saveRadioOnly()
+        // One already here only for the radio to play goes, as it would have once played,
+        // unless you've put it in a playlist since.
+        guard PlayPreferences.radioDeletesAfterPlaying,
+              !playlists.all.contains(where: { $0.identities.contains(identity) })
+        else { return }
+        let downloaded = copies.filter(downloads.isDownloaded)
+        if !downloaded.isEmpty { downloads.remove(Set(downloaded)) }
     }
 }

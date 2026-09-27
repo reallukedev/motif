@@ -8,7 +8,9 @@ enum StageBackground: String, CaseIterable, Identifiable {
     case flow
     /// The cover itself, huge and soft, breathing with the beat.
     case bloom
-    case colour, artwork, living, pulse
+    /// Halo is stored as "pulse", the background it took the place of.
+    case colour, artwork, living
+    case halo = "pulse"
 
     var id: String { rawValue }
 
@@ -35,7 +37,7 @@ enum StageBackground: String, CaseIterable, Identifiable {
         case .colour: .colour
         case .artwork: .artwork
         case .living: .living
-        case .pulse: .pulse
+        case .halo: .halo
         }
     }
 }

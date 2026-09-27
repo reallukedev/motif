@@ -90,10 +90,12 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Motif reaches your own music server on your network, and finds Motif on your other devices nearby to show and control what they're playing.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>With Always, Louder at Speed starts whenever you drive with music playing, even with iPhone in a pocket or a bag. Motif uses only your speed, only while you drive, and your location never leaves this iPhone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>With Louder at Speed on, Motif turns your own music up as the car speeds up and back down as it slows. It uses only your speed, while you drive, and your location never leaves this iPhone.</string>
+	<string>With Louder at Speed on, Motif turns your music up as the car speeds up and back down as it slows. It uses only your speed, only while you drive, and your location never leaves this iPhone.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>Motif notices when you're driving, so Motif Radio can play the songs you like on the road. Your drives stay on this iPhone.</string>
+	<string>Motif notices when you're driving, so Motif Radio can play the songs you like on the road and Louder at Speed can follow the car. Your drives stay on this iPhone.</string>
 	<key>NSSiriUsageDescription</key>
 	<string>Siri can play your music in Motif when you ask, so every song you hear is kept.</string>
 	<key>UIApplicationSceneManifest</key>

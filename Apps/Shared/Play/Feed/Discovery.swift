@@ -136,6 +136,22 @@ final class Discovery {
         return (songs + fromYourArtists).map(\.song).filter { seen.insert($0.id).inserted }
     }
 
+    /// Why each of ``newFinds`` was suggested, as Motif Radio says it, by song identity: an
+    /// artist of yours, or one like yours. Suggestions for a mood or the charts are just new.
+    var newFindReasons: [String: LiveMix.Reason] {
+        var reasons: [String: LiveMix.Reason] = [:]
+        for suggestion in songs + fromYourArtists {
+            let identity = HistoryImport.key(title: suggestion.song.title, artistName: suggestion.song.artistName)
+            guard reasons[identity] == nil else { continue }
+            switch suggestion.reason {
+            case .moreFrom, .newRelease: reasons[identity] = .newFromYourArtist
+            case .like(let artist): reasons[identity] = .newFindLike(artist)
+            case .popular, .mood: break
+            }
+        }
+        return reasons
+    }
+
     // MARK: - Walking out from your artists
 
     /// Starts again from your top artists. Called when they, or the explicit setting, change.

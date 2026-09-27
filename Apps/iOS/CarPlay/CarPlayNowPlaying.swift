@@ -10,7 +10,8 @@ import MotifCore
 /// - A queue (an album, a playlist, a mix): Shuffle and Autoplay.
 /// - Motif Radio and Apple's stations pick as they go, so neither.
 /// - Then always the ring with the song's play count, filling until it counts, the star for
-///   a song from Apple Music's catalog, and Not for Me.
+///   a song from Apple Music's catalog, More Like This on Motif Radio and the moods, and Not
+///   for Me.
 ///
 /// The song's name opens its album, as it does in Music.
 extension CarPlaySceneDelegate {
@@ -35,8 +36,11 @@ extension CarPlaySceneDelegate {
                     context: player.context?.title,
                     kind: player.context.map { "\($0.kind)" },
                     isPlaying: player.isPlaying,
+                    isLoading: player.status == .loading,
                     isFavorite: player.current?.song.map(player.isFavorite),
-                    plays: player.current.flatMap { feed.facts(for: $0)?.plays }
+                    plays: player.current.flatMap { feed.facts(for: $0)?.plays },
+                    isLive: player.isLive,
+                    askedForMore: player.current.map { player.moreLikeThis.contains($0.songIdentity) } ?? false
                 )
             }
             var lastSong: String?
@@ -90,8 +94,12 @@ extension CarPlaySceneDelegate {
         let context: String?
         let kind: String?
         let isPlaying: Bool
+        /// For Motif Radio's row in Radio, which counts a song still loading as playing.
+        let isLoading: Bool
         let isFavorite: Bool?
         let plays: Int?
+        let isLive: Bool
+        let askedForMore: Bool
     }
 
     /// Whether the star can be given: only a song from Apple Music's catalog has a rating to
@@ -142,6 +150,17 @@ extension CarPlaySceneDelegate {
                 star.isSelected = isFavorite
                 buttons.append(star)
             }
+        }
+
+        // More Like This, beside Not for Me, on Motif Radio or a mood: the car's way to steer
+        // one toward a song. Lit once asked. Not on a queue's Autoplay, whose Shuffle and
+        // Autoplay buttons would take the car past its five.
+        if let current, player.isLive, player.canAskForMoreLikeThis, let image = UIImage(systemName: "hand.thumbsup") {
+            let more = CPNowPlayingImageButton(image: image) { _ in
+                player.playMoreLikeThis()
+            }
+            more.isSelected = player.moreLikeThis.contains(current.songIdentity)
+            buttons.append(more)
         }
 
         // Not for Me: out of the mixes, and on to the next song.
@@ -264,9 +283,14 @@ extension CarPlaySceneDelegate {
         var rows: [CPListItem] = []
         let limit = max(0, CPListTemplate.maximumItemCount - 1)
         for track in player.upNext.prefix(min(40, limit)) {
-            let detail = player.isAutoplayPick(track)
-                ? String(localized: "\(track.artistName) · Autoplay")
-                : track.artistName
+            // Why a live mix picked it, where one thing stands out, as the phone's Up Next says.
+            let detail = if let reason = player.pickReason(for: track) {
+                "\(track.artistName) · \(reason.line)"
+            } else if player.isAutoplayPick(track) {
+                String(localized: "\(track.artistName) · Autoplay")
+            } else {
+                track.artistName
+            }
             let row = CPListItem(text: track.title, detailText: detail, image: await cover(for: track, side: side))
             row.isExplicitContent = track.isExplicit
             row.handler = { [weak self] _, completion in

@@ -205,6 +205,7 @@ struct PlayCountLine: View {
 struct NowPlayingMenu: View {
     let track: PlayerTrack
     let onNavigate: (NowPlayingDestination) -> Void
+    @Environment(\.openRadioTuner) private var openRadioTuner
 
     var body: some View {
         Menu {
@@ -214,7 +215,7 @@ struct NowPlayingMenu: View {
             Button("Stage", systemImage: "tv") { StagePresenter.shared.isShowing = true }
             Divider()
             #endif
-            NowPlayingMenuItems(track: track, onNavigate: onNavigate)
+            NowPlayingMenuItems(track: track, onNavigate: onNavigate, onTuneRadio: openRadioTuner.map { open in { open() } })
         } label: {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.bold))
@@ -232,6 +233,8 @@ struct NowPlayingMenuItems: View {
     let track: PlayerTrack
     /// Where Go to Album and the like lead. Nil pushes onto the stack the view is in.
     var onNavigate: ((NowPlayingDestination) -> Void)?
+    /// Opens Motif Radio's tuning, where the menu can show it. Nil leaves Tune out.
+    var onTuneRadio: (() -> Void)?
     @Environment(PlayerModel.self) private var player
     @Environment(\.openPlayRoute) private var openPlayRoute
 
@@ -259,7 +262,19 @@ struct NowPlayingMenuItems: View {
             ShareLink(item: url) { Label("Share Song", systemImage: "square.and.arrow.up") }
         }
         Divider()
+        // Steering what a live mix plays next, for the song on only.
+        if player.canAskForMoreLikeThis, track.songIdentity == player.current?.songIdentity {
+            let isAsked = player.moreLikeThis.contains(track.songIdentity)
+            Button(isAsked ? "Asked for More Like This" : "Play More Like This", systemImage: isAsked ? "hand.thumbsup.fill" : "hand.thumbsup") {
+                player.playMoreLikeThis()
+            }
+            .disabled(isAsked)
+        }
         SuggestLessButton(songIdentity: track.songIdentity)
+        if let onTuneRadio, player.isPlayingMotifRadio, track.songIdentity == player.current?.songIdentity {
+            Divider()
+            Button("Tune Motif Radio", systemImage: "slider.horizontal.3", action: onTuneRadio)
+        }
     }
 
     private func navigate(_ destination: NowPlayingDestination) {

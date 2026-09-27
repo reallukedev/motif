@@ -5,6 +5,12 @@ import Intents
 /// extension: the player lives in the app. And finishes downloads from your servers that
 /// completed while Motif wasn't running.
 final class MotifAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Here rather than on the window, since CarPlay can start Motif with no window at all.
+        SpeedVolume.shared.start(AppModel.shared)
+        return true
+    }
+
     /// Upright everywhere but Stage, which turns as its settings say.
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         StagePresenter.shared.orientations

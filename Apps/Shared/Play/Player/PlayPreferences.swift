@@ -36,11 +36,24 @@ enum PlayPreferences {
         UserDefaults.standard.object(forKey: radioDownloadsFirstKey) as? Bool ?? true
     }
 
-    /// Louder at Speed: your own music follows the car's speed while driving. Off by default.
+    /// Louder at Speed: the music follows the car's speed while driving. Off by default.
     static let volumeFollowsSpeedKey = "playVolumeFollowsSpeed"
 
     static var volumeFollowsSpeed: Bool {
         UserDefaults.standard.bool(forKey: volumeFollowsSpeedKey)
+    }
+
+    /// How much Louder at Speed changes the music. Moderate by default.
+    static let speedVolumeAmountKey = "playSpeedVolumeAmount"
+
+    static var speedVolumeAmount: SpeedVolumeAmount {
+        UserDefaults.standard.string(forKey: speedVolumeAmountKey).flatMap(SpeedVolumeAmount.init) ?? .moderate
+    }
+
+    /// Whether anything needs to know when you're driving: Motif Radio playing for the road,
+    /// or Louder at Speed.
+    static var noticesDriving: Bool {
+        radioNoticesDriving || volumeFollowsSpeed
     }
 
     /// Shaking iPhone plays a song Motif thinks you'd like, then Motif Radio. On by default.

@@ -1,4 +1,5 @@
 import Foundation
+import MotifCore
 
 /// What actually makes sound. ``PlayerModel`` is the same for both; the engine is Apple Music
 /// through MusicKit, or a pretend one for sample data, which mustn't reach Apple Music.
@@ -44,6 +45,9 @@ protocol PlayerEngine: AnyObject {
     /// The player's own level, 0 to 1, under the phone's volume. Only a player that plays
     /// the audio itself can change it.
     func setLevel(_ level: Float)
+    /// Whether a live mix's song can play right now, so the mix only picks ones that will.
+    /// Only your own music's player has songs that can't: a server's, while it's out of reach.
+    func canPlayNow(_ song: MixSong) -> Bool
 }
 
 extension PlayerEngine {
@@ -51,4 +55,5 @@ extension PlayerEngine {
     func activate() {}
     func deactivate() {}
     func setLevel(_ level: Float) {}
+    func canPlayNow(_ song: MixSong) -> Bool { true }
 }

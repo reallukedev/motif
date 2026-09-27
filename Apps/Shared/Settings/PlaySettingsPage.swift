@@ -21,7 +21,6 @@ struct PlaySettingsPage: View {
     @AppStorage(PlayPreferences.radioDownloadsFirstKey) private var radioDownloadsFirst = true
     @AppStorage(PlayPreferences.radioDeletesAfterPlayingKey) private var radioDeletesAfterPlaying = false
     @AppStorage(PlayPreferences.shakeToPlayKey) private var shakeToPlay = true
-    @AppStorage(PlayPreferences.volumeFollowsSpeedKey) private var volumeFollowsSpeed = false
     @AppStorage(QuickSwitch.storageKey) private var quickSwitch = false
     @AppStorage(NearbyDevices.storageKey) private var showsNearby = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
@@ -43,15 +42,13 @@ struct PlaySettingsPage: View {
                 sourceSection
                 if isYourMusic {
                     yourMusicSections
-                    #if os(iOS)
-                    drivingSection
-                        .id(DebugScroll.driving)
-                    #endif
                 } else {
                     offlineSection
                 }
                 radioSection
                     .id(DebugScroll.radio)
+                drivingSection
+                    .id(DebugScroll.driving)
                 aroundSection
                 ResumeSettingsSection()
                 NowPlayingBackdropSection()
@@ -242,30 +239,21 @@ struct PlaySettingsPage: View {
 
     // MARK: - Driving
 
-    #if os(iOS)
+    /// Louder at Speed's row, saying where it stands, pushing its own page.
     private var drivingSection: some View {
-        Section {
-            Toggle("Louder at Speed", isOn: $volumeFollowsSpeed)
-                .onChange(of: volumeFollowsSpeed) { _, isOn in
-                    if isOn { SpeedVolume.shared.askForLocation() }
-                }
+        let standing = SpeedVolume.shared.standing(motion: model.player.drive.access, isAppleMusic: !model.player.setsOwnLevel)
+        return Section {
+            NavigationLink {
+                SpeedVolumePage()
+            } label: {
+                LabeledContent("Louder at Speed", value: SpeedVolumeWords.rowValue(standing))
+            }
         } header: {
             Text("Driving")
         } footer: {
-            Text(drivingFooter)
-                .contentTransition(.opacity)
+            Text("Your music comes up on the highway and down at the lights, following the car.")
         }
-        .onAppear { SpeedVolume.shared.refreshAuthorization() }
     }
-
-    private var drivingFooter: String {
-        let status = SpeedVolume.shared.authorization
-        if volumeFollowsSpeed, status == .denied || status == .restricted {
-            return String(localized: "Motif can't see how fast you're going. Allow Location for Motif in Settings ▸ Privacy & Security ▸ Location Services.")
-        }
-        return String(localized: "While you drive, your music comes up as the car speeds up and eases back down as it slows, so the road never drowns it out. Motif uses only your speed, only while driving, and it stays on this iPhone.")
-    }
-    #endif
 
     // MARK: - Around Motif
 
