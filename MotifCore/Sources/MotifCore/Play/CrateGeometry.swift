@@ -8,9 +8,18 @@ import Foundation
 /// Distances are in records from the front (`a`, never negative) and in covers across.
 public enum CrateFan {
     /// How far a record sits from the front's centre, in covers, `a` records out.
+    ///
+    /// The one in front and the one beside it swap which is on top halfway between their
+    /// places, and a swap where they overlap shows as one cutting into the other. So on the
+    /// way to the front a record moves out of the way a little quicker at first, as Cover
+    /// Flow's did: halfway, the two stand clear of each other and the swap can't be seen.
     public static func reach(_ a: Double) -> Double {
-        min(a, 1) * 0.86 + max(0, a - 1) * step
+        let near = min(a, 1)
+        return 0.86 * (near + inner * near * (1 - near)) + max(0, a - 1) * step
     }
+
+    /// How much quicker the first step out is than an even one.
+    static let inner = 0.4
 
     /// How large a record is, `a` records out, the front's size being 1.
     public static func scale(_ a: Double) -> Double {

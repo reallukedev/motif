@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreGraphics
+import MotifCore
 
 /// A colour taken from a cover, deep enough that white type on it always reads.
 ///
@@ -76,25 +77,22 @@ enum CoverTint {
     typealias RGB = (red: Double, green: Double, blue: Double)
 
     /// Four colours from a cover, each deep enough for white type, for a field that moves:
-    /// Apple Music's own palette for its artwork, the picture's quarters for an address, and
-    /// shades of the stand-in's hue for a song with no cover.
+    /// the colours the picture is made of (see ``CoverPalette``), Apple Music's own colours for
+    /// a library cover only MusicKit can draw, and shades of the stand-in's hue for a song
+    /// with no cover.
     static func palette(for cover: CoverArt) async -> [Color] {
-        var colors: [RGB] = []
-        // The picture's own colours first: Apple Music's text colours are picked to read on
-        // the cover, so they come out greys, not the cover's colours.
-        if let image = await smallImage(for: cover, pixels: 64) {
-            colors = quarters(of: image)
-        } else if case .artwork(let artwork) = cover {
-            colors = [artwork.backgroundColor, artwork.primaryTextColor, artwork.secondaryTextColor, artwork.tertiaryTextColor]
-                .compactMap { $0.flatMap(components(of:)) }
-        } else if case .url(_, let seed) = cover {
-            let hue = Double(GeneratedCover.hash(seed) % 360) / 360
-            colors = [0, 0.05, -0.06, 0.1].map { rgb(hue: hue + $0, saturation: 0.7, brightness: 0.8) }
-        }
-        guard !colors.isEmpty else { return [] }
-        while colors.count < 4 { colors.append(colors[colors.count % max(colors.count, 1)]) }
-        return colors.map { color in
-            let deep = deepened(saturated(color, by: 1.6), maximum: 0.2)
+        if let art = await BackdropArtStore.shared.art(for: cover) { return art.deep }
+        guard case .artwork(let artwork) = cover else { return [] }
+        let colours = [artwork.backgroundColor, artwork.primaryTextColor, artwork.secondaryTextColor, artwork.tertiaryTextColor]
+            .compactMap { $0.flatMap(components(of:)) }
+            .map { CoverPalette.Colour(red: $0.red, green: $0.green, blue: $0.blue) }
+        return deepPalette(colours)
+    }
+
+    /// A cover's colours made deep enough for white type, four of them at least.
+    static func deepPalette(_ colours: [CoverPalette.Colour]) -> [Color] {
+        CoverPalette.filled(colours, to: 4).map { colour in
+            let deep = deepened(saturated((colour.red, colour.green, colour.blue), by: 1.6), maximum: 0.2)
             return Color(red: deep.red, green: deep.green, blue: deep.blue)
         }
     }
@@ -109,29 +107,6 @@ enum CoverTint {
         }
         guard let url else { return nil }
         return await ArtworkImages.shared.image(for: ArtworkImages.Key(url: url, pixels: pixels))
-    }
-
-    /// The cover drawn into four pixels, one for each quarter.
-    private static func quarters(of image: CGImage) -> [RGB] {
-        var pixels = [UInt8](repeating: 0, count: 16)
-        let drawn = pixels.withUnsafeMutableBytes { bytes -> Bool in
-            guard let context = CGContext(
-                data: bytes.baseAddress,
-                width: 2,
-                height: 2,
-                bitsPerComponent: 8,
-                bytesPerRow: 8,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return false }
-            context.interpolationQuality = .medium
-            context.draw(image, in: CGRect(x: 0, y: 0, width: 2, height: 2))
-            return true
-        }
-        guard drawn else { return [] }
-        return (0..<4).map { index in
-            (Double(pixels[index * 4]) / 255, Double(pixels[index * 4 + 1]) / 255, Double(pixels[index * 4 + 2]) / 255)
-        }
     }
 
     private static func components(of cgColor: CGColor) -> RGB? {

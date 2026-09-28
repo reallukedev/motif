@@ -211,13 +211,13 @@ struct Crate: View {
         return ScrollView(.horizontal) {
             HStack(spacing: Self.spacing) {
                 if showsLeadingEnd {
-                    endRecord(CrateEnd.leading, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: frontIndex + 1)
+                    endRecord(CrateEnd.leading, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: -centered)
                 }
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, card in
                     // Near the middle as it scrolls, or near the one chosen, which songs dealt
                     // to the start move along the row a moment before the crate follows it.
                     if abs(index + firstRecord - centered) <= drawn || abs(index - frontIndex) <= drawn {
-                        recordView(card, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: index - frontIndex)
+                        recordView(card, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: index + firstRecord - centered)
                     } else {
                         Color.clear
                             .frame(width: side, height: side)
@@ -225,7 +225,7 @@ struct Crate: View {
                     }
                 }
                 if showsTrailingEnd {
-                    endRecord(CrateEnd.trailing, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: items.count - frontIndex)
+                    endRecord(CrateEnd.trailing, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: firstRecord + items.count - centered)
                 }
             }
             .scrollTargetLayout()
@@ -552,7 +552,10 @@ struct Crate: View {
     }
 
     /// A record in the row: in front, a click or tap opens or plays it; beside it, brings it
-    /// to the front.
+    /// to the front. `distance` is in places from the one passing through the middle as the
+    /// crate moves, not from the one chosen, which a click chooses before the crate has
+    /// moved to it: stacked from the chosen one, the records the crate passes on its way
+    /// there would be drawn over the ones nearer the middle, and cut them off.
     private func recordView(_ card: ForYouCard, side: CGFloat, spacing: CGFloat, depth: Double, stillness: Bool, distance: Int) -> some View {
         let record = record(for: card)
         let isFront = front == card.id

@@ -74,6 +74,13 @@ struct MacRootView: View {
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.02)))
                 }
             }
+            #if DEBUG
+            .overlay {
+                if let style = BackdropLab.requested {
+                    BackdropLab(style: style).ignoresSafeArea()
+                }
+            }
+            #endif
             .animation(reduceMotion ? .easeOut(duration: 0.2) : PlayMotion.panel, value: isShowingFullPlayer)
             .playerFeedback()
             // Your devices, at the far end of the titlebar on every page, as Spotify keeps its

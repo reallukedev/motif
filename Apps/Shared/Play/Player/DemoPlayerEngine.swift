@@ -227,10 +227,23 @@ final class DemoPlayerEngine: PlayerEngine {
             title: song.title,
             artistName: song.artistName,
             albumTitle: song.albumTitle,
-            cover: .url(song.artworkURL, seed: song.albumTitle ?? song.title),
+            cover: demoCover(number: number) ?? .url(song.artworkURL, seed: song.albumTitle ?? song.title),
             duration: isStation ? nil : seconds,
             isExplicit: false,
             song: nil
         )
+    }
+
+    /// `-MotifDemoCovers "https://…|https://…"`, in a Debug build: real covers for the sample
+    /// songs, one after another, to see the player's backgrounds with real artwork.
+    private static func demoCover(number: Int) -> CoverArt? {
+        #if DEBUG
+        guard let list = UserDefaults.standard.string(forKey: "MotifDemoCovers") else { return nil }
+        let covers = list.split(separator: "|").map(String.init)
+        guard !covers.isEmpty else { return nil }
+        return .url(covers[(number - 1) % covers.count], seed: "demo")
+        #else
+        return nil
+        #endif
     }
 }

@@ -14,8 +14,21 @@ import MotifMusic
 @Observable
 final class PlayerModel {
     private(set) var status: PlayerStatus = .stopped
-    private(set) var current: PlayerTrack?
-    private(set) var upNext: [PlayerTrack] = []
+    private(set) var current: PlayerTrack? {
+        didSet {
+            // Its background readied now, so the player shows it the moment it's opened or
+            // the song changes under it, with the next song's after it.
+            guard current?.cover != oldValue?.cover else { return }
+            BackdropArtStore.shared.prepare([current?.cover])
+        }
+    }
+    private(set) var upNext: [PlayerTrack] = [] {
+        didSet {
+            // And the next song's, so the change to it is ready too.
+            guard upNext.first?.cover != oldValue.first?.cover else { return }
+            BackdropArtStore.shared.prepare([upNext.first?.cover])
+        }
+    }
     private(set) var isShuffled = false
     @ObservationIgnored private var level: Float = 1
     private(set) var repeatMode: PlayerRepeat = .off

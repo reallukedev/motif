@@ -2,14 +2,14 @@ import SwiftUI
 import MotifCore
 
 /// What fills Stage behind the song. Two of its own that move with the music, then Now
-/// Playing's four.
+/// Playing's.
 enum StageBackground: String, CaseIterable, Identifiable {
     /// The cover's colours as a mesh that drifts with the song and swells on the bass.
     case flow
     /// The cover itself, huge and soft, breathing with the beat.
     case bloom
     /// Halo is stored as "pulse", the background it took the place of.
-    case colour, artwork, living
+    case colour, artwork, living, glass, aurora
     case halo = "pulse"
 
     var id: String { rawValue }
@@ -30,13 +30,15 @@ enum StageBackground: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The same background as Now Playing's, for the four they share.
+    /// The same background as Now Playing's, for the ones they share.
     var nowPlaying: NowPlayingBackground? {
         switch self {
         case .flow, .bloom: nil
         case .colour: .colour
         case .artwork: .artwork
         case .living: .living
+        case .glass: .glass
+        case .aurora: .aurora
         case .halo: .halo
         }
     }
@@ -87,15 +89,18 @@ private struct FlowBackdrop: View {
     let energy: Double
     let isPlaying: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSettled = false
+    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: !isPlaying && levels.isResting)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: isSettled)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
             let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
             let bass = Float(bands.prefix(5).reduce(0, +) / 5)
             let mid = Float(bands[6..<14].reduce(0, +) / 8)
             // Slow, whatever the song: the drift is the room, the bass is the music.
-            let t = Float(reduceMotion ? 0 : time.truncatingRemainder(dividingBy: 10_000))
+            // The drift keeps its own time, which stops while paused and goes on from there.
+            let t = Float(reduceMotion ? 0 : drift.phase(at: time).truncatingRemainder(dividingBy: 10_000))
             let wander: Float = 0.13
             let points: [SIMD2<Float>] = [
                 [0, 0], [0.5 + wander * sin(t * 0.21), 0], [1, 0],
@@ -126,42 +131,85 @@ private struct FlowBackdrop: View {
                 LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.4)], startPoint: .top, endPoint: .bottom)
             }
         }
+        .settles(isPlaying: isPlaying, into: $isSettled, drift: $drift)
     }
 }
 
 /// The cover, far larger than the screen and heavily blurred, turning slowly and breathing
-/// with the beat: swelling and brightening on each kick.
+/// with the beat: swelling and brightening on each kick. Drawn from the cover readied for the
+/// backgrounds, already softened, so no blur the size of the screen is worked out each frame.
 private struct BloomBackdrop: View {
     let cover: CoverArt?
     let levels: SmoothedLevels
     let energy: Double
     let isPlaying: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var art: BackdropArt?
+    @State private var isSettled = false
+    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
+
+    init(cover: CoverArt?, levels: SmoothedLevels, energy: Double, isPlaying: Bool) {
+        self.cover = cover
+        self.levels = levels
+        self.energy = energy
+        self.isPlaying = isPlaying
+        _art = State(initialValue: BackdropArtStore.shared.cached(cover))
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let side = max(proxy.size.width, proxy.size.height) * 1.5
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying && levels.isResting)) { context in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: isSettled)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
                 let bass = CGFloat(bands.prefix(5).reduce(0, +) / 5)
                 ZStack {
-                    if let cover {
-                        CoverImage(cover: cover, size: side, isBare: true)
+                    if let art {
+                        Image(decorative: art.soft, scale: 1)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: side, height: side)
                             .scaleEffect(1.1 + bass * 0.12)
-                            .rotationEffect(.degrees(reduceMotion ? 0 : (time * 3).truncatingRemainder(dividingBy: 360)))
-                            .blur(radius: 80)
+                            .rotationEffect(.degrees(reduceMotion ? 0 : (drift.phase(at: time) * 3).truncatingRemainder(dividingBy: 360)))
                             .saturation(1.35)
                             .brightness(Double(bass) * 0.14 - 0.1)
+                            .transition(.opacity)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
-                .drawingGroup()
             }
         }
+        .background(art?.field ?? CoverStage.fallback)
         .overlay {
             LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
         }
         .clipped()
+        .settles(isPlaying: isPlaying, into: $isSettled, drift: $drift)
+        .task(id: cover) {
+            guard let cover else { return }
+            let found = await BackdropArtStore.shared.art(for: cover)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.6)) { art = found }
+        }
+    }
+}
+
+extension View {
+    /// Sets `isSettled` a moment after the music pauses, once what moves with it has fallen
+    /// still, so the drawing can stop; clears it as soon as the music plays. `drift`, the
+    /// slow motion's own time, glides to a stop with it and picks up from there.
+    func settles(isPlaying: Bool, into isSettled: Binding<Bool>, drift: Binding<BackdropClock>) -> some View {
+        task(id: isPlaying) {
+            let now = Date.now.timeIntervalSinceReferenceDate
+            drift.wrappedValue.setSpeed(isPlaying ? 1 : 0, at: now)
+            guard !isPlaying else {
+                isSettled.wrappedValue = false
+                return
+            }
+            let still = drift.wrappedValue.secondsToRest(from: now) ?? 0
+            try? await Task.sleep(for: .seconds(max(1.5, still)))
+            guard !Task.isCancelled else { return }
+            isSettled.wrappedValue = true
+        }
     }
 }

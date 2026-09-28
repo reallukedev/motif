@@ -27,6 +27,20 @@ struct CrateGeometryTests {
         #expect(innerEdge > 0.3)
     }
 
+    @Test("Halfway to the front, the record coming and the one going stand clear of each other")
+    func crossingRecordsDontOverlap() {
+        // They swap which is on top here: each one's inner edge must be past the middle, with
+        // room for the few points its turn adds to its near edge.
+        let innerEdge = CrateFan.reach(0.5) - CrateFan.scale(0.5) / 2
+        #expect(innerEdge > 0.02)
+    }
+
+    @Test("Moving toward the front, a record never goes back the way it came",
+          arguments: stride(from: 0.0, through: 3.0, by: 0.05).map(\.self))
+    func reachKeepsGrowing(a: Double) {
+        #expect(CrateFan.reach(a + 0.05) > CrateFan.reach(a))
+    }
+
     @Test("Records far out never shrink to nothing")
     func scaleHasAFloor() {
         #expect(CrateFan.scale(40) == 0.5)

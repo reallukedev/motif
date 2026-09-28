@@ -16,8 +16,7 @@ struct FullPlayer: View {
 
     var body: some View {
         ZStack {
-            NowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying)
-                .ignoresSafeArea()
+            Color.clear
             if let track = player.current {
                 content(track)
                     .environment(\.colorScheme, .dark)
@@ -26,6 +25,8 @@ struct FullPlayer: View {
                     .tint(.white)
             }
         }
+        // Lit from the cover, wherever the window's size puts it.
+        .nowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying)
         .coverTint(of: player.current?.cover, into: $tint)
         .onChange(of: player.current?.songIdentity) { showsBack = false }
         .onExitCommand(perform: close)
@@ -137,6 +138,7 @@ struct FullPlayer: View {
             .accessibilityElement(children: .contain)
             .accessibilityAction(named: "Show the Cover") { showsBack = false }
         }
+        .backdropFocus()
         .shadow(color: .black.opacity(sinks ? 0.2 : 0.4), radius: sinks ? 14 : 30, y: sinks ? 6 : 16)
         .scaleEffect(sinks ? 0.88 : 1)
         .animation(reduceMotion ? nil : .spring(duration: 0.34, bounce: 0.2), value: sinks)

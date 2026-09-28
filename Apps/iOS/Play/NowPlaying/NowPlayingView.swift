@@ -28,7 +28,7 @@ struct NowPlayingView: View {
 
     var body: some View {
         ZStack {
-            background
+            Color.clear
             if let track = player.current {
                 content(track)
                     .environment(\.colorScheme, .dark)
@@ -39,6 +39,8 @@ struct NowPlayingView: View {
                     .environment(\.openRadioTuner, OpenRadioTunerAction { showsTuner = true })
             }
         }
+        // Lit from the cover, wherever the layout puts it.
+        .nowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying)
         .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
         .coverTint(of: player.current?.cover, into: $tint)
         .onChange(of: player.hasQueue) { _, hasQueue in
@@ -159,6 +161,7 @@ struct NowPlayingView: View {
             .accessibilityElement(children: .contain)
             .accessibilityAction(named: "Show the Cover", turnSleeve)
         }
+        .backdropFocus()
         .shadow(color: .black.opacity(sinks ? 0.2 : 0.4), radius: sinks ? 14 : 30, y: sinks ? 6 : 16)
         .scaleEffect(sinks ? 0.82 : 1)
         .animation(reduceMotion ? nil : .spring(duration: 0.34, bounce: 0.2), value: sinks)
@@ -250,13 +253,6 @@ struct NowPlayingView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
         .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-
-    // MARK: - Background
-
-    private var background: some View {
-        NowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying)
-            .ignoresSafeArea()
     }
 
     private func navigate(_ destination: NowPlayingDestination) {

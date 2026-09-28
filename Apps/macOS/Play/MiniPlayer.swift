@@ -61,7 +61,10 @@ private struct MiniPlayer: View {
             }
         }
         .frame(width: Self.side, height: Self.side)
-        .background(NowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying))
+        .background {
+            // The cover fills the window, so only its colour shows, round the edges as it loads.
+            CoverStage(tint: tint)
+        }
         .clipShape(.rect(cornerRadius: Self.cornerRadius, style: .continuous))
         .coverTint(of: player.current?.cover, into: $tint)
         .onHover { hovering in

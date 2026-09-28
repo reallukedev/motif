@@ -42,6 +42,13 @@ struct RootView: View {
                 NowPlayingView(onNavigate: go(to:))
                     .navigationTransition(.zoom(sourceID: "nowPlaying", in: nowPlayingTransition))
             }
+            #if DEBUG
+            .overlay {
+                if let style = BackdropLab.requested {
+                    BackdropLab(style: style).ignoresSafeArea()
+                }
+            }
+            #endif
             // The song a shake finds plays in Now Playing, so you see what it is.
             .shakeToPlay(model.player) { showsNowPlaying = true }
             // Songs being added to a playlist, from a menu anywhere.
