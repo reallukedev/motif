@@ -97,3 +97,49 @@ public enum CrateRest {
         return Double(min(max(place, 0), lastPlace)) * pitch
     }
 }
+
+/// The crate's row, place by place: the quiet record at the start while more songs are looked
+/// for, the records, and the quiet one at the end. The crate is scrolled by place, and chooses
+/// by record.
+public struct CrateRow: Equatable, Sendable {
+    public enum Slot: Equatable, Sendable {
+        case leadingEnd
+        /// The record at this index among the records.
+        case record(Int)
+        case trailingEnd
+    }
+
+    public let records: Int
+    public let hasLeadingEnd: Bool
+    public let hasTrailingEnd: Bool
+
+    public init(records: Int, hasLeadingEnd: Bool, hasTrailingEnd: Bool) {
+        self.records = max(0, records)
+        self.hasLeadingEnd = hasLeadingEnd
+        self.hasTrailingEnd = hasTrailingEnd
+    }
+
+    /// How many places the row has, the quiet records included.
+    public var places: Int { records + (hasLeadingEnd ? 1 : 0) + (hasTrailingEnd ? 1 : 0) }
+
+    /// What's at a place, or nil for one outside the row.
+    public func slot(at place: Int) -> Slot? {
+        let index = place - (hasLeadingEnd ? 1 : 0)
+        if (0..<records).contains(index) { return .record(index) }
+        if index == -1, hasLeadingEnd { return .leadingEnd }
+        if index == records, hasTrailingEnd { return .trailingEnd }
+        return nil
+    }
+
+    /// Where something is in the row, or nil when it isn't there.
+    public func place(of slot: Slot) -> Int? {
+        switch slot {
+        case .leadingEnd:
+            return hasLeadingEnd ? 0 : nil
+        case .record(let index):
+            return (0..<records).contains(index) ? index + (hasLeadingEnd ? 1 : 0) : nil
+        case .trailingEnd:
+            return hasTrailingEnd ? records + (hasLeadingEnd ? 1 : 0) : nil
+        }
+    }
+}

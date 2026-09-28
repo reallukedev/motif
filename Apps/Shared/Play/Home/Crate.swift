@@ -28,7 +28,15 @@ struct Crate: View {
     @Environment(AppModel.self) private var model
     @Environment(YourMusic.self) private var music
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The record chosen, in front: moved to by a tap or a key, or the one in the middle as
+    /// the crate is flipped by hand. Never what the scroll view reports once still, which is
+    /// wherever the row has shifted to when songs are dealt in before it.
     @State private var front: String?
+    /// Drives the scroll view to the record chosen.
+    @State private var position = ScrollPosition(idType: String.self)
+    /// While the row changes under the crate and it's being put back on the record chosen, a
+    /// shift at rest isn't someone scrolling.
+    @State private var isRowChanging = false
     /// Whether the crate's been flipped by hand, after which it stays where it was put.
     @State private var hasMoved = false
     @State private var width: CGFloat = 0
@@ -47,9 +55,11 @@ struct Crate: View {
     @State private var flickStart: Int?
     /// The place in the row passing through the middle of the crate, as it scrolls.
     @State private var centered = 0
+    #if os(iOS)
     /// Counts records settling into the middle and pulls past an end, each felt.
     @State private var ticks = 0
     @State private var bumps = 0
+    #endif
     /// False until the records have been scrolled to the one in front the first time: lazy
     /// records are laid out a moment after the crate is, and until then it would show the
     /// first of them, then jump.
@@ -108,7 +118,6 @@ struct Crate: View {
         .onChange(of: songs.map(\.id)) { deal() }
         .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("For You")
     }
 
     // MARK: - Dealing songs
@@ -120,7 +129,9 @@ struct Crate: View {
         guard !isScrolling else { return }
         let known = Set(songs.map(\.id))
         let removed = (leading + trailing).contains { !known.contains($0.id) }
+        // Whatever is dealt in or taken out before the one in front moves the row under it.
         if removed {
+            isRowChanging = true
             let items = items
             let index = items.firstIndex { $0.id == front }
             leading.removeAll { !known.contains($0.id) }
@@ -136,6 +147,7 @@ struct Crate: View {
         let dealt = Set((leading + trailing).map(\.id))
         let fresh = songs.filter { !dealt.contains($0.id) }
         guard !fresh.isEmpty else { return }
+        isRowChanging = true
         let order = FreshShuffle.order(
             fresh,
             artist: { StatsCalculator.folded($0.artistName) },
@@ -159,6 +171,7 @@ struct Crate: View {
         guard items.indices.contains(lead + offset) else { return }
         hasMoved = true
         front = items[lead + offset].id
+        position.scrollTo(id: items[lead + offset].id, anchor: .center)
         #endif
     }
 
@@ -189,13 +202,13 @@ struct Crate: View {
             ?? (front == CrateEnd.leading ? -1 : front == CrateEnd.trailing ? items.count : 0)
         // Records are counted from the first place in the row, the quiet one at the start
         // included.
-        let firstRecord = showsLeadingEnd ? 1 : 0
-        let places = items.count + firstRecord + (showsTrailingEnd ? 1 : 0)
+        let row = row(items)
+        let (firstRecord, places) = (row.hasLeadingEnd ? 1 : 0, row.places)
         // Every record has its place in the row, but only those near the middle are drawn: the
         // songs go on as long as you flip. Not a lazy stack, which draws only what's laid out
         // in view, when the fan pulls records in from well outside it.
         let drawn = Int(depth) + 2
-        return ScrollViewReader { proxy in ScrollView(.horizontal) {
+        return ScrollView(.horizontal) {
             HStack(spacing: Self.spacing) {
                 if showsLeadingEnd {
                     endRecord(CrateEnd.leading, side: side, spacing: spacing, depth: depth, stillness: stillness, distance: frontIndex + 1)
@@ -221,10 +234,13 @@ struct Crate: View {
             // answers clicks and scrolls over to the record in front.
             .padding(.horizontal, max(0, (width - side) / 2))
         }
-        .scrollPosition(id: $front, anchor: .center)
-        .onScrollPhaseChange { _, phase in
+        .scrollPosition($position, anchor: .center)
+        .onScrollPhaseChange { old, phase in
             if phase == .interacting { hasMoved = true }
-            if phase == .tracking || phase == .interacting, flickStart == nil { flickStart = centered }
+            // Each flick goes a few from where the finger came down, even onto a crate still
+            // gliding from the last.
+            let touches: [ScrollPhase] = [.tracking, .interacting]
+            if touches.contains(phase), !touches.contains(old) { flickStart = centered }
             if phase == .idle { flickStart = nil }
             scrollPhase = phase
             isScrolling = phase != .idle
@@ -233,19 +249,44 @@ struct Crate: View {
         }
         // Where the middle of the crate is, in records: which one is passing through it, and
         // whether it's being pulled past either end.
-        .onScrollGeometryChange(for: CratePosition.self) { geometry in
-            CratePosition(offset: geometry.contentOffset.x, pitch: side + spacing, places: places)
-        } action: { old, new in
+        .onScrollGeometryChange(for: CrateScroll.self) { geometry in
+            CrateScroll(
+                position: CratePosition(offset: geometry.contentOffset.x, pitch: side + spacing, places: places),
+                rowWidth: geometry.contentSize.width,
+                width: geometry.containerSize.width
+            )
+        } action: { oldScroll, newScroll in
+            let (old, new) = (oldScroll.position, newScroll.position)
             centered = new.place
-            if scrollPhase == .idle, new != old { keepChosenInMiddle(proxy) }
+            switch scrollPhase {
+            case .idle where isRowChanging:
+                // The row changed under it: back to the one chosen, once it's still.
+                if new != old { keepChosenInMiddle() }
+            case .animating:
+                // On its way to the one chosen, already in front.
+                break
+            case .idle where !newScroll.isSameSize(as: oldScroll):
+                // The window resized: the one chosen stays chosen.
+                if new != old { keepChosenInMiddle() }
+            default:
+                // Flipped by hand, or by a mouse's wheel, which has no phases: the one
+                // passing through the middle is chosen.
+                if new.place != old.place, let id = id(atPlace: new.place) {
+                    front = id
+                    hasMoved = true
+                }
+                if scrollPhase == .idle, new != old { keepChosenInMiddle() }
+            }
             // A tick as each record settles into the middle, the way a picker's detents are
             // felt, while it's being moved rather than put back in place.
             guard isPlaced, scrollPhase != .idle else { return }
-            if new.place != old.place { ticks += 1 }
-            if new.isPastEnd, !old.isPastEnd, scrollPhase == .interacting { bumps += 1 }
+            if new.place != old.place { feel(.detent) }
+            if new.isPastEnd, !old.isPastEnd, scrollPhase == .interacting { feel(.end) }
         }
-        .sensoryFeedback(CrateHaptics.tick, trigger: ticks)
+        #if os(iOS)
+        .sensoryFeedback(CrateHaptics.detent, trigger: ticks)
         .sensoryFeedback(CrateHaptics.end, trigger: bumps)
+        #endif
         // What's in front has to be the record chosen. The cards can change under it, as the
         // history arrives and Motif Radio joins them in the middle, songs are dealt to either
         // side, and the page's width is only known after the first layout, which moves the
@@ -256,35 +297,42 @@ struct Crate: View {
                 front = leadID ?? cards.first?.id
             }
             guard let front else { return }
+            isRowChanging = true
             var instant = Transaction()
             instant.disablesAnimations = true
-            withTransaction(instant) { proxy.scrollTo(front, anchor: .center) }
+            withTransaction(instant) { position.scrollTo(id: front, anchor: .center) }
             // The row's room either side comes from the width, known only after the first
             // layout, and a jump before it lands short: once more after this layout.
             Task { @MainActor in
-                withTransaction(instant) { proxy.scrollTo(front, anchor: .center) }
+                withTransaction(instant) { position.scrollTo(id: front, anchor: .center) }
                 if !isPlaced {
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { isPlaced = true }
                 }
             }
-            keepChosenInMiddle(proxy)
-        }
+            keepChosenInMiddle()
         }
         .scrollTargetBehavior(CrateSnap(pitch: side + spacing, start: flickStart))
         .scrollIndicators(.hidden)
         .frame(height: side + Self.shadowRoom * 2)
         .opacity(isPlaced ? 1 : 0)
         // The records farthest out fade into the page rather than stopping at its edge.
-        .mask {
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.09),
-                        .init(color: .black, location: 0.91), .init(color: .clear, location: 1)],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        }
+        .mask { Self.edgeFade }
         .padding(.vertical, -Self.shadowRoom)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // To VoiceOver the crate is one control, flipped with a swipe up or down as a picker
+        // is: only the records near the middle are drawn, and the one in front is what counts.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("For You")
+        .accessibilityValue(frontCard(items).map { record(for: $0).accessibilityTitle } ?? String(localized: "Finding More Songs"))
+        .accessibilityHint(frontCard(items).map { record(for: $0).frontHint } ?? "")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: step(1)
+            case .decrement: step(-1)
+            @unknown default: break
+            }
+        }
+        .accessibilityAction { openFront(items) }
         #if os(macOS)
         // The keyboard flips through the crate, as the arrows did in Cover Flow.
         .focusable()
@@ -294,10 +342,13 @@ struct Crate: View {
         .onKeyPress(.rightArrow) { step(1); return .handled }
         // Return opens the front record, as a click does.
         .onKeyPress(.return) {
-            if let card = items.first(where: { $0.id == front }) { open(record(for: card)) }
+            openFront(items)
             return .handled
         }
-        .overlay { if isHovering { hoverArrows(items) } }
+        .overlay {
+            ZStack { if isHovering { hoverArrows(items) } }
+                .animation(PlayMotion.hover, value: isHovering)
+        }
         .overlay(alignment: .center) {
             // The system's ring goes around the whole crate; this one goes around the record
             // the keys act on. Drawn only for keyboard navigation, as the system draws its
@@ -343,6 +394,17 @@ struct Crate: View {
 
     // MARK: - Moving
 
+    private func feel(_ kind: CrateHaptics.Kind) {
+        #if os(macOS)
+        CrateHaptics.play(kind)
+        #else
+        switch kind {
+        case .detent: ticks += 1
+        case .end: bumps += 1
+        }
+        #endif
+    }
+
     private func step(_ by: Int) {
         hasMoved = true
         let items = items
@@ -353,12 +415,28 @@ struct Crate: View {
         let next = min(max(0, index + by), items.count - 1)
         guard next != index else { return }
         // Quick, so a held arrow key riffles through the records as Cover Flow's did.
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) { front = items[next].id }
+        choose(items[next].id, animation: .snappy(duration: 0.24))
     }
 
     private func move(to id: String) {
         hasMoved = true
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) { front = id }
+        choose(id, animation: .smooth(duration: 0.35))
+    }
+
+    /// Brings a record to the front, sliding the crate along to it.
+    private func choose(_ id: String, animation: Animation) {
+        withAnimation(reduceMotion ? nil : animation) {
+            front = id
+            position.scrollTo(id: id, anchor: .center)
+        }
+    }
+
+    private func frontCard(_ items: [ForYouCard]) -> ForYouCard? {
+        items.first { $0.id == front }
+    }
+
+    private func openFront(_ items: [ForYouCard]) {
+        if let card = frontCard(items) { open(record(for: card)) }
     }
 
     private func open(_ record: CrateRecord) {
@@ -373,6 +451,15 @@ struct Crate: View {
 
     // MARK: - Geometry
 
+    /// The crate's edges, fading into the page. ``CrateFan/depth(width:side:)`` counts only
+    /// the records inside it.
+    static let edgeFade = LinearGradient(
+        stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.09),
+                .init(color: .black, location: 0.91), .init(color: .clear, location: 1)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
     static let shadowRadius: CGFloat = 20
     static let shadowDrop: CGFloat = 12
     /// Room above and below the records for their shadow, inside the scroll view's clip and
@@ -380,13 +467,15 @@ struct Crate: View {
     /// that much further down: any less and the shadow stops at a hard line across the page.
     static let shadowRoom: CGFloat = shadowDrop + shadowRadius * 2
 
+    private var side: CGFloat { Self.side(for: width) }
+
     /// A cover's side. A wide Mac window gets bigger records, so the crate still leads the
     /// page on an ultra-wide display rather than sitting small in the middle of it.
-    private var side: CGFloat {
+    static func side(for width: CGFloat) -> CGFloat {
         #if os(macOS)
-        min(max(Self.side, (width * 0.2).rounded()), 360)
+        min(max(side, (width * 0.2).rounded()), 360)
         #else
-        Self.side
+        side
         #endif
     }
 
@@ -423,26 +512,43 @@ struct Crate: View {
     /// dealt in quick succession, or the first layouts, can leave a jump landing on a row that
     /// has since grown, a few places short: once the layout has settled, it's checked against
     /// what's really in the middle and put right.
-    private func keepChosenInMiddle(_ proxy: ScrollViewProxy) {
+    private func keepChosenInMiddle() {
         settling?.cancel()
         settling = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled, scrollPhase == .idle, let front,
-                  let chosen = place(of: front), centered != chosen
-            else { return }
+            guard !Task.isCancelled, scrollPhase == .idle else { return }
+            defer { isRowChanging = false }
+            guard let front, let chosen = place(of: front), centered != chosen else { return }
             var instant = Transaction()
             instant.disablesAnimations = true
-            withTransaction(instant) { proxy.scrollTo(front, anchor: .center) }
+            withTransaction(instant) { position.scrollTo(id: front, anchor: .center) }
+        }
+    }
+
+    /// The record at a place in the row, counting the quiet one at the start.
+    private func id(atPlace place: Int) -> String? {
+        let items = items
+        switch row(items).slot(at: place) {
+        case .leadingEnd: return CrateEnd.leading
+        case .record(let index): return items[index].id
+        case .trailingEnd: return CrateEnd.trailing
+        case nil: return nil
         }
     }
 
     /// Where a record is in the row now, counting the quiet one at the start.
     private func place(of id: String) -> Int? {
-        let first = showsLeadingEnd ? 1 : 0
-        if id == CrateEnd.leading { return showsLeadingEnd ? 0 : nil }
         let items = items
-        if id == CrateEnd.trailing { return showsTrailingEnd ? items.count + first : nil }
-        return items.firstIndex { $0.id == id }.map { $0 + first }
+        let row = row(items)
+        switch id {
+        case CrateEnd.leading: return row.place(of: .leadingEnd)
+        case CrateEnd.trailing: return row.place(of: .trailingEnd)
+        default: return items.firstIndex { $0.id == id }.flatMap { row.place(of: .record($0)) }
+        }
+    }
+
+    private func row(_ items: [ForYouCard]) -> CrateRow {
+        CrateRow(records: items.count, hasLeadingEnd: showsLeadingEnd, hasTrailingEnd: showsTrailingEnd)
     }
 
     /// A record in the row: in front, a click or tap opens or plays it; beside it, brings it
@@ -461,6 +567,12 @@ struct Crate: View {
         }
         .buttonStyle(CrateCoverStyle(isFront: isFront))
         .frame(width: side, height: side)
+        #if os(iOS)
+        // Lifted on a long press as the cover itself, square and upright, not the room
+        // around it for its shadow.
+        .contentShape(.contextMenuPreview, .rect(cornerRadius: CoverImage.radius(for: side), style: .continuous))
+        #endif
+        .contextMenu { CrateMenu(record: record, showsTuner: $showsTuner) }
         // Room for the shadow, inside the scroll view's clip.
         .padding(.vertical, Self.shadowRoom)
         .visualEffect { content, proxy in
@@ -468,9 +580,6 @@ struct Crate: View {
         }
         // The record in front is on top of the stack, and each behind it lower.
         .zIndex(-Double(abs(distance)))
-        .accessibilityLabel(record.accessibilityTitle)
-        .accessibilityHint(isFront ? record.frontHint : String(localized: "Brings it to the front"))
-        .contextMenu { CrateMenu(record: record, showsTuner: $showsTuner) }
     }
 
     /// The quiet record at an end while more songs are looked for: the shape of a cover,
@@ -486,7 +595,81 @@ struct Crate: View {
             }
             .zIndex(-Double(abs(distance)))
             .id(id)
-            .accessibilityLabel("Finding More Songs")
+    }
+}
+
+/// The crate's shape while Play's mixes are made: blank records fanned just as the real ones
+/// will be, and the lines under them, so nothing on the page moves when they arrive. Nothing
+/// made up on them.
+struct CratePlaceholder: View {
+    @State private var width: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let side = Crate.side(for: width)
+        let (spacing, stillness) = (Crate.spacing, reduceMotion)
+        let depth = Int(CrateFan.depth(width: width, side: side))
+        let shape = RoundedRectangle(cornerRadius: CoverImage.radius(for: side), style: .continuous)
+        VStack(spacing: Crate.detailsGap) {
+            ZStack {
+                ForEach(-depth...depth, id: \.self) { distance in
+                    // On the page's own colour first, so where one tucks behind another the
+                    // fills don't add up to a darker band.
+                    shape.fill(.background)
+                        .overlay { shape.fill(Color.placeholderFill) }
+                        .frame(width: side, height: side)
+                        .visualEffect { content, _ in
+                            content.fanned(by: Double(distance), side: side, spacing: spacing, depth: Double(depth), reduceMotion: stillness, dimming: 0.3)
+                        }
+                        // Where the row would have laid it, which the fan moves it in from.
+                        .offset(x: Double(distance) * (side + spacing))
+                        .zIndex(-Double(abs(distance)))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: side)
+            .mask { Crate.edgeFade }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            VStack(spacing: 6) {
+                CrateCaption(eyebrow: "Weekend Morning", title: "Morning Mix", reason: "What you play most on weekend mornings")
+                Button {} label: {
+                    Label("Play", systemImage: "play.fill")
+                        .frame(minWidth: 96)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .hidden()
+                .overlay { Capsule().fill(Color.placeholderFill) }
+                .padding(.top, 8)
+            }
+            // Redacted lines are drawn fainter than their colour: as strong as the records.
+            .foregroundStyle(.secondary)
+            .redacted(reason: .placeholder)
+            .padding(.horizontal, PlayMetrics.margin)
+            // Where the page dots go.
+            Color.clear.frame(height: 14)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+#Preview("Crate Loading") {
+    ScrollView {
+        CratePlaceholder()
+    }
+}
+
+/// Where the crate is scrolled to, with the sizes that tell a scroll from the row or the
+/// window changing under it.
+private struct CrateScroll: Equatable {
+    let position: CratePosition
+    let rowWidth: CGFloat
+    let width: CGFloat
+
+    func isSameSize(as other: CrateScroll) -> Bool {
+        rowWidth == other.rowWidth && width == other.width
     }
 }
 
@@ -508,13 +691,18 @@ struct CrateSnap: ScrollTargetBehavior {
 
 /// What the crate feels like to flip: a detent as each record settles in the middle, as a
 /// picker's wheel has, and a firmer knock against either end. On the Mac they come through
-/// a Force Touch trackpad, while a finger is on it.
+/// a Force Touch trackpad, while fingers are on it.
 enum CrateHaptics {
+    enum Kind { case detent, end }
+
     #if os(macOS)
-    static let tick = SensoryFeedback.alignment
-    static let end = SensoryFeedback.levelChange
+    /// Played in the frame the record reaches the middle, not once the view has updated: the
+    /// trackpad is felt only while fingers are on it, and a swipe lifts off moments later.
+    @MainActor static func play(_ kind: Kind) {
+        NSHapticFeedbackManager.defaultPerformer.perform(kind == .detent ? .alignment : .levelChange, performanceTime: .now)
+    }
     #else
-    static let tick = SensoryFeedback.selection
+    static let detent = SensoryFeedback.selection
     static let end = SensoryFeedback.impact(flexibility: .rigid, intensity: 0.7)
     #endif
 }
@@ -532,7 +720,10 @@ private extension VisualEffect {
     /// behind the one nearer the front, turned a touch away, and each further out a step
     /// smaller and darker. Scrolling slides a record out from behind the others and up to
     /// the front. Under Reduce Motion nothing turns.
-    nonisolated func fanned(by distance: Double, side: CGFloat, spacing: CGFloat, depth: Double, reduceMotion: Bool) -> some VisualEffect {
+    ///
+    /// - Parameter dimming: How much darker each step out gets, from the covers' own 1. Blank
+    ///   records, already grey, take a touch: darkened as much, they'd go black in Dark Mode.
+    nonisolated func fanned(by distance: Double, side: CGFloat, spacing: CGFloat, depth: Double, reduceMotion: Bool, dimming: Double = 1) -> some VisualEffect {
         let a = min(abs(distance), depth + 1)
         let sign: Double = distance < 0 ? -1 : 1
         let near = min(a, 1)
@@ -544,7 +735,7 @@ private extension VisualEffect {
         return self
             .rotation3DEffect(.degrees(reduceMotion ? 0 : -sign * near * 12), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
             .scaleEffect(CrateFan.scale(a))
-            .brightness(max(-0.4, -0.1 * near - 0.07 * far))
+            .brightness(max(-0.4, -0.1 * near - 0.07 * far) * dimming)
             // The last that fits in full; the one past it fading as it comes or goes.
             .opacity(min(1, max(0, depth + 1 - abs(distance))))
             .offset(x: shift)
@@ -574,28 +765,10 @@ private struct CrateDetails: View {
     let record: CrateRecord
     @Binding var showsTuner: Bool
     @Environment(PlayerModel.self) private var player
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(record.eyebrow)
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
-                .kerning(0.6)
-                .foregroundStyle(.secondary)
-            Text(record.title)
-                .font(titleFont)
-                .multilineTextAlignment(.center)
-                // A song's name can run long; a mix's never does.
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-            Text(record.reason)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                // The reason is why it's here: never cut short at the largest sizes.
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 360)
+            CrateCaption(eyebrow: record.eyebrow, title: record.title, reason: record.reason)
             HStack(spacing: 10) {
                 Button {
                     if record.isPlayingThis { player.togglePlayPause() } else { record.play() }
@@ -641,17 +814,55 @@ private struct CrateDetails: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var titleFont: Font {
+    private var primaryTitle: LocalizedStringKey {
+        guard record.isPlayingThis else { return "Play" }
+        return player.isPlaying ? "Pause" : "Resume"
+    }
+}
+
+/// The words under the crate: why the front record is there, its name, and a line about it.
+/// The same height whichever record is in front, so flipping never moves the buttons or the
+/// page below: the name on one line, cut short as Music's Now Playing is, and room for two
+/// about it. At the largest text sizes nothing is cut short, and the page moves instead.
+private struct CrateCaption: View {
+    let eyebrow: String
+    let title: String
+    let reason: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let isLarge = dynamicTypeSize.isAccessibilitySize
+        VStack(spacing: 6) {
+            Text(eyebrow)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .kerning(0.6)
+                .foregroundStyle(.secondary)
+                .lineLimit(isLarge ? nil : 1)
+            Text(title)
+                .font(Self.titleFont)
+                .lineLimit(isLarge ? nil : 1)
+            Group {
+                if isLarge {
+                    Text(reason)
+                } else {
+                    Text(reason).lineLimit(2, reservesSpace: true)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 360)
+        }
+        .multilineTextAlignment(.center)
+    }
+
+    private static var titleFont: Font {
         #if os(macOS)
         .system(size: 26, weight: .bold)
         #else
         .title2.bold()
         #endif
-    }
-
-    private var primaryTitle: LocalizedStringKey {
-        guard record.isPlayingThis else { return "Play" }
-        return player.isPlaying ? "Pause" : "Resume"
     }
 }
 
@@ -660,17 +871,11 @@ private struct CrateDetails: View {
 private struct CrateEndDetails: View {
     var body: some View {
         VStack(spacing: 6) {
-            Text("New to You")
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
-                .kerning(0.6)
-                .foregroundStyle(.secondary)
-            Text("Finding More Songs")
-                .font(.title2.bold())
-            Text("Songs you've never played, like the ones you do")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            CrateCaption(
+                eyebrow: String(localized: "New to You"),
+                title: String(localized: "Finding More Songs"),
+                reason: String(localized: "Songs you've never played, like the ones you do")
+            )
             Button {} label: {
                 Label("Play", systemImage: "play.fill")
                     .frame(minWidth: 96)
@@ -769,7 +974,7 @@ private struct PageDots: View {
     let select: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             ForEach(ids, id: \.self) { id in
                 Button {
                     select(id)
@@ -777,15 +982,26 @@ private struct PageDots: View {
                     Circle()
                         .fill(id == current ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .frame(width: 6, height: 6)
-                        .padding(4)
-                        .contentShape(.circle)
+                        // Easy to hit, where each dot is so small: the gap to the next and a
+                        // finger's height, the dots as far apart as ever.
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, Self.verticalRoom)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityHidden(true)
             }
         }
         .animation(.easeOut(duration: 0.2), value: current)
+        // The dots' room above and below is for fingers, not for the page's rhythm.
+        .padding(.vertical, 4 - Self.verticalRoom)
     }
+
+    #if os(macOS)
+    private static let verticalRoom: CGFloat = 4
+    #else
+    private static let verticalRoom: CGFloat = 12
+    #endif
 }
 
 /// The front record's colour, washed across the top of the page behind the large title, and

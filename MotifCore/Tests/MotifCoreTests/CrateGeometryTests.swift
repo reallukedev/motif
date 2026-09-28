@@ -137,6 +137,57 @@ struct CrateGeometryTests {
         #expect(CrateRest.offset(for: pitch * 9, from: nil, pitch: pitch, last: last) == last)
     }
 
+    // MARK: - The row
+
+    @Test("Without quiet records at the ends, each place is the record at that index")
+    func rowWithoutEnds() {
+        let row = CrateRow(records: 3, hasLeadingEnd: false, hasTrailingEnd: false)
+        #expect(row.places == 3)
+        #expect((0..<3).map(row.slot(at:)) == [.record(0), .record(1), .record(2)])
+        #expect(row.slot(at: -1) == nil)
+        #expect(row.slot(at: 3) == nil)
+        #expect(row.place(of: .leadingEnd) == nil)
+        #expect(row.place(of: .trailingEnd) == nil)
+    }
+
+    @Test("The quiet records hold the first and last places while more songs are looked for")
+    func rowWithEnds() {
+        let row = CrateRow(records: 3, hasLeadingEnd: true, hasTrailingEnd: true)
+        #expect(row.places == 5)
+        #expect((0..<5).map(row.slot(at:)) == [.leadingEnd, .record(0), .record(1), .record(2), .trailingEnd])
+        #expect(row.slot(at: 5) == nil)
+    }
+
+    @Test("Finding a place and reading it back gives the same thing, either way round", arguments: [
+        (leading: false, trailing: false),
+        (leading: true, trailing: false),
+        (leading: false, trailing: true),
+        (leading: true, trailing: true),
+    ])
+    func rowRoundTrips(leading: Bool, trailing: Bool) throws {
+        let row = CrateRow(records: 6, hasLeadingEnd: leading, hasTrailingEnd: trailing)
+        for place in 0..<row.places {
+            let slot = try #require(row.slot(at: place))
+            #expect(row.place(of: slot) == place)
+        }
+    }
+
+    @Test("A record that isn't in the row has no place")
+    func rowMissingRecord() {
+        let row = CrateRow(records: 2, hasLeadingEnd: true, hasTrailingEnd: false)
+        #expect(row.place(of: .record(2)) == nil)
+        #expect(row.place(of: .record(-1)) == nil)
+    }
+
+    @Test("An empty row has only its quiet records")
+    func emptyRow() {
+        let row = CrateRow(records: 0, hasLeadingEnd: true, hasTrailingEnd: true)
+        #expect(row.places == 2)
+        #expect(row.slot(at: 0) == .leadingEnd)
+        #expect(row.slot(at: 1) == .trailingEnd)
+        #expect(CrateRow(records: -3, hasLeadingEnd: false, hasTrailingEnd: false).places == 0)
+    }
+
     @Test("A crate of one record always rests on it")
     func singleRecord() {
         #expect(CrateRest.offset(for: pitch * 0.8, from: 0, pitch: pitch, last: 0) == 0)

@@ -245,8 +245,7 @@ struct PlayScreen: View {
             }
             .padding(.horizontal, PlayMetrics.margin)
         } else {
-            HeroPlaceholder()
-                .padding(.horizontal, PlayMetrics.margin)
+            CratePlaceholder()
         }
     }
 
@@ -427,16 +426,6 @@ struct PlayStateCard<Actions: View>: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.cardFill, in: .rect(cornerRadius: Metrics.cardRadius, style: .continuous))
-    }
-}
-
-/// The hero's shape while the history is first read.
-private struct HeroPlaceholder: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
-            .fill(Color.cardFill)
-            .frame(height: 320)
-            .accessibilityHidden(true)
     }
 }
 
