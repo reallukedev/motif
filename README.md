@@ -251,7 +251,10 @@ The code holds a `motif://` link until the App Clip is live, so only iPhones wit
 join. To let anyone join:
 
 1. Create the App Clip's App ID, `<bundle id>.Clip`. Automatic signing does this on the
-   first device build of the **Motif (iOS)** scheme, which embeds **MotifClip (iOS)**.
+   first device build of the **Motif (iOS)** scheme in Xcode, which embeds
+   **MotifClip (iOS)**. Do it there once before an Xcode Cloud build: Xcode Cloud can't
+   register a new identifier. The app's own entitlements files name no App Clip; Xcode adds
+   that entitlement when it archives.
 2. Upload a build to App Store Connect. On the app's version page, set up the **default App
    Clip experience**: a header image, the subtitle "Add songs to what's playing" and the
    action **Open**. App Store Connect makes its default link,

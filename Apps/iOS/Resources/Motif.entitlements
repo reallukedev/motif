@@ -42,11 +42,10 @@
     <key>com.apple.developer.group-session</key>
     <true/>
 
-    <!-- Motif's App Clip, which passengers without Motif open from SharePlay's code. -->
-    <key>com.apple.developer.associated-appclip-app-identifiers</key>
-    <array>
-        <string>$(AppIdentifierPrefix)$(MOTIF_BUNDLE_ID).Clip</string>
-    </array>
+    <!-- Motif's App Clip needs no key here. Xcode adds
+         com.apple.developer.associated-appclip-app-identifiers itself when it archives the app
+         with the Clip embedded. Written by hand, automatic signing asks the portal to put it
+         in the profile as a capability, and provisioning fails. -->
 
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>

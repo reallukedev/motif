@@ -67,12 +67,12 @@
 	<string>public.app-category.music</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>MotifAppGroupIdentifier</key>
-	<string>$(MOTIF_APP_GROUP)</string>
 	<key>MotifAppClipBundleID</key>
 	<string>$(MOTIF_BUNDLE_ID).Clip</string>
 	<key>MotifAppClipIsLive</key>
 	<string>$(MOTIF_APP_CLIP_LIVE)</string>
+	<key>MotifAppGroupIdentifier</key>
+	<string>$(MOTIF_APP_GROUP)</string>
 	<key>MotifCloudContainerIdentifier</key>
 	<string>$(MOTIF_ICLOUD_CONTAINER)</string>
 	<key>MotifLastFMAPIKey</key>

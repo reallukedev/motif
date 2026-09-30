@@ -536,6 +536,9 @@
     "Behind %@" : {
 
     },
+    "Blocked Artists" : {
+
+    },
     "Browse by Mood" : {
 
     },
@@ -574,6 +577,9 @@
 
     },
     "Click a %@ to see its chart." : {
+
+    },
+    "Click to show controls" : {
 
     },
     "Coming Soon" : {
@@ -984,9 +990,6 @@
     "Motif syncs the list of songs on your server each day, so Motif Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them." : {
 
     },
-    "Move the pointer to show controls" : {
-
-    },
     "Music Folder" : {
 
     },
@@ -1025,6 +1028,9 @@
       }
     },
     "Night owl: %@%% of your listening happens after 10 PM." : {
+
+    },
+    "No Blocked Artists" : {
 
     },
     "No listening" : {
