@@ -11,6 +11,13 @@ import MotifMusic
 /// The host tells the group what's on whenever it changes; a guest asks for a song, the host
 /// looks it up the way its player would play it and answers. The rules for what goes in live
 /// in MotifCore (``SharePlayGate``, ``SharePlayGuest``); this is the plumbing around them.
+///
+/// People join one of two ways, and the host treats them the same:
+/// - In Messages, from the share sheet: a real SharePlay session.
+/// - By scanning the host's code, shown in the car or on its iPhone: Apple keeps the car's
+///   SharePlay code to Music, so Motif shows its own, and the passenger's Motif connects
+///   straight to the host's iPhone nearby (see ``SharePlayInvite`` and
+///   ``SharePlayNearbyHost``).
 @MainActor
 @Observable
 final class SharePlayController {
@@ -28,18 +35,66 @@ final class SharePlayController {
 
     // MARK: Host
 
-    /// People who've joined, across every session this iPhone started.
+    /// People who've joined, across every session this iPhone started and its code.
     private(set) var guestCount = 0
     /// Which songs in Up Next someone at SharePlay added.
     private(set) var ledger = SharePlayLedger()
 
+    /// Whether the people nearby can join with this iPhone's code.
+    enum CodeStatus: Equatable {
+        /// No code showing, and no one joined by one.
+        case off
+        case starting
+        case ready
+        /// Local Network is off for Motif, so nothing nearby can reach it.
+        case needsLocalNetwork
+        /// Couldn't offer itself nearby. It tries again on its own.
+        case failed
+    }
+
+    private(set) var codeStatus: CodeStatus = .off
+    /// The code's invite, kept until SharePlay ends, so a code shown twice is the same code
+    /// and anyone still looking with it finds this iPhone.
+    private(set) var invite: SharePlayInvite?
+
+    /// The code's sheet is up on this iPhone.
+    var showsCode = false
+
+    /// Where the code is showing.
+    enum CodeViewer: Hashable {
+        case car
+        case phone
+    }
+
     // MARK: Guest
 
-    private(set) var guest = SharePlayGuest()
+    /// What the host has said, and what became of this person's picks.
+    var guest: SharePlayGuest { codeGuest?.guest ?? sessionGuest }
     /// The guest page is up. Set as a session arrives and cleared as it's left.
     var showsGuestPage = false
     /// Joined, but the host hasn't answered for a while.
-    private(set) var isSlowToConnect = false
+    var isSlowToConnect: Bool { codeGuest?.isSlowToConnect ?? sessionIsSlow }
+
+    /// How this iPhone joined someone else's SharePlay.
+    enum GuestConnection: Equatable {
+        /// Invited in Messages.
+        case sharePlay
+        /// Scanned their code, and connected straight to their iPhone.
+        case code
+    }
+
+    private(set) var guestConnection: GuestConnection = .sharePlay
+    /// Joined by code, and the connection to the host dropped: looking for it again.
+    var isReconnecting: Bool { codeGuest?.isReconnecting ?? false }
+    /// Joined by code, but Local Network is off for Motif here and there's no other way.
+    var guestNeedsLocalNetwork: Bool { codeGuest?.needsLocalNetwork ?? false }
+    /// Someone else's SharePlay, joined by code.
+    private(set) var codeGuest: SharePlayCodeGuest?
+    /// Someone else's SharePlay, joined in Messages.
+    private var sessionGuest = SharePlayGuest()
+    private var sessionIsSlow = false
+    /// A code scanned while this iPhone hosts its own SharePlay, waiting on whether to end it.
+    var pendingInvite: SharePlayInvite?
 
     @ObservationIgnored private weak var model: AppModel?
     @ObservationIgnored private var listener: Task<Void, Never>?
@@ -48,6 +103,18 @@ final class SharePlayController {
     @ObservationIgnored private var snapshotFollower: Task<Void, Never>?
     @ObservationIgnored private var gate = SharePlayGate()
     @ObservationIgnored private var broadcast = SharePlayBroadcast()
+    /// Guests in sessions started from Messages.
+    @ObservationIgnored private var sessionGuestCount = 0
+    @ObservationIgnored private var codeHost: SharePlayCodeHost?
+    @ObservationIgnored private var codeGuests: Set<UUID> = []
+    /// Someone has joined by code since it started, so it may be someone coming back.
+    @ObservationIgnored private var hadCodeGuests = false
+    @ObservationIgnored private var codeViewers: Set<CodeViewer> = []
+    @ObservationIgnored private var idleStop: Task<Void, Never>?
+    @ObservationIgnored private var guestInvite: SharePlayInvite?
+    /// The relay, where the build has one.
+    @ObservationIgnored private let relay = SharePlayRelayConfig.main
+    @ObservationIgnored private var foregroundObserver: (any NSObjectProtocol)?
     #if DEBUG
     /// Sample data's pretend sessions, which the simulator can't run for real.
     @ObservationIgnored private(set) var demo: SharePlayDemo?
@@ -88,6 +155,14 @@ final class SharePlayController {
                 self?.receive(session)
             }
         }
+        // iOS stops listening nearby while Motif is suspended: back in the foreground, the
+        // code works again straight away.
+        foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.codeHost?.resume()
+                self?.codeGuest?.resume()
+            }
+        }
     }
 
     private func receive(_ session: GroupSession<SharePlayActivity>) {
@@ -105,14 +180,105 @@ final class SharePlayController {
         role == .host && ledger.contains(track.songIdentity)
     }
 
-    /// Ends SharePlay for everyone.
+    /// Ends SharePlay for everyone, in Messages and by code. A code shown after this is a
+    /// new one.
     func endHosting() {
         for link in hostLinks.values {
+            link.cancel()
             link.session.end()
         }
+        hostLinks = [:]
+        stopCode(sayingGoodbye: true)
+        invite = nil
+        stopHosting()
+    }
+
+    // MARK: - The code
+
+    /// Shows the code somewhere: this iPhone offers itself nearby for as long as the code
+    /// shows, and for as long as anyone who joined with it stays.
+    func showCode(on viewer: CodeViewer) {
+        codeViewers.insert(viewer)
+        idleStop?.cancel()
+        idleStop = nil
         #if DEBUG
-        if demo != nil { stopHosting() }
+        if let demo {
+            invite = invite ?? SharePlayInvite()
+            codeStatus = demo.scene == "host.nolocalnetwork" ? .needsLocalNetwork : .ready
+            if role != .host { pretend(role: .host) }
+            return
+        }
         #endif
+        if let codeHost {
+            codeHost.resume()
+            return
+        }
+        // Hosting and picking for someone else at once would mix up whose queue is whose.
+        if role == .guest { leave() }
+        let invite = invite ?? SharePlayInvite()
+        self.invite = invite
+        let host = SharePlayCodeHost(invite: invite, relay: relay)
+        host.onStatus = { [weak self] status in self?.codeStatus = CodeStatus(status) }
+        host.onGuestsChanged = { [weak self] guests in self?.codeGuestsChanged(guests) }
+        host.onMessage = { [weak self, weak host] message, id in
+            self?.hostReceived(message, from: id) { answer in host?.send(answer, to: id) }
+        }
+        codeHost = host
+        codeStatus = .starting
+        role = .host
+        host.start()
+        followPlayer()
+    }
+
+    /// The code has gone from somewhere. Once it shows nowhere and no one's joined with it,
+    /// this iPhone stops offering itself.
+    func hideCode(on viewer: CodeViewer) {
+        guard codeViewers.remove(viewer) != nil else { return }
+        stopCodeIfUnused()
+    }
+
+    private func stopCodeIfUnused() {
+        guard codeViewers.isEmpty, codeHost != nil, codeGuests.isEmpty else { return }
+        guard hadCodeGuests else {
+            stopCode(sayingGoodbye: false)
+            return
+        }
+        // Everyone who joined has gone, perhaps only for a moment (a phone locked, a tunnel):
+        // their way back stays open for a while.
+        idleStop?.cancel()
+        idleStop = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(120))
+            guard let self, !Task.isCancelled, codeViewers.isEmpty, codeGuests.isEmpty else { return }
+            stopCode(sayingGoodbye: false)
+        }
+    }
+
+    private func stopCode(sayingGoodbye: Bool) {
+        idleStop?.cancel()
+        idleStop = nil
+        guard let codeHost else { return }
+        codeHost.stop(sayingGoodbye: sayingGoodbye)
+        self.codeHost = nil
+        codeGuests = []
+        hadCodeGuests = false
+        codeStatus = .off
+        updateGuestCount()
+        if hostLinks.isEmpty { stopHosting() }
+    }
+
+    private func codeGuestsChanged(_ guests: Set<UUID>) {
+        codeGuests = guests
+        if !guests.isEmpty {
+            hadCodeGuests = true
+            idleStop?.cancel()
+            idleStop = nil
+        }
+        updateGuestCount()
+        if guests.isEmpty { stopCodeIfUnused() }
+    }
+
+    private func updateGuestCount() {
+        guestCount = sessionGuestCount + codeGuests.count
     }
 
     private func host(_ session: GroupSession<SharePlayActivity>) {
@@ -124,8 +290,12 @@ final class SharePlayController {
         role = .host
         link.tasks.append(Task { [weak self, weak link] in
             guard let link else { return }
-            for await (message, context) in link.messenger.messages(of: SharePlayMessage.self) {
-                self?.hostReceived(message, from: context.source, on: link)
+            let messenger = link.messenger
+            for await (message, context) in messenger.messages(of: SharePlayMessage.self) {
+                let participant = context.source
+                self?.hostReceived(message, from: participant.id) { answer in
+                    Task { try? await messenger.send(answer, to: .only(participant)) }
+                }
             }
         })
         link.tasks.append(Task { [weak self] in
@@ -147,12 +317,13 @@ final class SharePlayController {
 
     private func participantsChanged(_ participants: Set<Participant>, in session: GroupSession<SharePlayActivity>) {
         let joined = participants.subtracting([session.localParticipant]).count
-        let before = guestCount
-        guestCount = hostLinks.values.reduce(0) { total, link in
+        let before = sessionGuestCount
+        sessionGuestCount = hostLinks.values.reduce(0) { total, link in
             total + (link.session === session ? joined : link.session.activeParticipants.subtracting([link.session.localParticipant]).count)
         }
+        updateGuestCount()
         // Someone new hears what's on straight away, even if they don't ask.
-        if guestCount > before {
+        if sessionGuestCount > before {
             broadcast.resend()
             sendSnapshot()
         }
@@ -160,13 +331,18 @@ final class SharePlayController {
 
     private func hostSessionEnded(_ key: ObjectIdentifier) {
         hostLinks.removeValue(forKey: key)?.cancel()
-        guard hostLinks.isEmpty else { return }
+        sessionGuestCount = hostLinks.values.reduce(0) { $0 + $1.session.activeParticipants.subtracting([$1.session.localParticipant]).count }
+        updateGuestCount()
+        // Still offered by code: those guests carry on.
+        guard hostLinks.isEmpty, codeHost == nil else { return }
         stopHosting()
     }
 
     private func stopHosting() {
-        role = .idle
+        if role == .host { role = .idle }
+        codeStatus = .off
         guestCount = 0
+        sessionGuestCount = 0
         ledger = SharePlayLedger()
         gate = SharePlayGate()
         broadcast = SharePlayBroadcast()
@@ -181,8 +357,12 @@ final class SharePlayController {
             let snapshots = Observations { [weak self] in self?.currentSnapshot() }
             for await snapshot in snapshots {
                 guard let self, let snapshot else { continue }
-                // Songs from SharePlay that have played and gone are no longer marked.
-                ledger.prune(keeping: snapshot.queuedIdentities.union(Set(player.upNext.map(\.songIdentity))))
+                // Songs from SharePlay that have played and gone are no longer marked. Set only
+                // when that changes it: the snapshot reads the ledger, so setting it every time
+                // would bring the snapshot straight back, forever.
+                var pruned = ledger
+                pruned.prune(keeping: snapshot.queuedIdentities.union(Set(player.upNext.map(\.songIdentity))))
+                if pruned != ledger { ledger = pruned }
                 sendSnapshot(snapshot)
             }
         }
@@ -194,6 +374,7 @@ final class SharePlayController {
             let messenger = link.messenger
             Task { try? await messenger.send(SharePlayMessage.snapshot(next)) }
         }
+        codeHost?.broadcast(.snapshot(next))
     }
 
     /// What's on, as the group sees it.
@@ -227,17 +408,16 @@ final class SharePlayController {
         return model.musicSource == .yourMusic
     }
 
-    private func hostReceived(_ message: SharePlayMessage, from participant: Participant, on link: Link) {
+    /// A guest said something, in Messages or by code; `answer` says something back to them
+    /// alone.
+    private func hostReceived(_ message: SharePlayMessage, from participant: UUID, answer: @escaping (SharePlayMessage) -> Void) {
         switch message {
         case .hello:
             guard let snapshot = currentSnapshot() else { return }
-            let messenger = link.messenger
-            Task { try? await messenger.send(SharePlayMessage.snapshot(snapshot), to: .only(participant)) }
+            answer(.snapshot(snapshot))
         case .add(let request):
-            Task { await add(request, from: participant.id) { [messenger = link.messenger] reply in
-                Task { try? await messenger.send(SharePlayMessage.reply(reply), to: .only(participant)) }
-            } }
-        case .snapshot, .reply:
+            Task { await add(request, from: participant) { answer(.reply($0)) } }
+        case .snapshot, .reply, .ended:
             // Only the host says these.
             break
         }
@@ -349,10 +529,7 @@ final class SharePlayController {
         leaveQuietly()
         let link = Link(session: session)
         guestLink = link
-        guest = SharePlayGuest()
-        isSlowToConnect = false
-        role = .guest
-        showsGuestPage = true
+        resetGuest(joining: .sharePlay)
         link.tasks.append(Task { [weak self, weak link] in
             guard let link else { return }
             for await (message, _) in link.messenger.messages(of: SharePlayMessage.self) {
@@ -375,15 +552,23 @@ final class SharePlayController {
         session.join()
     }
 
+    private func resetGuest(joining connection: GuestConnection) {
+        sessionGuest = SharePlayGuest()
+        sessionIsSlow = false
+        guestConnection = connection
+        role = .guest
+        showsGuestPage = true
+    }
+
     /// Asks the host for what's on until it answers: its side may still be getting ready.
     private func sayHello() {
         guard let link = guestLink else { return }
         let messenger = link.messenger
         link.tasks.append(Task { [weak self] in
             for attempt in 0..<30 {
-                guard let self, guest.phase == .joining, !Task.isCancelled else { return }
+                guard let self, sessionGuest.phase == .joining, !Task.isCancelled else { return }
                 // Ten seconds without a word: likely one of the two is offline.
-                isSlowToConnect = attempt >= 5
+                sessionIsSlow = attempt >= 5
                 try? await messenger.send(SharePlayMessage.hello)
                 try? await Task.sleep(for: .seconds(2))
             }
@@ -392,34 +577,84 @@ final class SharePlayController {
 
     private func guestReceived(_ message: SharePlayMessage) {
         switch message {
-        case .snapshot(let snapshot): guest.receive(snapshot)
-        case .reply(let reply): guest.receive(reply)
+        case .snapshot(let snapshot): sessionGuest.receive(snapshot)
+        case .reply(let reply): sessionGuest.receive(reply)
+        case .ended: guestSessionEnded()
         case .hello, .add: break
         }
     }
 
+    // MARK: - Joining by code
+
+    /// Joins the SharePlay whose code was scanned. Scanned while this iPhone hosts its own,
+    /// it waits on whether to end that first (``pendingInvite``).
+    func join(_ invite: SharePlayInvite) {
+        // Its own code, scanned off its own screen or a photo of it.
+        if invite == self.invite { return }
+        if role == .guest, invite == guestInvite, guest.phase != .ended {
+            showsGuestPage = true
+            return
+        }
+        // Hosting with no one to leave behind, or waiting to come back: nothing to ask.
+        if role == .host, guestCount == 0, hostLinks.isEmpty, !hadCodeGuests {
+            endHosting()
+        }
+        if role == .host {
+            pendingInvite = invite
+            return
+        }
+        joinByCode(invite)
+    }
+
+    /// Ends this iPhone's own SharePlay, if it's still on, and joins the one whose code was
+    /// scanned.
+    func endHostingAndJoin() {
+        guard let invite = pendingInvite else { return }
+        pendingInvite = nil
+        if role == .host { endHosting() }
+        joinByCode(invite)
+    }
+
+    private func joinByCode(_ invite: SharePlayInvite) {
+        leaveQuietly()
+        guestInvite = invite
+        resetGuest(joining: .code)
+        let guest = SharePlayCodeGuest(invite: invite, relay: relay)
+        codeGuest = guest
+        #if DEBUG
+        if demo != nil { return }
+        #endif
+        guest.start()
+    }
+
     /// Sends a song to the host, once, however many times it's pressed.
     func add(_ song: SharePlaySong, placement: SharePlayPlacement) {
-        guard let request = guest.add(song, placement: placement, at: .now) else { return }
         #if DEBUG
         if let demo {
-            demo.answer(request, in: self)
+            var request: SharePlayAddRequest?
+            pretendGuest { request = $0.add(song, placement: placement, at: .now) }
+            if let request { demo.answer(request, in: self) }
             return
         }
         #endif
+        if let codeGuest {
+            codeGuest.add(song, placement: placement)
+            return
+        }
+        guard let request = sessionGuest.add(song, placement: placement, at: .now) else { return }
         guard let messenger = guestLink?.messenger else {
-            guest.failedToSend(request.id)
+            sessionGuest.failedToSend(request.id)
             return
         }
         Task {
             do {
                 try await messenger.send(SharePlayMessage.add(request))
             } catch {
-                guest.failedToSend(request.id)
+                sessionGuest.failedToSend(request.id)
             }
             // Gives up on it if the host never answers.
             try? await Task.sleep(for: .seconds(SharePlayGuest.answerTimeout))
-            guest.expire(at: .now)
+            sessionGuest.expire(at: .now)
         }
     }
 
@@ -431,10 +666,14 @@ final class SharePlayController {
     }
 
     private func leaveQuietly() {
-        guard let link = guestLink else { return }
-        link.cancel()
-        link.session.leave()
-        guestLink = nil
+        codeGuest?.stop()
+        codeGuest = nil
+        guestInvite = nil
+        if let link = guestLink {
+            link.cancel()
+            link.session.leave()
+            guestLink = nil
+        }
         if role == .guest { role = .idle }
     }
 
@@ -442,12 +681,15 @@ final class SharePlayController {
     private func guestSessionEnded() {
         guestLink?.cancel()
         guestLink = nil
-        guest.end()
+        sessionGuest.end()
     }
 
     /// Closes the page of a SharePlay that has ended.
     func closeEnded() {
         showsGuestPage = false
+        guestInvite = nil
+        codeGuest?.stop()
+        codeGuest = nil
         if role == .guest { role = .idle }
     }
 
@@ -461,7 +703,30 @@ final class SharePlayController {
     }
 
     func pretendGuest(_ change: (inout SharePlayGuest) -> Void) {
-        change(&guest)
+        if let codeGuest {
+            codeGuest.pretend(change)
+        } else {
+            change(&sessionGuest)
+        }
+    }
+
+    /// A guest who joined by code, looking for the host, or found it and lost it again.
+    func pretendCode(isSlow: Bool = false, isReconnecting: Bool = false, needsLocalNetwork: Bool = false) {
+        guestConnection = .code
+        let guest = SharePlayCodeGuest(invite: SharePlayInvite(), relay: nil)
+        guest.pretend({ _ in }, isSlow: isSlow, isReconnecting: isReconnecting, needsLocalNetwork: needsLocalNetwork)
+        codeGuest = guest
     }
     #endif
+}
+
+private extension SharePlayController.CodeStatus {
+    init(_ status: SharePlayCodeHost.Status) {
+        self = switch status {
+        case .starting: .starting
+        case .ready: .ready
+        case .needsLocalNetwork: .needsLocalNetwork
+        case .failed: .failed
+        }
+    }
 }

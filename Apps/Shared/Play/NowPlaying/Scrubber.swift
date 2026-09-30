@@ -13,20 +13,23 @@ struct Scrubber: View {
 
     @State private var dragFraction: Double?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.25, paused: !isPlaying || dragFraction != nil)) { _ in
+        TimelineView(.animation(minimumInterval: 0.25, paused: !isPlaying || dragFraction != nil || !isOnScreen)) { _ in
             let fraction = dragFraction ?? (duration > 0 ? min(1, max(0, time() / duration)) : 0)
             let elapsed = fraction * duration
             VStack(spacing: 8) {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule().fill(.white.opacity(0.2))
+                        // Slid along rather than resized, so each tick only redraws.
                         Capsule()
                             .fill(.white.opacity(dragFraction == nil ? 0.7 : 1))
-                            .frame(width: max(0, proxy.size.width * fraction))
+                            .offset(x: -proxy.size.width * (1 - fraction))
                     }
                     .frame(height: dragFraction == nil ? 6 : 12)
+                    .clipShape(.capsule)
                     .frame(maxHeight: .infinity)
                     .contentShape(.rect)
                     .gesture(

@@ -1,8 +1,8 @@
 import SwiftUI
 import MotifCore
 
-/// Radio: your own station first, on a field of its colour, then the moods, then Apple Music's
-/// live stations.
+/// Radio: your own station first, on a field of its colour, then Apple Music's live stations,
+/// then the moods.
 struct RadioPage: View {
     @Environment(PlayFeed.self) private var feed
     @Environment(AppModel.self) private var model
@@ -16,7 +16,6 @@ struct RadioPage: View {
                 } else {
                     radioOff
                 }
-                MoodShelf()
                 if !feed.liveStations.isEmpty {
                     Shelf(title: String(localized: "Live Radio"), items: feed.liveStations) { item in
                         FeedTile(item: item)
@@ -25,6 +24,7 @@ struct RadioPage: View {
                     LoadingRows(count: 2)
                         .padding(.horizontal, PlayMetrics.margin)
                 }
+                MoodShelf()
             }
             .padding(.top, 20)
             .padding(.bottom, 32)
@@ -125,8 +125,7 @@ private struct MotifRadioStage: View {
                 CoverImage(cover: track.cover, size: 36)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
-                        Image(systemName: "waveform")
-                            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying)
+                        PlayingWaveform(isActive: player.isPlaying, color: .secondary)
                         Text("On Air")
                             .textCase(.uppercase)
                     }

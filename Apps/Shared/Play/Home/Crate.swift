@@ -1217,13 +1217,10 @@ struct CrateRecord {
 private struct NowPlayingMark: View {
     let side: CGFloat
     let isPlaying: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Image(systemName: "waveform")
+        PlayingWaveform(isActive: isPlaying, color: .white)
             .font(.system(size: side * 0.08, weight: .semibold))
-            .foregroundStyle(.white)
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isPlaying && !reduceMotion)
             .frame(width: side * 0.18, height: side * 0.18)
             .background(.black.opacity(0.45), in: .circle)
             .padding(side * 0.05)

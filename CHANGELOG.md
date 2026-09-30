@@ -29,6 +29,21 @@ with the app in the background, so your history no longer depends on having Moti
   playing on each, control it from the other, send the music there, or bring it here from
   where it's got to
 
+### SharePlay
+
+- Let the people with you add songs to Up Next from their own iPhones: invite them in
+  Messages, or show a code on your iPhone or your car's screen for them to scan with the
+  Camera
+- In the car, SharePlay sits at the top of Up Next: the code, who's joined and the songs
+  passengers added, with End SharePlay when you're done
+- Passengers without Motif join from an App Clip, with nothing to install: see what's
+  playing, search Apple Music and add songs
+- Passengers with Motif can also add from their own library: Recently Played, Playlists and
+  Recently Added
+- Joining by code works with no network in the car, straight between iPhones, and over the
+  internet when they can't reach each other. Every message is encrypted with a key only the
+  code holds
+
 ### Motif Radio
 
 - Follows the time of day: your morning songs in the morning, calmer late at night

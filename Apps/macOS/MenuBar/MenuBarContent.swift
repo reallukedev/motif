@@ -152,8 +152,7 @@ private struct MotifPlayerHeader: View {
                         Label {
                             Text(player.context.map { "\($0.title)" } ?? String(localized: "Playing in Motif"))
                         } icon: {
-                            Image(systemName: "waveform")
-                                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
+                            PlayingWaveform(isActive: player.isPlaying)
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)
@@ -304,12 +303,7 @@ private struct NowPlayingHeader: View {
                 Label {
                     Text("Now Playing")
                 } icon: {
-                    Image(systemName: "waveform")
-                        .symbolEffect(
-                            .variableColor.iterative,
-                            options: .repeating,
-                            isActive: monitor.music.isPlaying && !reduceMotion
-                        )
+                    PlayingWaveform(isActive: monitor.music.isPlaying)
                 }
                 .foregroundStyle(.tint)
             }

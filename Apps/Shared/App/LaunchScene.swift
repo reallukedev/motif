@@ -90,6 +90,8 @@ enum LaunchScene {
     /// A pretend SharePlay session's scene, with sample data.
     static var sharePlayDemo: String? { value("MotifSharePlayDemo") }
     static var sharePlaySearch: String? { value("MotifSharePlaySearch") }
+    /// Opens the SharePlay code's sheet over Now Playing.
+    static var opensSharePlayCode: Bool { value("MotifSharePlayCode") == "YES" }
     /// The day Top Charts starts on, as yyyy-MM-dd.
     static var chartDate: Date? {
         value("MotifChartDate").flatMap { try? Date($0, strategy: .iso8601.year().month().day()) }

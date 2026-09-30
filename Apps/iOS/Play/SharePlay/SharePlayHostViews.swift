@@ -1,17 +1,31 @@
 import SwiftUI
 import MotifCore
 
-/// Starts SharePlay: the share sheet, where the people with you are a tap away in Messages or,
-/// held close, over AirDrop. For Now Playing's menu, as Music has it.
+/// Starts SharePlay, in Now Playing's menu, as Music has it: a code for the people with you
+/// to scan, or the share sheet, where they're a tap away in Messages or, held close, over
+/// AirDrop.
 struct SharePlayMenuItem: View {
     var body: some View {
-        ShareLink(item: SharePlayActivity(), preview: SharePlayActivity.preview) {
+        Menu {
+            SharePlayInviteItems()
+        } label: {
             Label("SharePlay", systemImage: "shareplay")
         }
     }
 }
 
-/// SharePlay in Up Next's header: a button to start it, and while it's on, a glass pill with
+/// The two ways in: the code, first, since the people it's for are usually right there, and
+/// Messages.
+private struct SharePlayInviteItems: View {
+    var body: some View {
+        Button("Show Code", systemImage: "qrcode") { SharePlayController.shared.showsCode = true }
+        ShareLink(item: SharePlayActivity(), preview: SharePlayActivity.preview) {
+            Label("Invite in Messages…", systemImage: "message")
+        }
+    }
+}
+
+/// SharePlay in Up Next's header: a menu to start it, and while it's on, a glass pill with
 /// how many people have joined, and a menu to invite more or end it.
 struct SharePlayQueueControl: View {
     private var sharePlay = SharePlayController.shared
@@ -19,10 +33,8 @@ struct SharePlayQueueControl: View {
     var body: some View {
         if sharePlay.role == .host {
             Menu {
-                Section(peopleLine) {
-                    ShareLink(item: SharePlayActivity(), preview: SharePlayActivity.preview) {
-                        Label("Invite More…", systemImage: "person.badge.plus")
-                    }
+                Section(SharePlayWords.people(sharePlay.guestCount)) {
+                    SharePlayInviteItems()
                     Button("End SharePlay", systemImage: "xmark", role: .destructive) {
                         sharePlay.endHosting()
                     }
@@ -49,9 +61,13 @@ struct SharePlayQueueControl: View {
                 .animation(PlayMotion.value, value: sharePlay.guestCount)
             }
             .accessibilityLabel("SharePlay")
-            .accessibilityValue(Text(peopleLine))
+            .accessibilityValue(Text(SharePlayWords.people(sharePlay.guestCount)))
         } else {
-            ShareLink(item: SharePlayActivity(), preview: SharePlayActivity.preview) {
+            Menu {
+                Section("Let People Add Songs") {
+                    SharePlayInviteItems()
+                }
+            } label: {
                 Image(systemName: "shareplay")
                     .font(.body.weight(.semibold))
                     .frame(width: 32, height: 32)
@@ -63,12 +79,16 @@ struct SharePlayQueueControl: View {
             .accessibilityHint("Lets the people with you add songs to Up Next from their iPhones")
         }
     }
+}
 
-    private var peopleLine: String {
-        switch sharePlay.guestCount {
+/// SharePlay's words, the same on the iPhone and in the car.
+enum SharePlayWords {
+    /// How many have joined, as a line.
+    static func people(_ count: Int) -> String {
+        switch count {
         case 0: String(localized: "Waiting for People to Join")
         case 1: String(localized: "1 Person Joined")
-        case let count: String(localized: "\(count) People Joined")
+        default: String(localized: "\(count) People Joined")
         }
     }
 }

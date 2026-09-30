@@ -54,6 +54,15 @@ schemes:
         - package: MotifCore/MotifMusicTests
     archive:
       config: Release
+  # Runs the App Clip on its own. `_XCAppClipURL` in the environment opens it with a code.
+  MotifClip (iOS):
+    build:
+      targets:
+        MotifClip (iOS): all
+    run:
+      config: Debug
+    archive:
+      config: Release
 
 packages:
   MotifCore:
@@ -68,6 +77,8 @@ targets:
       - path: Apps/Shared
     dependencies:
       - target: MotifWidgets (iOS)
+      # SharePlay for passengers without Motif, embedded as its App Clip.
+      - target: MotifClip (iOS)
       - package: MotifCore
         product: MotifCore
       - package: MotifCore
@@ -92,6 +103,34 @@ targets:
         # and macOS treats the iOS build as a second Motif with the same bundle id.
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO
+
+  # Motif's App Clip: SharePlay's code opens it for a passenger without Motif, to pick songs
+  # for the host's Up Next. Only MotifCore, no MusicKit, so it stays small and needs no sign-in.
+  MotifClip (iOS):
+    type: application.on-demand-install-capable
+    platform: iOS
+    sources:
+      - path: Apps/Clip
+      # Motif's own icon, which the App Clip card and the App Clips list show.
+      - path: Apps/Shared/Resources/AppIcon.icon
+    dependencies:
+      - package: MotifCore
+        product: MotifCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(MOTIF_BUNDLE_ID).Clip
+        PRODUCT_NAME: MotifClip
+        INFOPLIST_FILE: Apps/Clip/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/Clip/Resources/MotifClip.entitlements
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_MACCATALYST: NO
+        # Kept small, since an App Clip has to download in a moment.
+        DEAD_CODE_STRIPPING: YES
 
   MotifWidgets (macOS):
     type: app-extension

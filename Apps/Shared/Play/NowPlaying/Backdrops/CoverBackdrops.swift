@@ -15,11 +15,12 @@ struct BackdropTimeline<Content: View>: View {
     @State private var clock: BackdropClock?
     @State private var isAtRest = false
     @State private var isLowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
         // Low Power Mode keeps the motion, at fewer frames: at these speeds it barely shows.
         let frames = isLowPower ? min(frameRate, 20) : frameRate
-        TimelineView(.animation(minimumInterval: 1 / frames, paused: isAtRest)) { context in
+        TimelineView(.animation(minimumInterval: 1 / frames, paused: isAtRest || !isOnScreen)) { context in
             content(clock?.phase(at: context.date.timeIntervalSinceReferenceDate) ?? start)
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in

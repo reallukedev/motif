@@ -112,10 +112,15 @@ struct ArtistSongLabel: View {
                     if isCurrent || isHovered {
                         RoundedRectangle(cornerRadius: CoverImage.radius(for: 40), style: .continuous)
                             .fill(.black.opacity(0.4))
-                        Image(systemName: isCurrent ? "waveform" : "play.fill")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isCurrent && player.isPlaying)
+                        Group {
+                            if isCurrent {
+                                PlayingWaveform(isActive: player.isPlaying, color: .white)
+                            } else {
+                                Image(systemName: "play.fill")
+                            }
+                        }
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.white)
                     }
                 }
             VStack(alignment: .leading, spacing: 1) {

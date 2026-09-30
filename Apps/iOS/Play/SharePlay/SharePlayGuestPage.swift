@@ -4,8 +4,8 @@ import MotifCore
 
 extension View {
     /// Opens the SharePlay page when this iPhone joins someone else's SharePlay, over whatever
-    /// is on screen. Now Playing closes first: a sheet can't show from under a full-screen
-    /// cover.
+    /// is on screen, and asks before a scanned code ends this iPhone's own. Now Playing closes
+    /// first: a sheet or an alert can't show from under a full-screen cover.
     func sharePlayGuestPage(closing showsNowPlaying: Binding<Bool>) -> some View {
         modifier(SharePlayPresenter(showsNowPlaying: showsNowPlaying))
     }
@@ -14,6 +14,7 @@ extension View {
 private struct SharePlayPresenter: ViewModifier {
     @Binding var showsNowPlaying: Bool
     @State private var isPresented = false
+    @State private var asksToEnd = false
     private var sharePlay = SharePlayController.shared
 
     init(showsNowPlaying: Binding<Bool>) {
@@ -41,6 +42,39 @@ private struct SharePlayPresenter: ViewModifier {
                     isPresented = sharePlay.showsGuestPage
                 }
             }
+            .onChange(of: sharePlay.pendingInvite) { _, invite in
+                guard invite != nil else { return }
+                guard showsNowPlaying else {
+                    asksToEnd = true
+                    return
+                }
+                showsNowPlaying = false
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard sharePlay.pendingInvite != nil else { return }
+                    // Closing Now Playing closed the code with it, and with no one joined,
+                    // SharePlay went too: nothing left to ask about.
+                    if sharePlay.role == .host {
+                        asksToEnd = true
+                    } else {
+                        sharePlay.endHostingAndJoin()
+                    }
+                }
+            }
+            .alert("End Your SharePlay?", isPresented: $asksToEnd) {
+                Button("End and Join", role: .destructive, action: sharePlay.endHostingAndJoin)
+                Button("Cancel", role: .cancel) { sharePlay.pendingInvite = nil }
+            } message: {
+                Text(joinMessage)
+            }
+    }
+
+    private var joinMessage: String {
+        switch sharePlay.guestCount {
+        case 0: String(localized: "To add songs to someone else's music, this iPhone stops sharing its own.")
+        case 1: String(localized: "The person adding songs to your music will be disconnected.")
+        case let count: String(localized: "The \(count) people adding songs to your music will be disconnected.")
+        }
     }
 
     /// The page went away without Leave or Close: something else took the screen, or it was
@@ -66,6 +100,7 @@ struct SharePlayGuestPage: View {
     @State private var results: [SharePlaySong] = []
     @State private var searchState: SearchState = .idle
     @State private var glow: Color?
+    @Environment(\.openURL) private var openURL
     private var sharePlay = SharePlayController.shared
 
     enum SearchState: Equatable { case idle, loading, loaded, failed }
@@ -86,6 +121,9 @@ struct SharePlayGuestPage: View {
                 .navigationDestination(for: UpNextPage.self) { _ in
                     SharePlayUpNextPage()
                 }
+                .navigationDestination(for: SharePlayLibraryPage.self) { page in
+                    SharePlayLibraryPageView(page: page)
+                }
         }
         // In a moving car, a stray swipe mustn't leave. Leave is in the toolbar, and once
         // SharePlay has ended the page closes any way it likes.
@@ -100,13 +138,22 @@ struct SharePlayGuestPage: View {
     @ViewBuilder
     private var content: some View {
         switch sharePlay.guest.phase {
+        case .joining where sharePlay.guestNeedsLocalNetwork:
+            ContentUnavailableView {
+                Label("Allow Local Network", systemImage: "network")
+            } description: {
+                Text("Motif connects straight to the iPhone that's playing. Turn on Local Network for Motif in Settings to join.")
+            } actions: {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
         case .joining:
             ContentUnavailableView {
                 Label("Joining SharePlay", systemImage: "shareplay")
             } description: {
-                Text(sharePlay.isSlowToConnect
-                    ? "Still connecting. Check that both iPhones are online."
-                    : "Connecting to the iPhone that's playing.")
+                Text(joiningLine)
             } actions: {
                 ProgressView()
             }
@@ -129,6 +176,16 @@ struct SharePlayGuestPage: View {
 
     private var snapshot: SharePlaySnapshot? { sharePlay.guest.snapshot }
 
+    /// What's happening while it joins, by how it's joining.
+    private var joiningLine: LocalizedStringKey {
+        switch (sharePlay.guestConnection, sharePlay.isSlowToConnect) {
+        case (.sharePlay, false): "Connecting to the iPhone that's playing."
+        case (.sharePlay, true): "Still connecting. Check that both iPhones are online."
+        case (.code, false): "Looking for the iPhone that's playing."
+        case (.code, true): "Still looking. Keep Wi-Fi on, and stay close to the iPhone that's playing."
+        }
+    }
+
     @ViewBuilder
     private var joined: some View {
         if isSearching {
@@ -137,6 +194,9 @@ struct SharePlayGuestPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
                     SharePlayHostCard(track: snapshot?.nowPlaying, isPlaying: snapshot?.isPlaying == true)
+                    if sharePlay.isReconnecting {
+                        SharePlayNotice(text: "Reconnecting to their iPhone. Stay close to it to keep adding songs.", systemImage: "wifi.exclamationmark")
+                    }
                     if let notice {
                         SharePlayNotice(text: notice.text, systemImage: notice.symbol)
                     }
@@ -144,6 +204,9 @@ struct SharePlayGuestPage: View {
                         accessCard
                     }
                     upNext
+                    if authorization == .authorized {
+                        SharePlayLibraryLinks()
+                    }
                 }
                 .padding(.horizontal, PlayMetrics.margin)
                 .padding(.top, 12)
@@ -399,7 +462,7 @@ private struct SharePlayAccessCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Search Apple Music", systemImage: "magnifyingglass")
+            Label("Add From Apple Music", systemImage: "music.note")
                 .font(.headline)
             Text(message)
                 .font(.subheadline)
@@ -426,7 +489,7 @@ private struct SharePlayAccessCard: View {
 
     private var message: LocalizedStringKey {
         switch authorization {
-        case .notDetermined: "Allow Motif to use Apple Music to find songs to add. You don't need a subscription to search."
+        case .notDetermined: "Allow Motif to use Apple Music to search for songs to add, and to pick them from your library and playlists. You don't need a subscription to search."
         case .restricted: "Screen Time or a device profile doesn't allow Apple Music access, so you can't search here."
         default: "To find songs to add, turn on Media & Apple Music for Motif in Settings."
         }
@@ -446,7 +509,7 @@ private struct SharePlayAccessCard: View {
 }
 
 /// A short note about how adding works here, beside a symbol.
-private struct SharePlayNotice: View {
+struct SharePlayNotice: View {
     let text: LocalizedStringKey
     let systemImage: String
 
@@ -484,7 +547,7 @@ private struct SharePlayQueueRow: View {
 
 /// A song found in Apple Music, to add to the host's queue: a tap adds it to the end, and
 /// its menu can play it next instead.
-private struct SharePlayResultRow: View {
+struct SharePlayResultRow: View {
     let song: SharePlaySong
     private var sharePlay = SharePlayController.shared
 
@@ -493,7 +556,8 @@ private struct SharePlayResultRow: View {
     }
 
     private var state: SharePlayGuest.AddState? { sharePlay.guest.state(of: song.catalogID) }
-    private var canAdd: Bool { sharePlay.guest.snapshot?.acceptsSongs == true }
+    /// Nothing can reach their iPhone while it's reconnecting.
+    private var canAdd: Bool { sharePlay.guest.snapshot?.acceptsSongs == true && !sharePlay.isReconnecting }
 
     var body: some View {
         Button {

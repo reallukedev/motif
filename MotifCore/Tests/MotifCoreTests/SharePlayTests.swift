@@ -22,6 +22,7 @@ private func snapshot(isStation: Bool = false, allowsExplicit: Bool = true, upNe
 struct SharePlayMessageTests {
     @Test("a message comes back as it went", arguments: [
         SharePlayMessage.hello,
+        .ended,
         .snapshot(snapshot(upNext: [SharePlayTrack(id: "q2", title: "Juno", artistName: "Sabrina Carpenter", isFromSharePlay: true)])),
         .snapshot(SharePlaySnapshot(source: .yourMusic, isStation: true, allowsExplicit: false)),
         .add(SharePlayAddRequest(id: UUID(), song: juno, placement: .next)),

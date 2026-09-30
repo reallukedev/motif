@@ -56,7 +56,16 @@ struct NowPlayingView: View {
         }
         .onChange(of: player.hasQueue, initial: true) { _, hasQueue in
             if hasQueue, LaunchScene.opensStage { StagePresenter.shared.isShowing = true }
+            if hasQueue, LaunchScene.opensSharePlayCode {
+                // Once the cover has finished coming up, or the sheet has nothing to show from.
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    SharePlayController.shared.showsCode = true
+                }
+            }
         }
+        // SharePlay's code, from the menu or Up Next.
+        .sheet(isPresented: Bindable(SharePlayController.shared).showsCode) { SharePlayCodeSheet() }
     }
 
     // MARK: - Layout

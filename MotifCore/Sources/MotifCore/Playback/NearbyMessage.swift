@@ -89,7 +89,8 @@ public enum NearbyFraming {
     /// Longer than any message could honestly be: a connection saying otherwise is dropped.
     public static let largest = 256 * 1024
 
-    public static func frame(_ message: NearbyMessage) throws -> Data {
+    /// Any message, since SharePlay's code joins use the same framing.
+    public static func frame<Message: Encodable>(_ message: Message) throws -> Data {
         let body = try JSONEncoder().encode(message)
         var length = UInt32(body.count).bigEndian
         return Data(bytes: &length, count: 4) + body
@@ -103,6 +104,10 @@ public enum NearbyFraming {
     }
 
     public static func message(from body: Data) throws -> NearbyMessage {
-        try JSONDecoder().decode(NearbyMessage.self, from: body)
+        try message(NearbyMessage.self, from: body)
+    }
+
+    public static func message<Message: Decodable>(_ type: Message.Type, from body: Data) throws -> Message {
+        try JSONDecoder().decode(type, from: body)
     }
 }

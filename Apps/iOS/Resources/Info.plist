@@ -69,12 +69,20 @@
 	<true/>
 	<key>MotifAppGroupIdentifier</key>
 	<string>$(MOTIF_APP_GROUP)</string>
+	<key>MotifAppClipBundleID</key>
+	<string>$(MOTIF_BUNDLE_ID).Clip</string>
+	<key>MotifAppClipIsLive</key>
+	<string>$(MOTIF_APP_CLIP_LIVE)</string>
 	<key>MotifCloudContainerIdentifier</key>
 	<string>$(MOTIF_ICLOUD_CONTAINER)</string>
 	<key>MotifLastFMAPIKey</key>
 	<string>$(MOTIF_LASTFM_API_KEY)</string>
 	<key>MotifLastFMSecret</key>
 	<string>$(MOTIF_LASTFM_SECRET)</string>
+	<key>MotifRelayHost</key>
+	<string>$(MOTIF_RELAY_HOST)</string>
+	<key>MotifRelayKey</key>
+	<string>$(MOTIF_RELAY_KEY)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -87,9 +95,10 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_motif._tcp</string>
+		<string>_motifshareplay._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Motif reaches your own music server on your network, and finds Motif on your other devices nearby to show and control what they're playing.</string>
+	<string>Motif reaches your own music server on your network, finds Motif on your other devices nearby to show and control what they're playing, and connects the people with you who scan your SharePlay code.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>With Always, Louder at Speed starts whenever you drive with music playing, even with iPhone in a pocket or a bag. Motif uses only your speed, only while you drive, and your location never leaves this iPhone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

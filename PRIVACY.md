@@ -6,7 +6,7 @@ Motif is an app for iPhone and Mac that keeps a history of the music you play in
 Music and turns it into statistics. This policy explains what Motif stores, where it stores it,
 and what leaves your device.
 
-The short version is that **Motif DOES NOT collect your data.** I don't run any servers, and nothing Motif records is sent to me. Your listening history lives on your devices and in your own iCloud account. If you choose to connect Last.fm, Motif sends your listening to your Last.fm account, and nowhere else.
+The short version is that **Motif DOES NOT collect your data.** Nothing Motif records is sent to me. The one server Motif uses is a relay for SharePlay codes, which passes along messages it can't read and keeps none of them. Your listening history lives on your devices and in your own iCloud account. If you choose to connect Last.fm, Motif sends your listening to your Last.fm account, and nowhere else.
 
 ## What Motif stores, and where
 
@@ -85,12 +85,23 @@ If you connect your Last.fm account, Motif opens Last.fm's website in your brows
 
 You can turn scrobbling off, or disconnect Last.fm, in Motif's settings at any time. Disconnecting deletes Motif's Last.fm key from that device. Scrobbles already sent stay on your Last.fm profile; you can delete them on Last.fm's website.
 
+## SharePlay (iPhone, optional)
+
+SharePlay lets the people with you add songs to what's playing on your iPhone. They join in Messages, or by scanning a code Motif shows on your iPhone or your car's screen.
+
+When someone joins, Motif tells them the song that's playing and what's coming up (titles, artists, links to Apple Music artwork), and they send the songs they pick. Nothing else is shared: not your listening history, your library or your settings.
+
+People who scan the code connect to your iPhone directly, over Wi-Fi, when they're close by. Motif also passes these messages through a relay on the internet, for passengers using Motif's App Clip (which can't connect directly) or whose iPhone can't reach yours that way. The relay runs on [Supabase](https://supabase.com/privacy). Every message is encrypted on the sending iPhone with a key that exists only in the code, so the relay can't read them, and it keeps nothing once they're delivered. It sees a random name for each SharePlay, and, like any server, the IP addresses of the iPhones connected to it. A new code, with a new key, is made each time SharePlay ends.
+
+Motif's App Clip searches Apple Music with Apple's public search, which needs no sign-in, so a passenger's searches go to Apple.
+
 ## What leaves your device
 
 Motif connects only to:
 
 - **Apple**, for Apple Music (through MusicKit), album artwork, and iCloud sync
 - **Last.fm**, only if you connect your account
+- **SharePlay's relay**, only while a SharePlay code is showing or someone has joined with it, as described above
 
 As with any internet connection, these services can see your device's IP address when Motif talks to them.
 

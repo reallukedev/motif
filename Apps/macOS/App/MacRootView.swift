@@ -14,6 +14,7 @@ struct MacRootView: View {
     @State private var playerWindow = PlayerWindowState()
     @FocusState private var isSearchFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isOnScreen) private var isOnScreen
     #if DEBUG
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -39,6 +40,8 @@ struct MacRootView: View {
                         .playDestinations()
                 }
             }
+            // Under the full player, the page and its bar stop ticking.
+            .environment(\.isOnScreen, isOnScreen && !isShowingFullPlayer)
             .searchable(text: $query, placement: .sidebar, prompt: Text("Search"))
             .searchFocused($isSearchFocused)
             .environment(playerWindow)

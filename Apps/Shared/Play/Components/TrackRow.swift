@@ -40,7 +40,6 @@ struct TrackRow: View {
     var isPlayable = true
 
     @Environment(PlayerModel.self) private var player
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var coverSide: CGFloat = 48
     @ScaledMetric(relativeTo: .body) private var numberWidth: CGFloat = 28
@@ -95,13 +94,13 @@ struct TrackRow: View {
                     if isCurrent {
                         RoundedRectangle(cornerRadius: CoverImage.radius(for: min(coverSide, 72)), style: .continuous)
                             .fill(.black.opacity(0.4))
-                        playingGlyph.foregroundStyle(.white)
+                        playingGlyph(.white)
                     }
                 }
         } else if let number {
             Group {
                 if isCurrent {
-                    playingGlyph.foregroundStyle(.tint)
+                    playingGlyph(.accentColor)
                 } else {
                     Text(number, format: .number)
                         .font(.body)
@@ -113,10 +112,9 @@ struct TrackRow: View {
         }
     }
 
-    private var playingGlyph: some View {
-        Image(systemName: "waveform")
+    private func playingGlyph(_ color: Color) -> some View {
+        PlayingWaveform(isActive: player.isPlaying, color: color)
             .font(.subheadline.weight(.semibold))
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
             .accessibilityLabel("Now Playing")
     }
 }

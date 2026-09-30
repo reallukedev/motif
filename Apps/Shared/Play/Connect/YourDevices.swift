@@ -9,7 +9,6 @@ import MotifCore
 /// device plays, it says which, with the music moving in it.
 struct DevicesButton: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShowingPanel = LaunchScene.opensDevices
 
     var body: some View {
@@ -20,8 +19,7 @@ struct DevicesButton: View {
             if let playing {
                 HStack(spacing: 6) {
                     Image(systemName: NearbyDevices.symbol(for: playing.platform))
-                    Image(systemName: "waveform")
-                        .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
+                    PlayingWaveform(isActive: true)
                 }
                 .foregroundStyle(.tint)
             } else {
@@ -240,12 +238,9 @@ private struct DeviceSymbol: View {
 /// The music's here: the tint's waveform, moving while it plays.
 private struct ListeningMark: View {
     let isPlaying: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Image(systemName: "waveform")
-            .foregroundStyle(.tint)
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isPlaying && !reduceMotion)
+        PlayingWaveform(isActive: isPlaying)
             .accessibilityHidden(true)
     }
 }
@@ -415,11 +410,13 @@ struct RemoteScrubber: View {
     let state: NearbyState
     var showsTimes = true
     @Environment(AppModel.self) private var model
+    @Environment(\.isOnScreen) private var isOnScreen
     @State private var dragFraction: Double?
 
     var body: some View {
         if let duration = state.duration, duration > 0 {
-            TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            // Still while the other device is paused, or while this can't be seen.
+            TimelineView(.animation(minimumInterval: 1, paused: !state.isPlaying || dragFraction != nil || !isOnScreen)) { context in
                 let live = min(1, max(0, (state.position(at: context.date) ?? 0) / duration))
                 let fraction = dragFraction ?? live
                 VStack(spacing: 4) {
@@ -428,9 +425,10 @@ struct RemoteScrubber: View {
                             Capsule().fill(.primary.opacity(0.18))
                             Capsule()
                                 .fill(.primary.opacity(dragFraction == nil ? 0.8 : 1))
-                                .frame(width: max(0, proxy.size.width * fraction))
+                                .offset(x: -proxy.size.width * (1 - fraction))
                         }
                         .frame(height: dragFraction == nil ? 4 : 7)
+                        .clipShape(.capsule)
                         .frame(maxHeight: .infinity)
                         .contentShape(.rect)
                         .gesture(

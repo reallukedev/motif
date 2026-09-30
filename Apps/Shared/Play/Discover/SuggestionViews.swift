@@ -47,7 +47,6 @@ struct SuggestionRow: View {
     @Environment(PlayerModel.self) private var player
     @Environment(AppModel.self) private var model
     @Environment(YourMusic.self) private var music
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var coverSide: CGFloat = Self.cover
     /// Tapped while it was still being looked for: waiting to play it once it's found.
     @State private var isWaiting = false
@@ -81,10 +80,8 @@ struct SuggestionRow: View {
                             if isCurrent {
                                 RoundedRectangle(cornerRadius: CoverImage.radius(for: min(coverSide, 72)), style: .continuous)
                                     .fill(.black.opacity(0.4))
-                                Image(systemName: "waveform")
+                                PlayingWaveform(isActive: player.isPlaying, color: .white)
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
                             }
                         }
                     VStack(alignment: .leading, spacing: 2) {

@@ -333,7 +333,7 @@ private struct NowRow: View {
                 }
             }
             Spacer(minLength: 0)
-            PlayingWaveform()
+            PanelWaveform()
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
@@ -393,15 +393,12 @@ struct TwoLines: View {
 }
 
 /// Music's moving bars, in the accent, while the song beside it plays.
-struct PlayingWaveform: View {
+private struct PanelWaveform: View {
     @Environment(PlayerModel.self) private var player
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Image(systemName: "waveform")
+        PlayingWaveform(isActive: player.isPlaying)
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.tint)
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
             .accessibilityLabel("Now Playing")
     }
 }

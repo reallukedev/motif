@@ -290,7 +290,6 @@ private struct CollectionSongRow: View {
 
     @State private var isHovered = false
     @Environment(PlayerModel.self) private var player
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var height: CGFloat { showsCover ? 54 : 40 }
 
@@ -380,10 +379,8 @@ private struct CollectionSongRow: View {
             .buttonStyle(.plain)
             .help("Play \(track.title)")
         } else if track.isCurrent {
-            Image(systemName: "waveform")
+            PlayingWaveform(isActive: player.isPlaying)
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(.tint)
-                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
                 .accessibilityLabel("Now Playing")
         } else {
             Text(track.number, format: .number)

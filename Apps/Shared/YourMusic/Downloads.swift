@@ -214,6 +214,9 @@ final class Downloads {
 
     fileprivate func didWrite(_ trackID: String, attempt: String, fraction: Double) {
         guard pending[trackID]?.attempt == attempt else { return }
+        // Every row showing a download redraws on each write: whole percents are plenty, and
+        // the session reports every chunk.
+        if let shown = progress[trackID], fraction < 1, fraction - shown < 0.01 { return }
         progress[trackID] = fraction
     }
 

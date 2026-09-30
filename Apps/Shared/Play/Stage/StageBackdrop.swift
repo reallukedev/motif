@@ -91,9 +91,10 @@ private struct FlowBackdrop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSettled = false
     @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: isSettled)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: isSettled || !isOnScreen)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
             let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
             let bass = Float(bands.prefix(5).reduce(0, +) / 5)
@@ -155,11 +156,12 @@ private struct BloomBackdrop: View {
         self.isPlaying = isPlaying
         _art = State(initialValue: BackdropArtStore.shared.cached(cover))
     }
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
         GeometryReader { proxy in
             let side = max(proxy.size.width, proxy.size.height) * 1.5
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: isSettled)) { context in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
                 let bass = CGFloat(bands.prefix(5).reduce(0, +) / 5)

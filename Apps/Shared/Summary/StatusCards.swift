@@ -5,7 +5,6 @@ import MotifCore
 /// What's playing right now, shown at the top of Summary while there's music.
 struct NowPlayingCard: View {
     @Environment(CaptureService.self) private var capture
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(CaptureSettings.scrobblesToLastFMKey, store: CaptureSettings.sharedDefaults)
     private var scrobbles = true
     /// Follows connecting and disconnecting in Settings, without a Keychain read per render.
@@ -22,10 +21,7 @@ struct NowPlayingCard: View {
                         Label {
                             Text(caption)
                         } icon: {
-                            Image(systemName: "waveform")
-                                // A waveform that never stops is motion people can't opt
-                                // out of, so it stays still with Reduce Motion.
-                                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
+                            PlayingWaveform(isActive: true)
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)

@@ -40,7 +40,8 @@ extension CarPlaySceneDelegate {
                     isFavorite: player.current?.song.map(player.isFavorite),
                     plays: player.current.flatMap { feed.facts(for: $0)?.plays },
                     isLive: player.isLive,
-                    askedForMore: player.current.map { player.moreLikeThis.contains($0.songIdentity) } ?? false
+                    askedForMore: player.current.map { player.moreLikeThis.contains($0.songIdentity) } ?? false,
+                    sharePlay: CarPlaySceneDelegate.sharePlayRowState
                 )
             }
             var lastSong: String?
@@ -100,6 +101,8 @@ extension CarPlaySceneDelegate {
         let plays: Int?
         let isLive: Bool
         let askedForMore: Bool
+        /// Up Next's SharePlay row, and which of its songs passengers added.
+        let sharePlay: String
     }
 
     /// Whether the star can be given: only a song from Apple Music's catalog has a rating to
@@ -263,7 +266,9 @@ extension CarPlaySceneDelegate {
         }
         let player = model.player
         let side = CPListItem.maximumImageSize.height
-        var sections: [CPListSection] = []
+        let sharePlay = SharePlayController.shared
+        // SharePlay first, where the songs passengers add will go.
+        var sections: [CPListSection] = [CPListSection(items: [sharePlayRow()])]
         if let current = player.current {
             let plays = model.playFeed.facts(for: current)?.plays ?? 0
             var detail = current.artistName
@@ -281,10 +286,13 @@ extension CarPlaySceneDelegate {
             sections.append(CPListSection(items: [row], header: String(localized: "Now Playing"), sectionIndexTitle: nil))
         }
         var rows: [CPListItem] = []
-        let limit = max(0, CPListTemplate.maximumItemCount - 1)
+        // Room for SharePlay's row and the song playing.
+        let limit = max(0, CPListTemplate.maximumItemCount - 2)
         for track in player.upNext.prefix(min(40, limit)) {
             // Why a live mix picked it, where one thing stands out, as the phone's Up Next says.
-            let detail = if let reason = player.pickReason(for: track) {
+            let detail = if sharePlay.isFromSharePlay(track) {
+                String(localized: "\(track.artistName) · Added by SharePlay")
+            } else if let reason = player.pickReason(for: track) {
                 "\(track.artistName) · \(reason.line)"
             } else if player.isAutoplayPick(track) {
                 String(localized: "\(track.artistName) · Autoplay")

@@ -333,11 +333,13 @@ private struct BarProgress: View {
     let duration: TimeInterval
     let showsTimes: Bool
     @Environment(PlayerModel.self) private var player
+    @Environment(\.isOnScreen) private var isOnScreen
     @State private var dragFraction: Double?
     @State private var isHovering = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.5, paused: !player.isPlaying || dragFraction != nil)) { _ in
+        // Once a second, as the times change. Every tick lays the window out again.
+        TimelineView(.animation(minimumInterval: 1, paused: !player.isPlaying || dragFraction != nil || !isOnScreen)) { _ in
             let fraction = dragFraction ?? min(1, max(0, player.playbackTime / duration))
             HStack(spacing: 6) {
                 if showsTimes {
@@ -350,9 +352,10 @@ private struct BarProgress: View {
                         Capsule().fill(.primary.opacity(0.22))
                         Capsule()
                             .fill(.primary.opacity(isActive ? 0.9 : 0.7))
-                            .frame(width: max(0, proxy.size.width * fraction))
+                            .offset(x: -proxy.size.width * (1 - fraction))
                     }
                     .frame(height: isActive ? 6 : 4)
+                    .clipShape(.capsule)
                     .frame(maxHeight: .infinity)
                     .contentShape(.rect)
                     .onHover { isHovering = $0 }
@@ -384,7 +387,13 @@ private struct BarProgress: View {
     }
 
     private func time(_ seconds: TimeInterval, isRemaining: Bool = false) -> some View {
-        Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(seconds))
+        // Sized by the song's longest time with the ticking one drawn over it, so the bar's
+        // size never changes and its widths aren't all measured again every second.
+        Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(duration))
+            .hidden()
+            .overlay(alignment: isRemaining ? .leading : .trailing) {
+                Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(seconds))
+            }
             .font(.system(size: 10, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.secondary)
@@ -453,11 +462,12 @@ struct BarScrubber: View {
     let duration: TimeInterval
     var showsTimes = true
     @Environment(PlayerModel.self) private var player
+    @Environment(\.isOnScreen) private var isOnScreen
     @State private var dragFraction: Double?
     @State private var isHovering = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.5, paused: !player.isPlaying || dragFraction != nil)) { _ in
+        TimelineView(.animation(minimumInterval: 1, paused: !player.isPlaying || dragFraction != nil || !isOnScreen)) { _ in
             let fraction = dragFraction ?? min(1, max(0, player.playbackTime / duration))
             HStack(spacing: 8) {
                 if showsTimes {
@@ -469,9 +479,10 @@ struct BarScrubber: View {
                         Capsule().fill(.quaternary)
                         Capsule()
                             .fill(isActive ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                            .frame(width: max(0, proxy.size.width * fraction))
+                            .offset(x: -proxy.size.width * (1 - fraction))
                     }
                     .frame(height: isActive ? 6 : 4)
+                    .clipShape(.capsule)
                     .frame(maxHeight: .infinity)
                     .contentShape(.rect)
                     .onHover { isHovering = $0 }
@@ -503,7 +514,12 @@ struct BarScrubber: View {
     }
 
     private func time(_ seconds: TimeInterval, isRemaining: Bool = false) -> some View {
-        Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(seconds))
+        // Sized by the song's longest time with the ticking one drawn over it, as the bar's.
+        Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(duration))
+            .hidden()
+            .overlay(alignment: isRemaining ? .leading : .trailing) {
+                Text(verbatim: (isRemaining ? "-" : "") + Scrubber.format(seconds))
+            }
             .font(.caption.weight(.medium))
             .monospacedDigit()
             .foregroundStyle(.secondary)

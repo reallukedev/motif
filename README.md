@@ -84,6 +84,9 @@ All screenshots use the built-in sample data
   have, and Lidarr can fetch what you don't.
 - Siri ("Play music in Motif") and CarPlay. CarPlay needs Apple's CarPlay Audio
   entitlement on a device; see `Config/Motif.xcconfig`.
+- SharePlay: passengers add songs to Up Next from their iPhones, invited in Messages or by
+  scanning a code on your iPhone or the car's screen. Without Motif, they join from its App
+  Clip. See [SharePlay by code](#shareplay-by-code).
 
 ### Radio
 
@@ -226,6 +229,43 @@ application is configured.
 3. Rebuild, open **Settings**, and connect your account.
 
 `Secrets.xcconfig` is gitignored. Never put these values in a tracked file.
+
+## SharePlay by code
+
+Passengers join SharePlay by scanning a code. Two ways connect them to the host's iPhone,
+and a guest uses whichever answers first:
+
+- **Nearby**: Bonjour over Wi-Fi, peer-to-peer included, so it works in a car with no
+  network. It needs Local Network permission on both iPhones.
+- **The relay**: a Supabase project's Realtime channel, for Motif's App Clip (Apple keeps
+  Bonjour from App Clips) and anyone who can't connect nearby. Messages are sealed with
+  AES-GCM under a key derived from the code, so the relay only passes along boxes it can't
+  open.
+
+To use the relay, add the project's host and publishable key to `Config/Secrets.xcconfig`
+(see `Secrets.example.xcconfig`). Without them, joining by code works nearby only. The live
+relay test in MotifCore runs when `MOTIF_RELAY_HOST` and `MOTIF_RELAY_KEY` are set in the
+environment.
+
+The code holds a `motif://` link until the App Clip is live, so only iPhones with Motif can
+join. To let anyone join:
+
+1. Create the App Clip's App ID, `<bundle id>.Clip`. Automatic signing does this on the
+   first device build of the **Motif (iOS)** scheme, which embeds **MotifClip (iOS)**.
+2. Upload a build to App Store Connect. On the app's version page, set up the **default App
+   Clip experience**: a header image, the subtitle "Add songs to what's playing" and the
+   action **Open**. App Store Connect makes its default link,
+   `https://appclip.apple.com/id?p=<bundle id>.Clip`.
+3. To try it before release, add a Local Experience on your iPhone (Settings → Developer →
+   Local Experiences) for that link and the App Clip's bundle id, and install through
+   TestFlight.
+4. Once it's live, set `MOTIF_APP_CLIP_LIVE = YES` in `Config/Motif.xcconfig`. The code then
+   holds the App Clip link, with the code in a `c` parameter: Motif opens where it's
+   installed, the App Clip where it isn't.
+
+In the simulator, open the App Clip with a code by passing `-MotifClipURL <link>`, or show
+sample sessions with `-MotifClipDemo joined` (also `joining`, `reconnecting`, `ended`,
+`nocode`).
 
 ## Testing
 

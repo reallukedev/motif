@@ -13,9 +13,10 @@ struct StageVisualizerView: View {
     /// Shared with Stage's background, so both move to the same moment of sound.
     let levels: SmoothedLevels
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: style == .off || (!isPlaying && levels.isResting))) { context in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: style == .off || (!isPlaying && levels.isResting) || !isOnScreen)) { context in
             Canvas { canvas, size in
                 let bands = levels.next(
                     heard: AudioLevelMeter.shared.current(),

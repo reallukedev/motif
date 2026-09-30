@@ -7,6 +7,7 @@ import MotifCore
 /// `-MotifSharePlayDemo` names the scene:
 ///
 ///     host              hosting, with two people joined and one of their songs in Up Next
+///     host.nolocalnetwork   hosting, and the code can't work: Local Network is off
 ///     guest             joined someone's, with what they're playing
 ///     guest.joining     still waiting to hear from the host
 ///     guest.ended       the host ended it
@@ -14,6 +15,10 @@ import MotifCore
 ///     guest.yourmusic   the host is playing its own music
 ///     guest.noaccess    this iPhone hasn't allowed Apple Music
 ///     guest.offline     searching fails
+///     guest.code        joined by scanning the host's code
+///     guest.code.looking          scanned, and still looking for the host
+///     guest.code.reconnecting     joined by code, and lost the host for now
+///     guest.code.nolocalnetwork   scanned, but Local Network is off here
 ///
 /// `-MotifSharePlaySearch "sun"` types a search on the guest page, and marks one result added
 /// and another not.
@@ -33,18 +38,26 @@ final class SharePlayDemo {
     func start(in controller: SharePlayController, model: AppModel) {
         Task {
             // The sample mixes are built a moment after launch.
-            for _ in 0..<80 where model.playFeed.mixes.mixes.isEmpty || (scene == "host" && model.player.upNext.count < 2) {
+            let isHost = scene.hasPrefix("host")
+            for _ in 0..<80 where model.playFeed.mixes.mixes.isEmpty || (isHost && model.player.upNext.count < 2) {
                 try? await Task.sleep(for: .milliseconds(250))
             }
             songs = Self.songs(in: model)
-            if scene == "host" {
+            if isHost {
                 var ledger = SharePlayLedger()
                 if model.player.upNext.count > 1 { ledger.record(model.player.upNext[1].songIdentity) }
                 controller.pretend(role: .host, guestCount: 2, ledger: ledger)
                 return
             }
             controller.pretend(role: .guest)
-            guard scene != "guest.joining" else { return }
+            if scene.hasPrefix("guest.code") {
+                controller.pretendCode(
+                    isSlow: scene == "guest.code.looking",
+                    isReconnecting: scene == "guest.code.reconnecting",
+                    needsLocalNetwork: scene == "guest.code.nolocalnetwork"
+                )
+            }
+            guard scene != "guest.joining", scene != "guest.code.looking", scene != "guest.code.nolocalnetwork" else { return }
             let snapshot = snapshot()
             controller.pretendGuest { $0.receive(snapshot) }
             if let term = LaunchScene.sharePlaySearch {
@@ -70,6 +83,16 @@ final class SharePlayDemo {
             try? await Task.sleep(for: .milliseconds(600))
             controller.pretendGuest { $0.receive(SharePlayAddReply(requestID: request.id, outcome: .added(request.placement))) }
         }
+    }
+
+    /// Sample songs as a library: a slice of them for each of its pages.
+    func library(_ part: Int, count: Int = 12) -> [SharePlaySong] {
+        Array(songs.dropFirst(part * 5).prefix(count))
+    }
+
+    /// Sample playlists, each a slice of the sample songs.
+    var playlists: [(name: String, songs: [SharePlaySong])] {
+        [("Road Trip", library(0)), ("Late Night Drive", library(1)), ("Summer 2026", library(2)), ("Sing-Alongs", library(3))]
     }
 
     /// Sample songs whose title or artist starts a word with what was typed.

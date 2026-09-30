@@ -89,7 +89,6 @@ struct MotifRadioArt: View {
     var caption: String?
     /// Room at the bottom trailing corner for a button laid over the artwork.
     var leavesRoomForMenu = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Motif's red, the same in light and dark: artwork doesn't change with the appearance,
     /// as album covers don't. The accent lightens in dark mode, and white type on it wouldn't hold.
@@ -109,9 +108,8 @@ struct MotifRadioArt: View {
                         .contentTransition(.symbolEffect(.replace))
                     Spacer()
                     if isLive {
-                        Image(systemName: "waveform")
+                        PlayingWaveform(isActive: true, color: .white)
                             .font(.system(size: side * 0.075, weight: .semibold))
-                            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
                             .transition(.opacity)
                     }
                 }

@@ -42,6 +42,12 @@
     <key>com.apple.developer.group-session</key>
     <true/>
 
+    <!-- Motif's App Clip, which passengers without Motif open from SharePlay's code. -->
+    <key>com.apple.developer.associated-appclip-app-identifiers</key>
+    <array>
+        <string>$(AppIdentifierPrefix)$(MOTIF_BUNDLE_ID).Clip</string>
+    </array>
+
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 

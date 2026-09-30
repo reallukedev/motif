@@ -40,6 +40,18 @@ MOTIF_ICLOUD_CONTAINER = iCloud.$(MOTIF_BUNDLE_ID)
 MOTIF_LASTFM_API_KEY =
 MOTIF_LASTFM_SECRET =
 
+// SharePlay's relay, for passengers joining by code from Motif's App Clip, which can't reach
+// the host's iPhone nearby: a Supabase project's host (no scheme, since // starts a comment
+// here) and its publishable key. Every message on it is sealed with the code's own key.
+// Empty, SharePlay by code works nearby only. Real values go in Secrets.xcconfig.
+MOTIF_RELAY_HOST =
+MOTIF_RELAY_KEY =
+
+// YES once the App Clip's default experience is live in App Store Connect: SharePlay's code
+// then holds Apple's App Clip link, which opens Motif where it's installed and the App Clip
+// where it isn't. Until then the code holds a motif:// link, for iPhones with Motif.
+MOTIF_APP_CLIP_LIVE = NO
+
 SWIFT_VERSION = 6.0
 SWIFT_APPROACHABLE_CONCURRENCY = YES
 SWIFT_STRICT_CONCURRENCY = complete

@@ -43,6 +43,7 @@ struct MotifApp: App {
     var body: some Scene {
         WindowGroup("Motif", id: "main") {
             MacRootView(model: model)
+                .tracksOnScreen()
                 .environment(behaviour)
                 .environment(quitMonitor)
                 .frame(minWidth: 820, minHeight: 560)
@@ -86,6 +87,7 @@ struct MotifApp: App {
         // buildEither, and its buildOptional only takes availability checks.
         MenuBarExtra(isInserted: $showMenuBarExtra) {
             MenuBarContent(model: model, monitor: monitor)
+                .tracksOnScreen()
                 .environment(behaviour)
                 .environment(quitMonitor)
         } label: {

@@ -163,4 +163,7 @@ public enum SharePlayMessage: Codable, Sendable, Equatable {
     case snapshot(SharePlaySnapshot)
     case add(SharePlayAddRequest)
     case reply(SharePlayAddReply)
+    /// The host ending it, for guests who joined by its code: a session in Messages says so
+    /// itself.
+    case ended
 }

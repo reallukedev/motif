@@ -117,10 +117,8 @@ private struct LibrarySongTitleCell: View {
                     if isCurrent {
                         RoundedRectangle(cornerRadius: CoverImage.radius(for: 22), style: .continuous)
                             .fill(.black.opacity(0.45))
-                        Image(systemName: "waveform")
+                        PlayingWaveform(isActive: player.isPlaying, color: .white)
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying)
                     }
                 }
             Text(row.title)

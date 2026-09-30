@@ -352,11 +352,13 @@ struct KeepIndicator: View {
     let isKept: Bool
     @Environment(PlayerModel.self) private var player
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isOnScreen) private var isOnScreen
     @ScaledMetric(relativeTo: .subheadline) private var side: CGFloat = 15
 
     var body: some View {
-        // Still while the song loads: it counts once it's really playing.
-        TimelineView(.animation(minimumInterval: 0.25, paused: isKept || player.status != .playing)) { context in
+        // Still while the song loads: it counts once it's really playing. Once a second is
+        // enough for a ring this small, and it shows in the bar's panel and the menu bar too.
+        TimelineView(.animation(minimumInterval: 1, paused: isKept || player.status != .playing || !isOnScreen)) { context in
             let progress = progress(at: context.date)
             // With sample data nothing is kept, so a full ring stands in for it.
             let kept = isKept || (player.isDemo && progress >= 1)

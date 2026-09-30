@@ -40,12 +40,13 @@ struct HaloBackdrop: View {
     @State private var isSettled = false
 
     private static let scale: CGFloat = 3
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
         let energy = songEnergy(player?.current)
         GeometryReader { proxy in
             let light = Light(focus: focus, in: proxy.size)
-            TimelineView(.animation(minimumInterval: 1 / 60, paused: reduceMotion || isSettled)) { context in
+            TimelineView(.animation(minimumInterval: 1 / 60, paused: reduceMotion || isSettled || !isOnScreen)) { context in
                 let now = context.date
                 let bands = reduceMotion
                     ? [Float](repeating: 0.3, count: AudioLevelMeter.bandCount)

@@ -121,13 +121,10 @@ struct FeedItemMenu: View {
 /// Bars that move while this is what's playing, as on Music's covers.
 struct NowPlayingBadge: View {
     @Environment(PlayerModel.self) private var player
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Image(systemName: "waveform")
+        PlayingWaveform(isActive: player.isPlaying, color: .white)
             .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
-            .symbolEffect(.variableColor.iterative, options: .repeating, isActive: player.isPlaying && !reduceMotion)
             .frame(width: 26, height: 26)
             .background(.black.opacity(0.45), in: .circle)
             .accessibilityLabel("Now Playing")

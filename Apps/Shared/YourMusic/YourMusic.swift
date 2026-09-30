@@ -366,6 +366,8 @@ final class YourMusic {
         let found = await asking.value
         serverQuestions[key] = nil
         if let found {
+            // Out-of-date answers go too, or a Mac left running for weeks keeps every search.
+            serverAnswers = serverAnswers.filter { Date.now.timeIntervalSince($0.value.at) < Self.answersLast }
             serverAnswers[key] = ServerAnswer(at: .now, songs: found)
             if !isDemo { savedAnswers.save(serverAnswers) }
         }
@@ -631,12 +633,14 @@ final class YourMusic {
     }
 
     private func followServersAndDownloads() {
-        follower = Task { [weak self] in
-            guard let self else { return }
-            let changes = Observations { [servers, downloads] in
+        // Holds self only for each rebuild: held across the loop, which never ends, the task
+        // and the model would keep each other alive.
+        follower = Task { [weak self, servers, downloads] in
+            let changes = Observations {
                 SourceKey(catalogs: servers.catalogs.mapValues(\.count), downloads: downloads.items.count)
             }
             for await _ in changes {
+                guard let self else { return }
                 self.rebuild()
             }
         }

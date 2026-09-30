@@ -17,7 +17,7 @@ import MotifCore
 ///
 /// Everything plays through the same player as the phone, so every song is kept. The files
 /// beside this one build each tab, Now Playing, and the pictures.
-final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPNowPlayingTemplateObserver, CPTabBarTemplateDelegate {
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPNowPlayingTemplateObserver, CPTabBarTemplateDelegate, CPInterfaceControllerDelegate {
     var interface: CPInterfaceController?
     var scale: CGFloat = 2
     /// How many covers a shelf shows: one line's worth on this car's screen. The car keeps room
@@ -48,6 +48,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var addedToLibrary: Set<String> = []
     /// Where Motif Radio stood when Radio was last built, so the tab is redrawn when it changes.
     var radioRowState: String?
+    /// SharePlay's page while it's open, what keeps it current, and its code as last drawn.
+    var sharePlayPage: CPListTemplate?
+    var sharePlayWatch: Task<Void, Never>?
+    var sharePlayCode: (invite: SharePlayInvite, image: UIImage)?
 
     lazy var listenNow = tab(String(localized: "Listen Now"), symbol: "play.circle.fill")
     lazy var radio = tab(String(localized: "Radio"), symbol: "dot.radiowaves.left.and.right")
@@ -58,6 +62,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didConnect interfaceController: CPInterfaceController) {
         interface = interfaceController
+        interfaceController.delegate = self
         scale = interfaceController.carTraitCollection.displayScale
         // About 160 points a cover, beside the car's own side bar and the list's page arrows.
         let width = scene.carWindow.bounds.width
@@ -77,8 +82,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         tabs.delegate = self
         interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
 
-        // The car can start Motif with no phone window, so nothing else has started capture.
+        // The car can start Motif with no phone window, so nothing else has started capture,
+        // or listened for SharePlay.
         Task { await model.startCapture() }
+        SharePlayController.shared.start(model: model)
         Task {
             await model.prepareForPlaying()
             rebuild()
@@ -124,6 +131,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         nowPlayingWatch?.cancel()
         keepTicker?.cancel()
         CPNowPlayingTemplate.shared.remove(self)
+        if sharePlayPage != nil { sharePlayPageGone() }
+        sharePlayCode = nil
         interface = nil
         queue = nil
         isQueueShown = false
@@ -137,6 +146,24 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func tabBarTemplate(_ tabBarTemplate: CPTabBarTemplate, didSelect selectedTemplate: CPTemplate) {
         guard selectedTemplate === search else { return }
         update(search, searchSections())
+    }
+
+    // MARK: - Screens coming and going
+
+    /// SharePlay's code works while its page is on screen: covered by another screen or popped,
+    /// it's hidden, and back on top, shown again.
+    func templateWillAppear(_ aTemplate: CPTemplate, animated: Bool) {
+        guard let page = sharePlayPage, aTemplate === page else { return }
+        SharePlayController.shared.showCode(on: .car)
+    }
+
+    func templateDidDisappear(_ aTemplate: CPTemplate, animated: Bool) {
+        guard let page = sharePlayPage, aTemplate === page else { return }
+        if interface?.templates.contains(where: { $0 === page }) == true {
+            SharePlayController.shared.hideCode(on: .car)
+        } else {
+            sharePlayPageGone()
+        }
     }
 
     private struct ContentKey: Equatable {
