@@ -64,17 +64,20 @@ public struct CratePosition: Equatable, Sendable {
     public static let endGive = 0.12
 
     /// - Parameters:
-    ///   - offset: How far the first place's centre has scrolled past the middle.
+    ///   - offset: How far the first place's centre has scrolled past the middle, as the
+    ///     scroll view reports it: from its inset's edge.
+    ///   - inset: The scroll view's leading content inset, which `offset` leaves out: the
+    ///     Mac's sidebar over the crate, or an iPhone's safe area on its side.
     ///   - pitch: From one record's place to the next.
     ///   - places: How many places the row has.
-    public init(offset: Double, pitch: Double, places: Int) {
+    public init(offset: Double, inset: Double = 0, pitch: Double, places: Int) {
         self.places = places
-        guard pitch > 0, places > 0, offset.isFinite else {
+        guard pitch > 0, places > 0, offset.isFinite, inset.isFinite else {
             place = 0
             isPastEnd = false
             return
         }
-        let position = offset / pitch
+        let position = (offset + inset) / pitch
         let last = Double(places - 1)
         place = Int(min(max(position, 0), last).rounded())
         isPastEnd = position < -Self.endGive || position > last + Self.endGive
@@ -91,19 +94,21 @@ public enum CrateRest {
     ///
     /// - Parameters:
     ///   - proposed: Where the scroll would stop on its own, as an offset.
+    ///   - inset: The scroll view's leading content inset, which offsets leave out, as they
+    ///     do for ``CratePosition``.
     ///   - start: The place in the middle as the scroll began, which it goes no more than
     ///     ``flingReach`` from; nil for no limit.
     ///   - pitch: From one record's place to the next.
-    ///   - last: The farthest the crate scrolls, as an offset.
+    ///   - last: How far the last record's place is from the first's.
     /// - Returns: The offset that puts the nearest record in the middle.
-    public static func offset(for proposed: Double, from start: Int?, pitch: Double, last: Double) -> Double {
-        guard pitch > 0, proposed.isFinite else { return proposed }
-        var place = Int((proposed / pitch).rounded())
+    public static func offset(for proposed: Double, inset: Double = 0, from start: Int?, pitch: Double, last: Double) -> Double {
+        guard pitch > 0, proposed.isFinite, inset.isFinite else { return proposed }
+        var place = Int(((proposed + inset) / pitch).rounded())
         if let start {
             place = min(max(place, start - flingReach), start + flingReach)
         }
         let lastPlace = Int((max(0, last) / pitch).rounded())
-        return Double(min(max(place, 0), lastPlace)) * pitch
+        return Double(min(max(place, 0), lastPlace)) * pitch - inset
     }
 }
 

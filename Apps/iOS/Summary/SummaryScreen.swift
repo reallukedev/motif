@@ -68,6 +68,9 @@ struct SummaryScreen: View {
             if !model.isShowingSampleData { await model.capture?.catchUp() }
         }
         .task(id: "\(range.rawValue)|\(periodOffset)|\(sources.scope.rawValue)|\(model.library.revision)") {
+            // Not from the empty history before it's read, which would say nothing was played
+            // and then animate the real week in as if it had just been heard.
+            guard model.library.isLoaded else { return }
             let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
             let next = await OffMainActor.run {
                 StatsCalculator.summary(

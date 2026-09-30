@@ -15,10 +15,23 @@ extension View {
         #if os(macOS)
         modifier(OnScreenTracker())
         #else
-        self
+        modifier(ScenePhaseTracker())
         #endif
     }
 }
+
+#if os(iOS)
+/// An iPhone playing music keeps Motif running once it's left, and what ticks would go on
+/// updating a screen nobody sees. iOS then waits on those updates to snapshot the app, and a
+/// hot, busy phone gives up on them after ten seconds and ends it.
+private struct ScenePhaseTracker: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content.environment(\.isOnScreen, scenePhase != .background)
+    }
+}
+#endif
 
 #if os(macOS)
 import AppKit

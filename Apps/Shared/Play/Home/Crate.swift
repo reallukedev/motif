@@ -55,6 +55,8 @@ struct Crate: View {
     @State private var flickStart: Int?
     /// The place in the row passing through the middle of the crate, as it scrolls.
     @State private var centered = 0
+    /// The scroll view's leading inset and its last record's place, for where a flick rests.
+    @State private var snapRange: (inset: CGFloat, last: CGFloat) = (0, 0)
     #if os(iOS)
     /// Counts records settling into the middle and pulls past an end, each felt.
     @State private var ticks = 0
@@ -251,13 +253,20 @@ struct Crate: View {
         // whether it's being pulled past either end.
         .onScrollGeometryChange(for: CrateScroll.self) { geometry in
             CrateScroll(
-                position: CratePosition(offset: geometry.contentOffset.x, pitch: side + spacing, places: places),
+                position: CratePosition(
+                    offset: geometry.contentOffset.x,
+                    inset: geometry.contentInsets.leading,
+                    pitch: side + spacing,
+                    places: places
+                ),
+                inset: geometry.contentInsets.leading,
                 rowWidth: geometry.contentSize.width,
                 width: geometry.containerSize.width
             )
         } action: { oldScroll, newScroll in
             let (old, new) = (oldScroll.position, newScroll.position)
             centered = new.place
+            if snapRange != (newScroll.inset, newScroll.last) { snapRange = (newScroll.inset, newScroll.last) }
             switch scrollPhase {
             case .idle where isRowChanging:
                 // The row changed under it: back to the one chosen, once it's still.
@@ -311,7 +320,7 @@ struct Crate: View {
             }
             keepChosenInMiddle()
         }
-        .scrollTargetBehavior(CrateSnap(pitch: side + spacing, start: flickStart))
+        .scrollTargetBehavior(CrateSnap(pitch: side + spacing, start: flickStart, inset: snapRange.inset, last: snapRange.last))
         .scrollIndicators(.hidden)
         .frame(height: side + Self.shadowRoom * 2)
         .opacity(isPlaced ? 1 : 0)
@@ -668,8 +677,12 @@ struct CratePlaceholder: View {
 /// window changing under it.
 private struct CrateScroll: Equatable {
     let position: CratePosition
+    let inset: CGFloat
     let rowWidth: CGFloat
     let width: CGFloat
+
+    /// How far the last record's place is from the first's.
+    var last: CGFloat { max(0, rowWidth - width) }
 
     func isSameSize(as other: CrateScroll) -> Bool {
         rowWidth == other.rowWidth && width == other.width
@@ -683,12 +696,15 @@ struct CrateSnap: ScrollTargetBehavior {
     let pitch: CGFloat
     /// The place in the middle when the finger came down, which a flick goes a few from.
     let start: Int?
+    /// The scroll view's leading inset, and how far the last record is from the first, from
+    /// its geometry: the context's container size doesn't say which side of the inset it's on.
+    let inset: CGFloat
+    let last: CGFloat
 
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
         // A record asked for by name, to go to the middle: already where it should rest.
         guard target.anchor == nil else { return }
-        let last = max(0, context.contentSize.width - context.containerSize.width)
-        target.rect.origin.x = CrateRest.offset(for: target.rect.minX, from: start, pitch: pitch, last: last)
+        target.rect.origin.x = CrateRest.offset(for: target.rect.minX, inset: inset, from: start, pitch: pitch, last: last)
     }
 }
 

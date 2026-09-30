@@ -12,6 +12,7 @@ struct MotifApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
+                .tracksOnScreen()
                 // SharePlay sessions: one this iPhone starts, or one it's invited to, which
                 // can be what opened the app.
                 .task { SharePlayController.shared.start(model: model) }

@@ -110,7 +110,7 @@ extension View {
     /// iPhone's player lives on its tab bar instead.
     func pageChrome() -> some View {
         #if os(macOS)
-        nowPlayingBar()
+        ColumnLayout { nowPlayingBar() }
         #else
         self
         #endif

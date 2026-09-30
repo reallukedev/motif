@@ -165,6 +165,20 @@ struct NowPlayingBar: View {
                 bar(track, tier: .compact)
                 miniBar(track)
             }
+            // One AirPlay button, over whichever width shows. ViewThatFits builds every width to
+            // measure it, and a new AVRoutePickerView each time can make the one on screen
+            // refresh, which lays the window out and measures again: every frame, for good.
+            .overlayPreferenceValue(AirPlaySlot.self) { slot in
+                GeometryReader { proxy in
+                    if let slot {
+                        let rect = proxy[slot]
+                        RoutePickerButton()
+                            .frame(width: rect.width, height: rect.height)
+                            .help("AirPlay")
+                            .position(x: rect.midX, y: rect.midY)
+                    }
+                }
+            }
             .frame(height: Self.height)
             .frame(maxWidth: Self.maxWidth)
             .glassEffect(.regular, in: .capsule)
@@ -245,9 +259,9 @@ struct NowPlayingBar: View {
                 PanelToggle(page: .upNext, systemImage: "list.bullet", title: "Up Next", shortcut: "⌥⌘U", showsPanel: $showsPanel, current: $panelPage)
                 if tier != .compact {
                     StageBarButton()
-                    RoutePickerButton()
+                    Color.clear
                         .frame(width: 30, height: 30)
-                        .help("AirPlay")
+                        .anchorPreference(key: AirPlaySlot.self, value: .bounds) { $0 }
                 }
             }
             .padding(.trailing, 8)
@@ -565,14 +579,20 @@ private struct RepeatButton: View {
 /// While a sleep timer runs: the moon and the time left, to change or turn it off.
 private struct BarSleepTimer: View {
     @Environment(PlayerModel.self) private var player
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
         Menu {
             SleepTimerItems(player: player)
         } label: {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.animation(minimumInterval: 1, paused: !isOnScreen || player.sleepTimer == .endOfSong)) { context in
+                let label = label(at: context.date)
                 Label {
-                    Text(label(at: context.date))
+                    // Sized by its digits as zeros with the ticking time drawn over it, so the
+                    // bar's widths aren't all measured again every second.
+                    Text(verbatim: label.replacing(/\d/, with: "0"))
+                        .hidden()
+                        .overlay(alignment: .leading) { Text(verbatim: label) }
                         .monospacedDigit()
                 } icon: {
                     Image(systemName: "moon.zzz.fill")
@@ -652,6 +672,15 @@ struct BarIconButtonStyle: ButtonStyle {
             .onHover { isHovering = $0 }
             .animation(.easeOut(duration: 0.13), value: isHovering)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
+/// Where the bar's AirPlay button goes, in the width that shows.
+private struct AirPlaySlot: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
     }
 }
 

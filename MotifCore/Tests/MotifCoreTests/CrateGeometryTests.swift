@@ -83,6 +83,27 @@ struct CrateGeometryTests {
         #expect(CratePosition(offset: pitch * 7, pitch: pitch, places: 10).place == 7)
     }
 
+    @Test("Under the Mac's sidebar the place counts the inset, not the record before the middle")
+    func placeCountsTheInset() {
+        // As a maximized Mac window reports it at rest on the 18th record: the sidebar's
+        // 200 points of inset aren't in the offset.
+        let pitch = 326.0
+        #expect(CratePosition(offset: 5342, inset: 200, pitch: pitch, places: 40).place == 17)
+        #expect(CratePosition(offset: -200, inset: 200, pitch: pitch, places: 40).place == 0)
+        #expect(!CratePosition(offset: -200, inset: 200, pitch: pitch, places: 40).isPastEnd)
+    }
+
+    @Test("A flick under the Mac's sidebar rests where the crate itself centres a record")
+    func restCountsTheInset() {
+        // Centred on the 18th record by the crate, a maximized Mac window reports 5342 with
+        // the sidebar's 200 points of inset. A flick ending near there has to rest there too.
+        let pitch = 326.0
+        let last = pitch * 39
+        #expect(CrateRest.offset(for: 5300, inset: 200, from: nil, pitch: pitch, last: last) == 5342)
+        #expect(CrateRest.offset(for: -150, inset: 200, from: nil, pitch: pitch, last: last) == -200)
+        #expect(CrateRest.offset(for: 99_999, inset: 200, from: nil, pitch: pitch, last: last) == last - 200)
+    }
+
     @Test("Pulled past an end, the place holds at the end rather than running off the row")
     func placeHoldsAtTheEnds() {
         #expect(CratePosition(offset: -pitch * 2, pitch: pitch, places: 10).place == 0)
