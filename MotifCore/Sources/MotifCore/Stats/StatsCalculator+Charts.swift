@@ -39,9 +39,42 @@ extension StatsCalculator {
         }
     }
 
-    /// Movement is measured against the whole previous period (last week's final chart),
-    /// unlike the Summary comparison. If last period was empty we show no movement rather
-    /// than marking everything new.
+    /// The songs of one day, week, month or year, with movement against the period before.
+    public static func songChart(
+        in period: ChartPeriod,
+        history: ListeningHistory,
+        calendar: Calendar = .current,
+        limit: Int = 100
+    ) -> [Ranked<SongTally>] {
+        chart(period.interval, previous: period.previous(calendar: calendar)?.interval, history: history, limit: limit) {
+            tallySongs($0, in: history)
+        }
+    }
+
+    /// The artists of one day, week, month or year, with movement against the period before.
+    public static func artistChart(
+        in period: ChartPeriod,
+        history: ListeningHistory,
+        calendar: Calendar = .current,
+        limit: Int = 100
+    ) -> [Ranked<ArtistTally>] {
+        chart(period.interval, previous: period.previous(calendar: calendar)?.interval, history: history, limit: limit) {
+            tallyArtists($0, in: history)
+        }
+    }
+
+    /// The albums of one day, week, month or year, with movement against the period before.
+    public static func albumChart(
+        in period: ChartPeriod,
+        history: ListeningHistory,
+        calendar: Calendar = .current,
+        limit: Int = 100
+    ) -> [Ranked<AlbumTally>] {
+        chart(period.interval, previous: period.previous(calendar: calendar)?.interval, history: history, limit: limit) {
+            tallyAlbums($0, in: history)
+        }
+    }
+
     static func chart<Item: TallyCountable>(
         range: StatsRange,
         history: ListeningHistory,
@@ -51,10 +84,24 @@ extension StatsCalculator {
         tally: (Range<Int>) -> [Item]
     ) -> [Ranked<Item>] {
         let interval = range.interval(containing: now, calendar: calendar)
+        let previous = interval.flatMap { range.previousInterval(before: $0, calendar: calendar) }
+        return chart(interval, previous: previous, history: history, limit: limit, tally: tally)
+    }
+
+    /// Movement is measured against the whole previous period (last week's final chart),
+    /// unlike the Summary comparison, and for a period still under way too. If the previous
+    /// period was empty we show no movement rather than marking everything new.
+    static func chart<Item: TallyCountable>(
+        _ interval: DateInterval?,
+        previous: DateInterval?,
+        history: ListeningHistory,
+        limit: Int,
+        tally: (Range<Int>) -> [Item]
+    ) -> [Ranked<Item>] {
         let current = tally(history.indices(in: interval))
 
         let previousRanks: [Item.ID: Int]?
-        if let interval, let previous = range.previousInterval(before: interval, calendar: calendar) {
+        if interval != nil, let previous {
             let items = tally(history.indices(in: previous))
             previousRanks = items.isEmpty ? nil : Dictionary(
                 zip(items.map(\.id), competitionRanks(items.map(\.count))),

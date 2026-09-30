@@ -8,6 +8,7 @@ struct AlbumDetailView: View {
     let albumID: String
     @Environment(AppModel.self) private var model
     @Environment(PlaybackController.self) private var playback
+    @Environment(\.playSongs) private var playSongs
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: AlbumProfile?
     @State private var showsAllSongs = false
@@ -107,10 +108,13 @@ struct AlbumDetailView: View {
         let playable = profile.songs.filter { !$0.songID.isEmpty }
         if !playable.isEmpty, !model.isShowingSampleData {
             Button("Play", systemImage: "play.fill") {
-                Task {
-                    await playback.play(playable.map {
-                        PlaybackItem(songID: $0.songID, title: $0.title, artistName: $0.artistName)
-                    })
+                let items = playable.map {
+                    PlaybackItem(songID: $0.songID, title: $0.title, artistName: $0.artistName)
+                }
+                if let playSongs {
+                    playSongs(items, title: profile.album.title)
+                } else {
+                    Task { await playback.play(items) }
                 }
             }
             .buttonStyle(.borderedProminent)

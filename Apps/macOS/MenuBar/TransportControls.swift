@@ -74,7 +74,8 @@ struct TransportControls: View {
                         .contentTransition(.symbolEffect(.replace))
                         .animation(reduceMotion ? nil : .snappy, value: symbol)
                 } else {
-                    SkipGlyph(isForward: command == .next, height: glyph * 0.85, presses: skips[command, default: 0])
+                    SkipArrows(direction: command == .next ? .forward : .backward, height: glyph * 0.85, trigger: skips[command, default: 0])
+                        .fontWeight(.semibold)
                 }
             }
             .labelStyle(.iconOnly)
@@ -93,52 +94,5 @@ struct TransportControls: View {
             return "A radio station can't be skipped."
         }
         return "Nothing is playing."
-    }
-}
-
-/// Music's skip glyph: two arrows that step the way they point when pressed. The front arrow
-/// shrinks away at its tip, the back one slides into its place, and a new one grows in
-/// behind. It ends looking exactly as it started, so it can be pressed again at once. Back
-/// is the same glyph mirrored.
-private struct SkipGlyph: View {
-    let isForward: Bool
-    let height: CGFloat
-    let presses: Int
-
-    var body: some View {
-        let width = height * 0.82
-        KeyframeAnimator(initialValue: 1.0, trigger: presses) { step in
-            ZStack(alignment: .leading) {
-                SkipArrow()
-                    .frame(width: width, height: height)
-                    .scaleEffect(step, anchor: .leading)
-                SkipArrow()
-                    .frame(width: width, height: height)
-                    .offset(x: step * width)
-                SkipArrow()
-                    .frame(width: width, height: height)
-                    .scaleEffect(1 - step, anchor: .trailing)
-                    .offset(x: width)
-            }
-            .frame(width: width * 2, height: height, alignment: .leading)
-        } keyframes: { _ in
-            KeyframeTrack {
-                // Restart from the resting pose, then step once.
-                MoveKeyframe(0)
-                SpringKeyframe(1, duration: 0.38, spring: .snappy)
-            }
-        }
-        .scaleEffect(x: isForward ? 1 : -1)
-        .accessibilityHidden(true)
-    }
-}
-
-/// One arrow of ``SkipGlyph``. The play symbol, so it's drawn and tinted exactly like the
-/// glyph beside it; a filled custom shape lost its fill in the glass button.
-private struct SkipArrow: View {
-    var body: some View {
-        Image(systemName: "play.fill")
-            .resizable()
-            .fontWeight(.semibold)
     }
 }

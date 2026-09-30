@@ -25,15 +25,29 @@ public enum MenuBarLabelStyle: String, CaseIterable, Sendable, Codable, Identifi
         self = stored.flatMap(Self.init(rawValue:)) ?? .default
     }
 
+    /// The option in Settings' picker, completing "Show: Album Cover".
     public var name: String {
         switch self {
-        case .radio: "Radio"
-        case .note: "Note"
-        case .artwork: "Album cover"
-        case .title: "Song title"
-        case .artist: "Artist"
-        case .artworkAndTitle: "Cover and title"
-        case .custom: "Custom"
+        case .radio: String(localized: "Radio Icon")
+        case .note: String(localized: "Note")
+        case .artwork: String(localized: "Album Cover")
+        case .title: String(localized: "Song Title")
+        case .artist: String(localized: "Artist")
+        case .artworkAndTitle: String(localized: "Cover and Title")
+        case .custom: String(localized: "Custom")
+        }
+    }
+
+    /// What the menu bar shows, inside a sentence: "the album cover".
+    public var phrase: String {
+        switch self {
+        case .radio: String(localized: "a radio icon")
+        case .note: String(localized: "a note")
+        case .artwork: String(localized: "the album cover")
+        case .title: String(localized: "the song title")
+        case .artist: String(localized: "the artist")
+        case .artworkAndTitle: String(localized: "the cover and title")
+        case .custom: String(localized: "your own format")
         }
     }
 

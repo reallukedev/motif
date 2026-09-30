@@ -64,8 +64,6 @@ extension SyncedSetting {
     /// - ``CaptureSettings/recentlyPlayedAnchor``: Apple's recently-played list as *this*
     ///   device last saw it. The Mac and the iPhone see different lists, so sharing it would
     ///   make one device skip real plays and the other import old ones again.
-    /// - ``CaptureSettings/playlistTrackCount``: a count this device last observed, refreshed
-    ///   whenever Settings asks.
     /// - ``CaptureSettings/forceCapture``: a diagnostic override, meant for the machine
     ///   it's switched on.
     /// - ``CloudSync/isEnabled`` and ``DeviceIdentity``: per device by definition. Syncing
@@ -77,8 +75,6 @@ extension SyncedSetting {
         // creating another with the same name.
         SyncedSetting(key: CaptureSettings.playlistIDKey),
         SyncedSetting(key: CaptureSettings.autoAddKey),
-        SyncedSetting(key: CaptureSettings.limitsPlaylistSizeKey),
-        SyncedSetting(key: CaptureSettings.playlistSizeLimitKey),
 
         // Capture
         SyncedSetting(key: CaptureSettings.dedupeWindowKey),
@@ -89,6 +85,10 @@ extension SyncedSetting {
         // The user curates this list and can take a station back out, so a removal has to
         // travel as well as an addition.
         SyncedSetting(key: CaptureSettings.excludedStationsKey),
+
+        // Play. Blocked on the Mac is blocked on the iPhone; and unblocking is as much a
+        // change as blocking, so the newest list wins rather than the two joining.
+        SyncedSetting(key: CaptureSettings.blockedArtistsKey),
 
         // Song statuses. Nothing ever un-forgets a song, so the sets only grow and a union
         // is both safe and order-independent. Newest-wins would undo a removal made on the

@@ -7,12 +7,17 @@ struct PlayActions: View {
     var onDelete: () -> Void
     @Environment(AppModel.self) private var model
     @Environment(PlaybackController.self) private var playback
+    @Environment(\.playSongs) private var playSongs
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         if !model.isShowingSampleData, !capture.songID.isEmpty {
             Button("Play", systemImage: "play") {
-                Task { await playback.play(capture) }
+                if let playSongs {
+                    playSongs([PlaybackItem(songID: capture.songID, title: capture.title, artistName: capture.artistName)], title: capture.title)
+                } else {
+                    Task { await playback.play(capture) }
+                }
             }
             // There's no API for taking a song back out of a playlist, so we point at the
             // one app that can.
@@ -70,4 +75,21 @@ extension View {
     func deleteConfirmation(for capture: Binding<Capture?>) -> some View {
         modifier(DeleteConfirmation(capture: capture))
     }
+}
+
+/// Plays songs from the history in Motif's own player, where there is one.
+///
+/// The iPhone has one, on the Play tab, and sets this at the root so a song's page plays there
+/// and every play is kept. The Mac leaves it unset and hands songs to Music.app.
+struct PlaySongsAction {
+    let run: @MainActor (_ items: [PlaybackItem], _ title: String) -> Void
+
+    @MainActor
+    func callAsFunction(_ items: [PlaybackItem], title: String) {
+        run(items, title)
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var playSongs: PlaySongsAction?
 }

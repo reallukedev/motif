@@ -87,15 +87,20 @@ public enum DemoLibrary {
         }
 
         plays.sort { $0.capturedAt < $1.capturedAt }
-        // A few songs recovered from Apple's history, and the latest few not yet sent to
-        // Last.fm, so those states show up too.
+        // A few songs recovered from Apple's history, a few read from Last.fm, and the latest
+        // few not yet sent to Last.fm, so those states show up too.
         return plays.enumerated().map { index, play in
-            let recovered = index % 23 == 7 && play.kind == .onDemand
+            var kind = play.kind
+            if play.kind == .onDemand, index % 23 == 7 {
+                kind = .imported
+            } else if play.kind == .onDemand, index % 29 == 11 {
+                kind = .lastFM
+            }
             return Play(
                 title: play.title,
                 artistName: play.artistName,
                 albumTitle: play.albumTitle,
-                kind: recovered ? .imported : play.kind,
+                kind: kind,
                 capturedAt: play.capturedAt,
                 stationName: play.stationName,
                 isScrobbled: index < plays.count - 3,

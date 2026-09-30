@@ -9,12 +9,6 @@ public protocol PlaylistWriter: Sendable {
     func createPlaylist(name: String, description: String?) async throws -> String
     /// Appends songs. Succeeding with no response body is normal (HTTP 204).
     func addSongs(ids: [String], toPlaylist playlistID: String) async throws
-    /// How many songs the playlist holds, counting whatever the user put there themselves.
-    ///
-    /// - Parameter ceiling: stop counting once this many have been seen. The caller only
-    ///   needs to know how much room is left, so a long playlist doesn't have to be paged
-    ///   through to the end.
-    func trackCount(inPlaylist playlistID: String, upTo ceiling: Int?) async throws -> Int
     /// Whether the playlist is still in the user's library.
     ///
     /// Adding to a playlist the user deleted answers 404, the same as a song Apple won't take.

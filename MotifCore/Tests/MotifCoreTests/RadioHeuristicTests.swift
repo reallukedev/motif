@@ -53,6 +53,25 @@ struct RadioHeuristicTests {
         #expect(verdict == .radio(confidence: .asserted))
     }
 
+    /// Motif's own player queued the music, so it says rather than guesses.
+    @Test("a player that says what it's playing decides", arguments: [true, false])
+    func statedStation(isStation: Bool) {
+        // Evidence that points the other way each time, to show it's ignored.
+        let verdict = RadioHeuristic.evaluate(.init(
+            duration: isStation ? 200 : nil,
+            entryIdentifier: QueueEntryIdentifier(isStation ? "q::abc" : "q::STREAM"),
+            statedStation: isStation
+        ))
+        #expect(verdict == (isStation ? .radio(confidence: .stated) : .onDemand))
+    }
+
+    @Test("an observation carries its stated station through to the verdict")
+    func observationStatesStation() {
+        let observation = NowPlayingObservation(title: "Song", artistName: "Artist", duration: 180, isStation: true)
+        #expect(observation.radioVerdict() == .radio(confidence: .stated))
+        #expect(observation.radioVerdict(userForcedCapture: true) == .radio(confidence: .asserted))
+    }
+
     @Test("asserted outranks corroborated outranks likely")
     func confidenceOrdering() {
         #expect(RadioHeuristic.Confidence.likely < .corroborated)

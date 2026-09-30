@@ -229,6 +229,96 @@ public struct LastFMClient: Sendable {
         _ = try await call(parameters)
     }
 
+    // MARK: - History
+
+    /// The most scrobbles `user.getRecentTracks` returns in one page.
+    public static let historyPageLimit = 200
+
+    /// One page of the account's scrobbles, newest first.
+    ///
+    /// Signed and sent with the session key, so it works for an account that hides its
+    /// recent listening: Last.fm only shows that to its owner.
+    ///
+    /// - Parameters:
+    ///   - after: only scrobbles at or after this time (Last.fm's `from`).
+    ///   - before: only scrobbles at or before this time (Last.fm's `to`).
+    public func recentTracks(
+        session: LastFMSession,
+        after: Date? = nil,
+        before: Date? = nil,
+        limit: Int = historyPageLimit
+    ) async throws -> ScrobbleHistoryPage {
+        var parameters: [String: String] = [
+            "method": "user.getRecentTracks",
+            "user": session.username,
+            "sk": session.sessionKey,
+            "limit": String(min(limit, Self.historyPageLimit)),
+            "page": "1",
+        ]
+        if let after { parameters["from"] = String(Int(after.timeIntervalSince1970)) }
+        if let before { parameters["to"] = String(Int(before.timeIntervalSince1970)) }
+        return try Self.historyPage(from: try await call(parameters))
+    }
+
+    /// Reads a `user.getRecentTracks` response.
+    ///
+    /// `track` is an array, a lone object when there is one, or missing when there are none.
+    /// The song playing right now comes first with `nowplaying` and no date; it isn't a
+    /// scrobble yet, so it's left out. Names and dates are under `#text` and `uts`, and
+    /// numbers arrive as strings.
+    static func historyPage(from json: [String: Any]) throws -> ScrobbleHistoryPage {
+        guard let recent = json["recenttracks"] as? [String: Any] else {
+            throw LastFMError.malformedResponse
+        }
+        let entries: [[String: Any]] = switch recent["track"] {
+        case let many as [[String: Any]]: many
+        case let one as [String: Any]: [one]
+        default: []
+        }
+        let attributes = recent["@attr"] as? [String: Any]
+        return ScrobbleHistoryPage(
+            scrobbles: entries.compactMap(scrobbledTrack(from:)),
+            total: integer(attributes?["total"]) ?? 0,
+            totalPages: integer(attributes?["totalPages"]) ?? 0
+        )
+    }
+
+    private static func scrobbledTrack(from entry: [String: Any]) -> ScrobbledTrack? {
+        guard let date = entry["date"] as? [String: Any],
+              let seconds = integer(date["uts"]),
+              let title = (entry["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let artist = text(entry["artist"])?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty, !artist.isEmpty
+        else { return nil }
+        let album = text(entry["album"])?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ScrobbledTrack(
+            title: title,
+            artistName: artist,
+            albumTitle: album?.isEmpty == false ? album : nil,
+            artworkURL: artworkURL(from: entry["image"]),
+            playedAt: Date(timeIntervalSince1970: TimeInterval(seconds))
+        )
+    }
+
+    /// `{"#text": "Name", "mbid": ""}`, or `{"name": "Name"}` when asked for extended data.
+    private static func text(_ value: Any?) -> String? {
+        guard let object = value as? [String: Any] else { return value as? String }
+        return object["#text"] as? String ?? object["name"] as? String
+    }
+
+    /// The largest cover Last.fm lists, unless it's the grey star it uses for a missing one.
+    static func artworkURL(from value: Any?) -> String? {
+        guard let images = value as? [[String: Any]] else { return nil }
+        let url = images.reversed()
+            .compactMap { ($0["#text"] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+            .first
+        guard let url, !url.contains(missingArtworkID) else { return nil }
+        return ArtworkURL.loadable(url)
+    }
+
+    /// The file name of Last.fm's placeholder cover.
+    static let missingArtworkID = "2a96cbd8b46e442fc41c2b86b821562f"
+
     // MARK: - Transport
 
     func call(_ parameters: [String: String]) async throws -> [String: Any] {

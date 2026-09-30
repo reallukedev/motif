@@ -6,7 +6,7 @@ Motif is an app for iPhone and Mac that keeps a history of the music you play in
 Music and turns it into statistics. This policy explains what Motif stores, where it stores it,
 and what leaves your device.
 
-The short version is that **Motif DOES NOT collect your data.** I don't run any servers, and nothing Motif records is sent to me. Your listening history lives on your devices and in your own iCloud account. If you choose to connect Last.fm, Motif sends your listening to your Last.fm account, and nowhere else.
+The short version is that **Motif DOES NOT collect your data.** Nothing Motif records is sent to me. The one server Motif uses is a relay for SharePlay codes, which passes along messages it can't read and keeps none of them. Your listening history lives on your devices and in your own iCloud account. If you choose to connect Last.fm, Motif sends your listening to your Last.fm account, and nowhere else.
 
 ## What Motif stores, and where
 
@@ -51,6 +51,26 @@ Songs that Motif has added to your "Heard on Radio" playlist stay there if you d
 
 You can withdraw Motif's access to Apple Music at any time in Settings → Privacy & Security → Media & Apple Music on iPhone, or System Settings → Privacy & Security → Media & Apple Music on Mac.
 
+## Your own music (iPhone, optional)
+
+If you choose Your Music as the music source, Motif plays audio files you put in its folder on your iPhone and songs from music servers you connect yourself, such as Navidrome.
+
+- **Your files** stay in Motif's own storage on your iPhone, where the Files app can see them as On My iPhone › Motif. Motif reads their tags and covers to show them, and doesn't send them anywhere.
+- **Your servers.** Motif connects only to the servers you add, directly from your iPhone. The address and username are stored with your settings on the device; the password is stored in the device's Keychain and is never sent: each request carries a token made from it, as the Subsonic API asks. When you play a song from a server, Motif tells that server, so it can count your plays. Server details aren't synced to iCloud.
+- **Downloads** from your servers are kept on your iPhone, left out of iCloud backup, and can be removed at any time in Motif.
+- If a server is on your home network, iOS asks your permission for Motif to reach the local network. You can change your answer in Settings → Privacy & Security → Local Network.
+
+- **Lidarr**, if you connect it, is reached directly from your iPhone with the address and API key you give. The key is stored in the device's Keychain and sent only to your Lidarr, in a request header. Motif asks Lidarr what it follows and has, and tells it which artists and albums you ask for.
+- **Suggestions** in Your Music look up songs and artists in Apple Music's catalog, as they do with Apple Music, and check each one against your files, your servers and Lidarr, all from your iPhone.
+
+Songs you play from your own music are recorded in your listening history just like Apple Music's.
+
+## Your speed while driving (iPhone, optional)
+
+Louder at Speed is off until you turn it on. When it's on and you're driving with your own music playing, Motif asks iOS for your location about once a second and uses only the speed from it, to set how loud the music plays. The location isn't stored, isn't added to your history, and never leaves your iPhone. Motif stops asking when the drive ends or the music stops. While it's following your speed, iOS shows that Motif is using your location.
+
+You can turn Louder at Speed off in Motif's Play settings, and withdraw location access at any time in Settings → Privacy & Security → Location Services.
+
 ## On the Mac: controlling Music
 
 On the Mac, Motif asks Music what is playing and sends it playback commands (play, pause, next, previous) from the menu bar. macOS asks for your permission the first time, and you can change your answer in System Settings → Privacy & Security → Automation.
@@ -65,12 +85,23 @@ If you connect your Last.fm account, Motif opens Last.fm's website in your brows
 
 You can turn scrobbling off, or disconnect Last.fm, in Motif's settings at any time. Disconnecting deletes Motif's Last.fm key from that device. Scrobbles already sent stay on your Last.fm profile; you can delete them on Last.fm's website.
 
+## SharePlay (iPhone, optional)
+
+SharePlay lets the people with you add songs to what's playing on your iPhone. They join in Messages, or by scanning a code Motif shows on your iPhone or your car's screen.
+
+When someone joins, Motif tells them the song that's playing and what's coming up (titles, artists, links to Apple Music artwork), and they send the songs they pick. Nothing else is shared: not your listening history, your library or your settings.
+
+People who scan the code connect to your iPhone directly, over Wi-Fi, when they're close by. Motif also passes these messages through a relay on the internet, for passengers using Motif's App Clip (which can't connect directly) or whose iPhone can't reach yours that way. The relay runs on [Supabase](https://supabase.com/privacy). Every message is encrypted on the sending iPhone with a key that exists only in the code, so the relay can't read them, and it keeps nothing once they're delivered. It sees a random name for each SharePlay, and, like any server, the IP addresses of the iPhones connected to it. A new code, with a new key, is made each time SharePlay ends.
+
+Motif's App Clip searches Apple Music with Apple's public search, which needs no sign-in, so a passenger's searches go to Apple.
+
 ## What leaves your device
 
 Motif connects only to:
 
 - **Apple**, for Apple Music (through MusicKit), album artwork, and iCloud sync
 - **Last.fm**, only if you connect your account
+- **SharePlay's relay**, only while a SharePlay code is showing or someone has joined with it, as described above
 
 As with any internet connection, these services can see your device's IP address when Motif talks to them.
 

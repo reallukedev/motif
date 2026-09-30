@@ -74,5 +74,44 @@ struct MotifShortcuts: AppShortcutsProvider {
             shortTitle: "Save Radio Song",
             systemImageName: "radio"
         )
+        // Play's: "Play music in Motif" and the rest. See PlayInMotifIntent. Each
+        // choice by name ("Play Discover in Motif") comes from the last one's parameter, so
+        // the fixed phrases don't repeat those.
+        AppShortcut(
+            intent: PlayInMotifIntent(choice: .station),
+            phrases: [
+                "Play music in \(.applicationName)",
+                "Play \(.applicationName)",
+                "Play \(.applicationName) Radio",
+                "Play my station in \(.applicationName)",
+            ],
+            shortTitle: "Motif Radio",
+            systemImageName: "dot.radiowaves.left.and.right"
+        )
+        AppShortcut(
+            intent: PlayInMotifIntent(choice: .forYou),
+            phrases: [
+                "Play something I like in \(.applicationName)",
+            ],
+            shortTitle: "My Mix",
+            systemImageName: "sun.max"
+        )
+        AppShortcut(
+            intent: PlayInMotifIntent(choice: .discover),
+            phrases: [
+                "Play something new in \(.applicationName)",
+            ],
+            shortTitle: "Discover",
+            systemImageName: "binoculars"
+        )
+        AppShortcut(
+            intent: PlayInMotifIntent(),
+            phrases: [
+                "Play \(\.$choice) in \(.applicationName)",
+                "Play \(\.$choice) on \(.applicationName)",
+            ],
+            shortTitle: "Play a Mix",
+            systemImageName: "play.circle"
+        )
     }
 }

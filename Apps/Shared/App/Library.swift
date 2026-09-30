@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import SwiftData
 import CoreData
 import Observation
@@ -252,20 +253,24 @@ final class Library {
 struct LibraryObserver: ViewModifier {
     let library: Library
 
+    // Every one of these can be posted from a background thread (a merge's own context, the
+    // CloudKit mirror, the day rolling over), so each is moved to the main thread before it
+    // touches the main-actor library.
+
     func body(content: Content) -> some View {
         content
             // Any context's save, not just the main one: merges and repairs save on their own.
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
                 library.refresh()
             }
-            .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification).receive(on: DispatchQueue.main)) { _ in
                 library.refresh()
             }
             // Synced rows arrive without a save of any context in this process.
-            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: DispatchQueue.main)) { _ in
                 library.refresh()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in
                 library.invalidate()
             }
     }
@@ -311,10 +316,10 @@ extension View {
     /// has been folded in: the moments rows can change in place, which a query's count and
     /// ends don't show.
     func onStoreChange(of context: ModelContext, perform action: @escaping () -> Void) -> some View {
-        onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+        onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context).receive(on: DispatchQueue.main)) { _ in
             action()
         }
-        .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification).receive(on: DispatchQueue.main)) { _ in
             action()
         }
     }

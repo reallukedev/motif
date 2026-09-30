@@ -10,16 +10,10 @@ final class FakePlaylistWriter: PlaylistWriter, @unchecked Sendable {
     private var _added: [(ids: [String], playlist: String)] = []
     var createResult: Result<String, any Error> = .success("p.fake")
     var addResult: Result<Void, any Error> = .success(())
-    /// What the playlist already held before this test started.
-    var existingTracks = 0
-    /// Fails the count, as a flaky network would.
-    var countFails = false
 
     var created: [String] { lock.withLock { _created } }
     var added: [(ids: [String], playlist: String)] { lock.withLock { _added } }
     var addedIDs: [String] { added.flatMap(\.ids) }
-    /// How many times the playlist was counted, so the cache can be checked.
-    private(set) var countRequests = 0
 
     func createPlaylist(name: String, description: String?) async throws -> String {
         lock.withLock { _created.append(name) }
@@ -29,14 +23,6 @@ final class FakePlaylistWriter: PlaylistWriter, @unchecked Sendable {
     func addSongs(ids: [String], toPlaylist playlistID: String) async throws {
         lock.withLock { _added.append((ids, playlistID)) }
         try addResult.get()
-    }
-
-    /// Counts what the playlist started with plus what this fake has been told to add, so a
-    /// test doesn't have to keep the two in step itself.
-    func trackCount(inPlaylist playlistID: String, upTo ceiling: Int?) async throws -> Int {
-        lock.withLock { countRequests += 1 }
-        if countFails { throw URLError(.notConnectedToInternet) }
-        return existingTracks + addedIDs.count
     }
 }
 
@@ -319,81 +305,15 @@ struct CaptureCoordinatorTests {
         #expect(writer.added.isEmpty)
     }
 
-    @Test("songs stop going in once the playlist reaches its limit")
-    func stopsAtTheLimit() async throws {
-        settings.limitsPlaylistSize = true
-        settings.playlistSizeLimit = 50
-        writer.existingTracks = 49
-
+    /// Apple Music can't take a song back out of a playlist, so a cap could only fill up and
+    /// then stop. Every radio song goes in, however long the playlist has grown.
+    @Test("every radio song is added, however long the playlist is")
+    func addsWithoutALimit() async throws {
         let subject = coordinator()
         await subject.handle(radio(title: "One", id: "1"))
         await subject.handle(radio(title: "Two", id: "2"))
 
-        // Room for one, so the second song is kept but not written.
-        #expect(writer.addedIDs == ["1"])
-        #expect(try store.context.fetch(MotifStore.radioCaptures()).count == 2)
-        #expect(subject.playlistIsFull)
-    }
-
-    /// Raising the limit, or trimming the playlist, has to let the waiting songs through, so
-    /// they must still be owed a write and must not have burned an attempt.
-    @Test("a song held back by the limit stays pending without a failed attempt")
-    func heldBackSongStaysPending() async throws {
-        settings.limitsPlaylistSize = true
-        settings.playlistSizeLimit = 50
-        writer.existingTracks = 50
-
-        let subject = coordinator()
-        await subject.handle(radio(title: "One", id: "1"))
-
-        let capture = try #require(try store.context.fetch(MotifStore.radioCaptures()).first)
-        #expect(writer.added.isEmpty)
-        #expect(capture.needsPlaylistWrite)
-        #expect(capture.playlistWriteAttempts == 0)
-        #expect(capture.lastPlaylistWriteError == nil)
-    }
-
-    @Test("turning the limit off writes however many songs there are")
-    func limitOffWritesEverything() async throws {
-        settings.limitsPlaylistSize = false
-        writer.existingTracks = 5_000
-
-        await coordinator().handle(radio(title: "One", id: "1"))
-
-        #expect(writer.addedIDs == ["1"])
-        // Nothing to count when there's no ceiling to check against.
-        #expect(writer.countRequests == 0)
-    }
-
-    /// Refusing to write because we couldn't ask how full the playlist is would lose songs
-    /// over a flaky network, which is worse than overshooting the limit.
-    @Test("a failed count lets the write go ahead")
-    func failedCountDoesNotBlockWrites() async throws {
-        settings.limitsPlaylistSize = true
-        writer.countFails = true
-
-        await coordinator().handle(radio(title: "One", id: "1"))
-
-        #expect(writer.addedIDs == ["1"])
-    }
-
-    /// macOS drains every 10 seconds, so counting the playlist each time would be a request
-    /// per poll.
-    @Test("the playlist is counted once and then tracked locally")
-    func countIsCached() async throws {
-        settings.limitsPlaylistSize = true
-        settings.playlistSizeLimit = 250
-        writer.existingTracks = 10
-
-        let subject = coordinator()
-        await subject.handle(radio(title: "One", id: "1"))
-        await subject.handle(radio(title: "Two", id: "2"))
-        await subject.handle(radio(title: "Three", id: "3"))
-
-        #expect(writer.addedIDs == ["1", "2", "3"])
-        #expect(writer.countRequests == 1)
-        // Counted 10, then three went in.
-        #expect(settings.playlistTrackCount == 13)
+        #expect(writer.addedIDs == ["1", "2"])
     }
 
     @Test("a station announcement names the session without being captured")

@@ -294,7 +294,7 @@ public actor ListeningHistoryReader {
 
     private static var captureProperties: [PartialKeyPath<Capture>] {[
         \.songKey, \.songID, \.title, \.artistName, \.albumTitle, \.artworkURL,
-        \.capturedAt, \.playedBackAt, \.kindRawValue,
+        \.capturedAt, \.playedBackAt, \.kindRawValue, \.sourceRawValue,
     ]}
 
     private static func stat(for capture: Capture, stationName: String?) -> CaptureStat {
@@ -308,7 +308,8 @@ public actor ListeningHistoryReader {
             capturedAt: capture.capturedAt,
             stationName: stationName,
             playedBackAt: capture.playedBackAt,
-            kind: capture.kind
+            kind: capture.kind,
+            source: capture.source
         )
     }
 

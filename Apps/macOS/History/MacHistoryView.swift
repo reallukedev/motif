@@ -11,16 +11,20 @@ struct MacHistoryView: View {
     @State private var sortOrder = [SortDescriptor(\Capture.capturedAt, order: .reverse)]
     @State private var filter: HistoryFilter = .all
     @State private var limit = HistoryPage.size
+    private var sources = SourceScopeSetting()
 
     var body: some View {
         MacHistoryTable(
             filter: $filter,
             sortOrder: $sortOrder,
+            source: sources.scope,
+            sourceSelection: sources.isOffered ? sources.selection : nil,
             limit: limit,
             loadMore: { limit += HistoryPage.size }
         )
         // A different filter or order starts again from the top.
         .onChange(of: filter) { limit = HistoryPage.size }
+        .onChange(of: sources.scope) { limit = HistoryPage.size }
         .onChange(of: sortOrder) { limit = HistoryPage.size }
     }
 }
@@ -30,6 +34,9 @@ private struct MacHistoryTable: View {
     @Environment(PlaybackController.self) private var playback
     @Binding var filter: HistoryFilter
     @Binding var sortOrder: [SortDescriptor<Capture>]
+    let source: SourceScope
+    /// Apple Music or Your Music alone, when the person has asked to see them apart.
+    let sourceSelection: Binding<SourceScope>?
     let limit: Int
     let loadMore: () -> Void
 
@@ -53,15 +60,19 @@ private struct MacHistoryTable: View {
     init(
         filter: Binding<HistoryFilter>,
         sortOrder: Binding<[SortDescriptor<Capture>]>,
+        source: SourceScope,
+        sourceSelection: Binding<SourceScope>?,
         limit: Int,
         loadMore: @escaping () -> Void
     ) {
         _filter = filter
         _sortOrder = sortOrder
+        self.source = source
+        self.sourceSelection = sourceSelection
         self.limit = limit
         self.loadMore = loadMore
         _rows = Query(
-            filter.wrappedValue.descriptor(sortBy: sortOrder.wrappedValue, limit: limit),
+            filter.wrappedValue.descriptor(sortBy: sortOrder.wrappedValue, source: source, limit: limit),
             animation: .default
         )
     }
@@ -92,10 +103,18 @@ private struct MacHistoryTable: View {
             .width(min: 100, ideal: 150)
 
             TableColumn("Source", sortUsing: SortDescriptor(\Capture.kindRawValue)) { capture in
-                Label(capture.kind.label, systemImage: capture.kind.symbol)
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(capture.kind == .onDemand ? .secondary : capture.kind.tint)
-                    .lineLimit(1)
+                // A song you chose from your own music says so, rather than "On Demand".
+                if capture.kind == .onDemand, capture.source == .yourMusic {
+                    Label(SourceScope.yourMusic.title, systemImage: SourceScope.yourMusic.symbol)
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Label(capture.kind.label, systemImage: capture.kind.symbol)
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(capture.kind == .onDemand ? .secondary : capture.kind.tint)
+                        .lineLimit(1)
+                }
             }
             .width(min: 118, ideal: 124)
 
@@ -132,7 +151,9 @@ private struct MacHistoryTable: View {
         }
         .overlay {
             if rows.isEmpty, total != nil {
-                if filter == .all {
+                if filter == .all, source != .all {
+                    ContentUnavailableView("Nothing from \(Text(source.title))", systemImage: source.symbol)
+                } else if filter == .all {
                     ContentUnavailableView(
                         "No History Yet",
                         systemImage: "clock.arrow.circlepath",
@@ -171,10 +192,23 @@ private struct MacHistoryTable: View {
                     }
                     .pickerStyle(.inline)
                     .labelStyle(.titleAndIcon)
+                    if let sourceSelection {
+                        Section("Music") {
+                            Picker("Music", selection: sourceSelection) {
+                                ForEach(SourceScope.allCases) { scope in
+                                    Label(scope.title, systemImage: scope.symbol).tag(scope)
+                                }
+                            }
+                            .pickerStyle(.inline)
+                            .labelStyle(.titleAndIcon)
+                        }
+                    }
                 } label: {
-                    Label("Filter", systemImage: filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                    Label("Filter", systemImage: filter == .all && source == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
                 }
-                .help("Show only radio, on demand or recovered songs")
+                .help(sourceSelection == nil
+                    ? "Show only radio, on demand or recovered songs"
+                    : "Show only radio, on demand or recovered songs, or Apple Music or Your Music alone")
             }
             ToolbarItem {
                 Button("Inspector", systemImage: "sidebar.trailing") {
@@ -205,8 +239,8 @@ private struct MacHistoryTable: View {
             Text("This can't be undone. Scrobbles already sent stay on Last.fm.")
         }
         // A count query uses the kind and date index, so it stays quick in a long history.
-        .task(id: "\(filter.rawValue)|\(storeChanges)") {
-            total = try? context.fetchCount(filter.descriptor())
+        .task(id: "\(filter.rawValue)|\(source.rawValue)|\(storeChanges)") {
+            total = try? context.fetchCount(filter.descriptor(source: source))
         }
         .onStoreChange(of: context) { storeChanges += 1 }
         .onChange(of: lastFMUsername, initial: true) {

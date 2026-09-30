@@ -24,7 +24,7 @@ extension StatsCalculator {
 
         for index in indices {
             let capture = history.captures[index]
-            guard capture.kind.sourceIsKnown else { continue }
+            guard capture.kind.timeIsKnown else { continue }
             if let last, capture.capturedAt.timeIntervalSince(last) > ListeningEstimate.longestPlausibleGap {
                 close()
                 start = nil
@@ -226,7 +226,7 @@ extension StatsCalculator {
             days[dayStart, default: Day()].plays[capture.songIdentity] = (previousPlays + 1, capture)
 
             // Recovered songs carry the time Motif found them, not when they played.
-            guard capture.kind.sourceIsKnown else { continue }
+            guard capture.kind.timeIsKnown else { continue }
             let sinceMidnight = clockSeconds(of: capture.capturedAt, in: day, calendar: calendar)
             let offset = (sinceMidnight - 5 * 3_600 + 86_400) % 86_400
             // `>=` and `<=` so ties go to the most recent.

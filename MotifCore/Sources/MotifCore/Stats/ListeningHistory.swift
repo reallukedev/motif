@@ -14,6 +14,9 @@ public struct ListeningHistory: Sendable {
     public let songMetadata: [String: SongMetadata]
     let isFirstHearing: [Bool]
     let isFirstArtistHearing: [Bool]
+    /// Whether any play came from Your Music, so the statistics can offer to show it apart.
+    /// Stays true for a history scoped to Apple Music, which still has Your Music to switch to.
+    public let hasYourMusic: Bool
 
     public init(
         _ captures: [CaptureStat],
@@ -40,6 +43,7 @@ public struct ListeningHistory: Sendable {
         }
         self.isFirstHearing = firstSong
         self.isFirstArtistHearing = firstArtist
+        self.hasYourMusic = ordered.contains { $0.source == .yourMusic }
     }
 
     public var isEmpty: Bool { captures.isEmpty }
@@ -56,8 +60,30 @@ public struct ListeningHistory: Sendable {
         seconds = other.seconds
         isFirstHearing = other.isFirstHearing
         isFirstArtistHearing = other.isFirstArtistHearing
+        hasYourMusic = other.hasYourMusic
         self.artistArtwork = artistArtwork
         self.songMetadata = songMetadata
+    }
+
+    /// Only the plays from where `scope` says, or this history itself for everything.
+    ///
+    /// Each play keeps the facts worked out from the whole history: how long it was heard
+    /// comes from the song after it, whichever source that was, and a song heard first on
+    /// Apple Music isn't new the first time Your Music plays it.
+    public func scoped(to scope: SourceScope) -> ListeningHistory {
+        guard scope != .all else { return self }
+        let kept = captures.indices.filter { scope.includes(captures[$0].source) }
+        return ListeningHistory(subset: kept, of: self)
+    }
+
+    private init(subset indices: [Int], of other: ListeningHistory) {
+        captures = indices.map { other.captures[$0] }
+        seconds = indices.map { other.seconds[$0] }
+        isFirstHearing = indices.map { other.isFirstHearing[$0] }
+        isFirstArtistHearing = indices.map { other.isFirstArtistHearing[$0] }
+        hasYourMusic = other.hasYourMusic
+        artistArtwork = other.artistArtwork
+        songMetadata = other.songMetadata
     }
 
     /// The genre and release year of the capture at `index`, if they're known.

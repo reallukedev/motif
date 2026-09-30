@@ -31,6 +31,7 @@ extension CaptureKind {
         case .onDemand: .accentColor
         case .radio: .pink
         case .imported: .teal
+        case .lastFM: .red
         }
     }
 
@@ -39,6 +40,7 @@ extension CaptureKind {
         case .onDemand: "music.note"
         case .radio: "dot.radiowaves.left.and.right"
         case .imported: "clock.arrow.circlepath"
+        case .lastFM: "waveform"
         }
     }
 
@@ -47,6 +49,7 @@ extension CaptureKind {
         case .onDemand: "On Demand"
         case .radio: "Radio"
         case .imported: "Recovered"
+        case .lastFM: "Last.fm"
         }
     }
 }

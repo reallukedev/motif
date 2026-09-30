@@ -11,6 +11,19 @@ import MotifMusic
 @Observable
 public final class CaptureService {
     public private(set) var isRunning = false
+    /// Whether you've paused history: nothing you play is kept, not even what Apple Music's
+    /// Recently Played shows afterwards, until you resume. Kept on this device, and across
+    /// launches, since a pause that quietly ended when the app next opened wouldn't be one.
+    public private(set) var isPaused = UserDefaults.standard.bool(forKey: CaptureService.pausedKey)
+
+    /// Where the pause is kept. Not a synced setting: pausing one device leaves the others.
+    public nonisolated static let pausedKey = "historyPaused"
+
+    /// Whether history is paused, for code that doesn't hold the service: the player telling a
+    /// music server what played, say.
+    public nonisolated static var isHistoryPaused: Bool {
+        UserDefaults.standard.bool(forKey: pausedKey)
+    }
     public private(set) var lastCapture: CaptureSnapshot?
     public private(set) var lastDecision: CaptureDecision?
     public private(set) var currentStation: String?
@@ -66,9 +79,17 @@ public final class CaptureService {
         self.scrobbler = ScrobbleService(store: store, settings: settings)
 
         #if os(macOS)
-        self.source = PlayerInfoSource()
+        // Music.app, Motif's own Apple Music player, and its player for your own music. Nothing
+        // stops Music.app playing alongside Motif's, so it's only heard while Motif's is quiet.
+        self.source = MergedNowPlayingSource([
+            DeferringNowPlayingSource(PlayerInfoSource(), deferringWhile: { MotifPlayerContext.isPlaying }),
+            ApplicationMusicPlayerSource(),
+            PushedNowPlayingSource.yourMusic,
+        ])
         #else
-        self.source = SystemMusicPlayerSource()
+        // The Music app, Motif's own Apple Music player on the Play tab, and its player for your
+        // own music. Only one plays at a time.
+        self.source = MergedNowPlayingSource([SystemMusicPlayerSource(), ApplicationMusicPlayerSource(), PushedNowPlayingSource.yourMusic])
         #endif
 
         // Both platforms need it, so an iPhone manages on its own. macOS searches for every
@@ -92,11 +113,31 @@ public final class CaptureService {
         await scrobbler.drain()
     }
 
+    /// Stops keeping what you play until ``resume()``, even across launches.
+    public func pause() {
+        isPaused = true
+        UserDefaults.standard.set(true, forKey: Self.pausedKey)
+        stop()
+    }
+
+    /// Keeps what you play again. Songs played while paused stay out: Apple Music's
+    /// Recently Played, as it stands now, becomes the list new songs are counted from.
+    public func resume() async {
+        isPaused = false
+        UserDefaults.standard.set(false, forKey: Self.pausedKey)
+        if let songs = try? await RecentlyPlayedSource().recentlyPlayed(limit: 30) {
+            settings.recentlyPlayedAnchor = songs.map { HistoryImport.key(title: $0.title, artistName: $0.artistName) }
+        }
+        // Paused again while the list was read.
+        guard !isPaused else { return }
+        start()
+    }
+
     /// Picks up listening that happened while Motif wasn't running, from Apple's
     /// recently-played list. See ``HistoryImport`` for what an import can and can't record.
     @discardableResult
     public func importRecentlyPlayed() async -> Int {
-        guard settings.importsRecentlyPlayed else { return 0 }
+        guard settings.importsRecentlyPlayed, !isPaused else { return 0 }
         guard let songs = try? await RecentlyPlayedSource().recentlyPlayed(limit: 30) else { return 0 }
         let imported = (try? store.importPlayedSongs(songs)) ?? 0
         if imported > 0, lastCapture == nil {
@@ -155,7 +196,7 @@ public final class CaptureService {
     }
 
     public func start() {
-        guard !isRunning else { return }
+        guard !isRunning, !isPaused else { return }
         isRunning = true
         // Seed from the store so the menu bar has something to show before the next capture.
         if lastCapture == nil {
@@ -197,6 +238,9 @@ public final class CaptureService {
     /// live track correctly, so the poll is the fallback and the notification stays for
     /// speed. Polling the same song again is harmless: it has the same dedupe key and is
     /// rejected before the store.
+    ///
+    /// Each poll reads whichever player is making sound, as ``currentObservation()`` picks it,
+    /// so Motif's own player playing counts as music and never as silence to fill.
     private func startPolling() {
         poll = Task { [weak self] in
             var isFirst = true
@@ -209,11 +253,11 @@ public final class CaptureService {
                 }
                 guard let self, self.isRunning else { return }
 
-                // Off the main actor: an Apple event blocks its thread until Music answers
-                // or times out.
-                let observation = await ScriptingQueue.run { PlayerInfoSource.currentObservation() }
-
-                guard let observation, observation.playbackState == .playing else {
+                let observation = await self.currentObservation()
+                let isPlaying = observation?.playbackState == .playing
+                // Motif's own player is music too, even before its entry resolves into a song
+                // and gives an observation. Auto-playback must never start over it.
+                guard isPlaying || MotifPlayerContext.isPlaying else {
                     self.isSomethingPlaying = false
                     self.nowPlaying = nil
                     if self.silentSince == nil { self.silentSince = .now }
@@ -225,6 +269,7 @@ public final class CaptureService {
                 self.silentSince = nil
                 self.hasAutoPlayedThisSession = false
 
+                guard let observation, isPlaying else { continue }
                 let decision = await self.coordinator.handle(observation)
                 self.record(decision, observation: observation)
                 if case .capture = decision { await self.scrobbler.drain() }
@@ -329,6 +374,12 @@ public final class CaptureService {
         guard let observation, observation.playbackState == .playing,
               observation.isIdentifiable, observation.announcedStationName == nil
         else {
+            // A pause from one player is about its own song. On iPhone, Motif's player starting
+            // pauses the Music app, and that pause mustn't take away the song Motif is playing.
+            if let observation, let nowPlaying,
+               Self.songKey(for: observation) != Self.songKey(for: nowPlaying) {
+                return
+            }
             nowPlaying = nil
             return
         }
@@ -361,11 +412,14 @@ public final class CaptureService {
         artworkLookup?.cancel()
 
         artworkLookup = Task { [weak self] in
-            guard let found = await Self.catalogArtwork(for: observation), !Task.isCancelled
+            guard let found = await Self.catalogArtwork(for: observation), !Task.isCancelled,
+                  let self, self.artworkLookupKey == key
             else { return }
-            guard let self, self.nowPlaying?.title == observation.title else { return }
-            // So the next poll's rebuild of `nowPlaying` keeps it.
+            // Kept for the song whether or not it's on show this moment, so the next rebuild of
+            // `nowPlaying` has it: an observation in between can clear the card briefly, and the
+            // cover mustn't be lost with it, since it isn't looked up twice.
             self.artworkLookupResult = found.artworkURL
+            guard self.nowPlaying.map(Self.songKey(for:)) == key else { return }
             self.nowPlaying = NowPlaying(
                 title: observation.title,
                 artistName: observation.artistName,
@@ -410,14 +464,33 @@ public final class CaptureService {
     }
 
     static func songKey(for observation: NowPlayingObservation) -> String {
-        "\(observation.title)\u{1F}\(observation.artistName)"
+        songKey(title: observation.title, artistName: observation.artistName)
+    }
+
+    static func songKey(for song: NowPlaying) -> String {
+        songKey(title: song.title, artistName: song.artistName)
+    }
+
+    private static func songKey(title: String, artistName: String) -> String {
+        "\(title)\u{1F}\(artistName)"
     }
 
     private func currentObservation() async -> NowPlayingObservation? {
+        // Whichever player is making sound. Motif's own wins when it's playing: on iPhone
+        // starting it interrupted the Music app, and on the Mac capture only listens to
+        // Music.app while Motif's is quiet.
+        if PushedNowPlayingSource.yourMusic.isPlaying {
+            return PushedNowPlayingSource.yourMusic.current
+        }
+        if ApplicationMusicPlayerSource.isPlaying {
+            return ApplicationMusicPlayerSource.currentObservation()
+        }
         #if os(iOS)
-        return SystemMusicPlayerSource.currentObservation()
+        let other = SystemMusicPlayerSource.currentObservation()
         #else
-        return PlayerInfoSource.currentObservation()
+        // Off the main actor: an Apple event blocks its thread until Music answers or times out.
+        let other = await ScriptingQueue.run { PlayerInfoSource.currentObservation() }
         #endif
+        return other ?? ApplicationMusicPlayerSource.currentObservation()
     }
 }

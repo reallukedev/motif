@@ -52,7 +52,7 @@ public struct MusicKitPlaybackService: PlaybackService {
     ///
     /// Throws only when nothing was found and a request failed, so the failure is reported
     /// rather than passed off as nothing to play.
-    static func songs(for songIDs: [String]) async throws -> [Song] {
+    public static func songs(for songIDs: [String]) async throws -> [Song] {
         var found: [String: Song] = [:]
         var failure: (any Error)?
 

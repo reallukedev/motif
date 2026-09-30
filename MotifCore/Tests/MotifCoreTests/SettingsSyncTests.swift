@@ -29,7 +29,6 @@ struct SettingsSyncTests {
     func deviceLocalSettingsAreExcluded() {
         let mirrored = Set(SyncedSetting.all.map(\.key))
         #expect(!mirrored.contains(CaptureSettings.recentlyPlayedAnchorKey))
-        #expect(!mirrored.contains(CaptureSettings.playlistTrackCountKey))
         #expect(!mirrored.contains(CaptureSettings.forceCaptureKey))
     }
 
@@ -47,6 +46,7 @@ struct SettingsSyncTests {
             CaptureSettings.scrobblesToLastFMKey,
             CaptureSettings.scrobblesImportedKey,
             CaptureSettings.excludedStationsKey,
+            CaptureSettings.blockedArtistsKey,
             CaptureSettings.forgottenSongsKey,
             CaptureSettings.showsUpNextInWidgetKey,
         ] {
@@ -332,6 +332,21 @@ struct SettingsSyncTests {
         sync.pull(keys: [CaptureSettings.excludedStationsKey])
 
         #expect(defaults.stringArray(forKey: CaptureSettings.excludedStationsKey) == ["Chill"])
+    }
+
+    /// Unblocking an artist on one device has to reach the other, not be joined back in.
+    @Test("an unblocked artist stays unblocked")
+    func unblockingTravels() {
+        cloud.set(
+            [SettingsSync.valueField: ["Mara Solis", "Umbra"], SettingsSync.modifiedAtField: 100.0],
+            forKey: CaptureSettings.blockedArtistsKey
+        )
+        let sync = sync()
+        defaults.set(["Umbra"], forKey: CaptureSettings.blockedArtistsKey)
+        sync.pushLocalChanges()
+        sync.pull(keys: [CaptureSettings.blockedArtistsKey])
+
+        #expect(defaults.stringArray(forKey: CaptureSettings.blockedArtistsKey) == ["Umbra"])
     }
 
     // MARK: - Two devices

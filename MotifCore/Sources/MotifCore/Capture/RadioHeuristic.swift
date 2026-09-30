@@ -20,6 +20,9 @@ public enum RadioHeuristic {
         public let playerPosition: TimeInterval?
         /// iOS only. The item half is `STREAM` for radio; when present it decides on its own.
         public let entryIdentifier: QueueEntryIdentifier?
+        /// What the player said it was playing, when it knows. Motif's own player queued the
+        /// music itself, so this decides on its own too, ahead of the entry identifier.
+        public let statedStation: Bool?
         /// Whether the user has forced capture on, which overrides everything.
         public let userForcedCapture: Bool
 
@@ -28,12 +31,14 @@ public enum RadioHeuristic {
             hasComposer: Bool = false,
             playerPosition: TimeInterval? = nil,
             entryIdentifier: QueueEntryIdentifier? = nil,
+            statedStation: Bool? = nil,
             userForcedCapture: Bool = false
         ) {
             self.duration = duration
             self.hasComposer = hasComposer
             self.playerPosition = playerPosition
             self.entryIdentifier = entryIdentifier
+            self.statedStation = statedStation
             self.userForcedCapture = userForcedCapture
         }
     }
@@ -61,6 +66,11 @@ public enum RadioHeuristic {
     public static func evaluate(_ evidence: Evidence) -> Verdict {
         // The user's toggle beats any inference.
         if evidence.userForcedCapture { return .radio(confidence: .asserted) }
+
+        // Motif started this music, so it knows. No inference can beat that.
+        if let statedStation = evidence.statedStation {
+            return statedStation ? .radio(confidence: .stated) : .onDemand
+        }
 
         // Ignore the macOS signals on iOS: MusicKit reports a real Song.duration for a radio
         // track once the entry resolves.

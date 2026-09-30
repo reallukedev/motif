@@ -56,11 +56,42 @@ All screenshots use the built-in sample data
 
 - Connect a Last.fm account and Motif scrobbles every song it keeps, radio and recovered songs included.
 
+### Play (iPhone and Mac)
+
+- A Play tab on iPhone, and Listen Now and Radio in the Mac's sidebar, that play Apple Music
+  inside Motif, so every song is kept even with the app in the background: the library, live
+  radio, your stations, albums, playlists and the catalog, with search.
+- The crate: this hour's mix, Motif Radio and the rest of the day's mixes to flip through,
+  Cover Flow style. Tap the cover in Now Playing and it turns over to your history with the
+  song.
+- On the Mac: a player bar at the foot of the window, Up Next and Your History beside the
+  page, a full player, a Mini Player, a Controls menu with Music's shortcuts, and the song
+  in the menu bar and the Dock.
+- Mixes built from your own history: what you play at each time of day, On Repeat, New
+  Finds, All-Time Favorites, Deep Cuts, Radio Finds, Rediscover and a year ago this week.
+  Songs you skip or ask to hear less of drop out, and shuffle keeps each artist apart.
+- Motif Radio, your own endless station, tunable, picked a song at a time from everything
+  you love and new finds like it. Suggested Songs and Suggested Artists, with finders for
+  songs and artists you've never played and an endless Keep Exploring list.
+- Moods (Feel Good, Energy, Chill, Love, Heartbreak and more) to go with the flow or to find
+  new music in, and New from Your Artists with upcoming releases.
+- Now Playing with your play count for the song, a ring that fills until the song is kept,
+  Up Next, Create Station, AirPlay and a sleep timer. Settings for explicit songs,
+  crossfade (iPhone), the layout, and whether songs elsewhere play in Motif or Apple Music.
+- Your Music: play the FLAC and other files you own, and your own Subsonic-compatible
+  server (Navidrome and others), with downloads for offline, discovery on your servers, and
+  Motif Radio, mixes and moods made from all of it. Suggestions are checked against what you
+  have, and Lidarr can fetch what you don't.
+- Siri ("Play music in Motif") and CarPlay. CarPlay needs Apple's CarPlay Audio
+  entitlement on a device; see `Config/Motif.xcconfig`.
+- SharePlay: passengers add songs to Up Next from their iPhones, invited in Messages or by
+  scanning a code on your iPhone or the car's screen. Without Motif, they join from its App
+  Clip. See [SharePlay by code](#shareplay-by-code).
+
 ### Radio
 
-- Songs you hear on stations are added to a "Heard on Radio" playlist in your library,
-  which stops at 250 songs so a station left running can't fill it. The limit is yours to
-  change or turn off.
+- Songs you hear on stations are added to a "Heard on Radio" playlist in your library.
+  Apple Music doesn't let apps take songs back out, so trim it in Music when you like.
 - Play Back plays those songs again through Apple Music so that Apple counts them. It only runs when you're at the device to hear it.
 - You can exclude stations you don't want recorded.
 
@@ -198,6 +229,46 @@ application is configured.
 3. Rebuild, open **Settings**, and connect your account.
 
 `Secrets.xcconfig` is gitignored. Never put these values in a tracked file.
+
+## SharePlay by code
+
+Passengers join SharePlay by scanning a code. Two ways connect them to the host's iPhone,
+and a guest uses whichever answers first:
+
+- **Nearby**: Bonjour over Wi-Fi, peer-to-peer included, so it works in a car with no
+  network. It needs Local Network permission on both iPhones.
+- **The relay**: a Supabase project's Realtime channel, for Motif's App Clip (Apple keeps
+  Bonjour from App Clips) and anyone who can't connect nearby. Messages are sealed with
+  AES-GCM under a key derived from the code, so the relay only passes along boxes it can't
+  open.
+
+To use the relay, add the project's host and publishable key to `Config/Secrets.xcconfig`
+(see `Secrets.example.xcconfig`). Without them, joining by code works nearby only. The live
+relay test in MotifCore runs when `MOTIF_RELAY_HOST` and `MOTIF_RELAY_KEY` are set in the
+environment.
+
+The code holds a `motif://` link until the App Clip is live, so only iPhones with Motif can
+join. To let anyone join:
+
+1. Create the App Clip's App ID, `<bundle id>.Clip`. Automatic signing does this on the
+   first device build of the **Motif (iOS)** scheme in Xcode, which embeds
+   **MotifClip (iOS)**. Do it there once before an Xcode Cloud build: Xcode Cloud can't
+   register a new identifier. The app's own entitlements files name no App Clip; Xcode adds
+   that entitlement when it archives.
+2. Upload a build to App Store Connect. On the app's version page, set up the **default App
+   Clip experience**: a header image, the subtitle "Add songs to what's playing" and the
+   action **Open**. App Store Connect makes its default link,
+   `https://appclip.apple.com/id?p=<bundle id>.Clip`.
+3. To try it before release, add a Local Experience on your iPhone (Settings → Developer →
+   Local Experiences) for that link and the App Clip's bundle id, and install through
+   TestFlight.
+4. Once it's live, set `MOTIF_APP_CLIP_LIVE = YES` in `Config/Motif.xcconfig`. The code then
+   holds the App Clip link, with the code in a `c` parameter: Motif opens where it's
+   installed, the App Clip where it isn't.
+
+In the simulator, open the App Clip with a code by passing `-MotifClipURL <link>`, or show
+sample sessions with `-MotifClipDemo joined` (also `joining`, `reconnecting`, `ended`,
+`nocode`).
 
 ## Testing
 

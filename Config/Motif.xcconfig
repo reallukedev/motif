@@ -17,7 +17,7 @@ MOTIF_BUNDLE_ID = com.luke.motif
 
 // The version people see, and the build number App Store Connect requires to go up with
 // every upload. Both Info.plists read these.
-MARKETING_VERSION = 1.0
+MARKETING_VERSION = 2.0
 CURRENT_PROJECT_VERSION = 1
 
 // App Group identifiers differ by platform: iOS uses `group.<name>`, macOS needs the team
@@ -40,6 +40,18 @@ MOTIF_ICLOUD_CONTAINER = iCloud.$(MOTIF_BUNDLE_ID)
 MOTIF_LASTFM_API_KEY =
 MOTIF_LASTFM_SECRET =
 
+// SharePlay's relay, for passengers joining by code from Motif's App Clip, which can't reach
+// the host's iPhone nearby: a Supabase project's host (no scheme, since // starts a comment
+// here) and its publishable key. Every message on it is sealed with the code's own key.
+// Empty, SharePlay by code works nearby only. Real values go in Secrets.xcconfig.
+MOTIF_RELAY_HOST =
+MOTIF_RELAY_KEY =
+
+// YES once the App Clip's default experience is live in App Store Connect: SharePlay's code
+// then holds Apple's App Clip link, which opens Motif where it's installed and the App Clip
+// where it isn't. Until then the code holds a motif:// link, for iPhones with Motif.
+MOTIF_APP_CLIP_LIVE = NO
+
 SWIFT_VERSION = 6.0
 SWIFT_APPROACHABLE_CONCURRENCY = YES
 SWIFT_STRICT_CONCURRENCY = complete
@@ -48,6 +60,14 @@ IPHONEOS_DEPLOYMENT_TARGET = 27.0
 MACOSX_DEPLOYMENT_TARGET = 27.0
 
 CODE_SIGN_STYLE = Automatic
+
+// CarPlay Audio is an entitlement Apple grants on request
+// (https://developer.apple.com/carplay), and it's granted for Motif's App ID, so every build
+// gets the CarPlay entitlements. A copy built under another team can't be signed with it
+// until Apple grants that team too: set MOTIF_IOS_ENTITLEMENTS to
+// Apps/iOS/Resources/Motif.entitlements in Local.xcconfig until then. The simulator doesn't
+// check, so it can keep the CarPlay file either way.
+MOTIF_IOS_ENTITLEMENTS = Apps/iOS/Resources/Motif-CarPlay.entitlements
 
 // Optional, and last so they override the values above. A fresh clone builds for the
 // simulator and as an unsigned Mac app without either.
