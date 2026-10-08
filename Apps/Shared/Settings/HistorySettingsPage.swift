@@ -8,8 +8,8 @@ struct HistorySettingsPage: View {
     private var keepsOnDemand = true
     @AppStorage(CaptureSettings.importsRecentlyPlayedKey, store: CaptureSettings.sharedDefaults)
     private var recoversRecentlyPlayed = true
-    @AppStorage(CaptureSettings.minimumListenKey, store: CaptureSettings.sharedDefaults)
-    private var minimumListen: Double = 30
+    @AppStorage(CaptureSettings.minimumListenShareKey, store: CaptureSettings.sharedDefaults)
+    private var minimumListenShare = CaptureSettings.defaultMinimumListenShare
     @AppStorage(CaptureSettings.dedupeWindowKey, store: CaptureSettings.sharedDefaults)
     private var dedupeSeconds: Double = DedupePolicy.default.window
     @AppStorage(SourceScope.separatesKey) private var separatesSources = false
@@ -26,7 +26,7 @@ struct HistorySettingsPage: View {
         Form {
             SettingsHero(
                 "History",
-                subtitle: Text(HistorySettingsWords.status(keepsOnDemand: keepsOnDemand, minimumListen: minimumListen)),
+                subtitle: Text(HistorySettingsWords.status(keepsOnDemand: keepsOnDemand, minimumListenShare: minimumListenShare)),
                 systemImage: "clock.fill",
                 tint: .teal
             )
@@ -125,11 +125,11 @@ struct HistorySettingsPage: View {
         Section {
             SettingsSliderRow(
                 title: "Counts After",
-                value: $minimumListen,
-                range: 0...120,
-                step: 5,
-                minimumLabel: Text("0 sec"),
-                maximumLabel: Text("2 min"),
+                value: $minimumListenShare,
+                range: 0...CaptureSettings.maximumListenShare,
+                step: 0.05,
+                minimumLabel: Text(HistorySettingsWords.percent(0)),
+                maximumLabel: Text(HistorySettingsWords.percent(CaptureSettings.maximumListenShare)),
                 describe: HistorySettingsWords.countsAfterValue
             )
             SettingsSliderRow(
@@ -144,7 +144,7 @@ struct HistorySettingsPage: View {
         } header: {
             Text("Counting Plays")
         } footer: {
-            Text("\(HistorySettingsWords.countsAfterFooter(minimumListen)) \(HistorySettingsWords.windowFooter(minutes: dedupeMinutes.wrappedValue))")
+            Text("\(HistorySettingsWords.countsAfterFooter(minimumListenShare)) \(HistorySettingsWords.windowFooter(minutes: dedupeMinutes.wrappedValue))")
                 .contentTransition(.opacity)
         }
     }

@@ -462,6 +462,9 @@ final class AppModel {
             await DemoMode.runLiveFeed(into: store)
         }
         guard !isDemoLaunch, let capture else { return }
+        // Before capture and sync, so the first song is held to the carried-over choice, and
+        // it goes up rather than being taken for an unset one.
+        CaptureSettings().migrateMinimumListen()
         capture.start()
         // Before the catch-up, so settings another device changed are in force for the
         // captures it is about to make.

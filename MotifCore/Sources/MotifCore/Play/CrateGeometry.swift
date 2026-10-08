@@ -58,6 +58,12 @@ public struct CratePosition: Equatable, Sendable {
     /// How many places the row has. Part of the position, so records added before the one in
     /// the middle, which move it along without moving the scroll, count as a change.
     public let places: Int
+    /// Whether the crate is resting between records rather than with one in the middle: a
+    /// scroll that stops less than half a record from one still has `place` on it.
+    public let isBetween: Bool
+
+    /// How far from a record's place, in points, still counts as on it.
+    public static let tolerance = 0.5
 
     /// How far past an end the crate is pulled, in records, before it counts: a hair, so the
     /// end is felt as it gives, not on the way to settling at it.
@@ -75,12 +81,15 @@ public struct CratePosition: Equatable, Sendable {
         guard pitch > 0, places > 0, offset.isFinite, inset.isFinite else {
             place = 0
             isPastEnd = false
+            isBetween = false
             return
         }
         let position = (offset + inset) / pitch
         let last = Double(places - 1)
-        place = Int(min(max(position, 0), last).rounded())
+        let held = min(max(position, 0), last)
+        place = Int(held.rounded())
         isPastEnd = position < -Self.endGive || position > last + Self.endGive
+        isBetween = abs(held - Double(place)) * pitch > Self.tolerance
     }
 }
 

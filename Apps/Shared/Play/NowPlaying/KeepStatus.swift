@@ -4,7 +4,7 @@ import MotifCore
 /// How close the song on is to being kept in your history: the ring beside its play count on
 /// the phone, and the same ring in the car.
 enum KeepStatus: Equatable {
-    /// Filling: how far through the minimum listening time, 0 to 1.
+    /// Filling: how far through the share of the song that must play, 0 to 1.
     case counting(Double)
     case kept
 
@@ -36,7 +36,7 @@ enum KeepStatus: Equatable {
               let started = player.trackStartedAt
         else { return false }
         // With no minimum, the capture can land a moment before the player reports the song.
-        let slack: TimeInterval = CaptureSettings().minimumListenSeconds > 0 ? 0 : 5
+        let slack: TimeInterval = CaptureSettings().minimumListenShare > 0 ? 0 : 5
         return last.capturedAt >= started.addingTimeInterval(-slack)
     }
 
@@ -56,12 +56,12 @@ enum KeepStatus: Equatable {
         }
     }
 
-    /// How far through the minimum listening time the song is. Counted as the capture counts
-    /// it, from when the song first played, so neither loading nor scrubbing fills the ring
-    /// ahead of the check.
+    /// How far through the share of it that must play the song is. Counted as the capture
+    /// counts it, from when the song first played, so neither loading nor scrubbing fills the
+    /// ring ahead of the check.
     @MainActor
     static func progress(player: PlayerModel, at date: Date) -> Double {
-        let minimum = CaptureSettings().minimumListenSeconds
+        let minimum = CaptureSettings().minimumListen(forDuration: player.current?.duration)
         guard minimum > 0 else { return 1 }
         let elapsed = player.trackStartedAt.map { date.timeIntervalSince($0) } ?? 0
         return min(1, max(0, elapsed / minimum))

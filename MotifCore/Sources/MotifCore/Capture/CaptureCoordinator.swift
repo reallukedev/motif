@@ -40,7 +40,7 @@ public final class CaptureCoordinator {
 
     // MARK: - Ingest
 
-    /// When the current song was first seen, for the minimum listening time.
+    /// When the current song was first seen, for the share of it that must play.
     private var pendingKey: String?
     private var pendingSince: Date?
 
@@ -98,7 +98,7 @@ public final class CaptureCoordinator {
         guard case .capture(let capturable) = decision else { return decision }
 
         // After the policy, which is pure: this needs state kept across observations.
-        if let waiting = timeStillOwed(songKey: songKey, now: now, force: force) {
+        if let waiting = timeStillOwed(songKey: songKey, duration: observation.duration, now: now, force: force) {
             return .ignore(waiting)
         }
 
@@ -117,11 +117,11 @@ public final class CaptureCoordinator {
         return decision
     }
 
-    /// Nil once the song has played long enough, otherwise how much is left.
+    /// Nil once enough of the song has played, otherwise how much is left.
     ///
     /// The clock starts when a song is first seen and resets when a different one arrives.
-    private func timeStillOwed(songKey: String, now: Date, force: Bool) -> CaptureDecision.Reason? {
-        let minimum = settings.minimumListenSeconds
+    private func timeStillOwed(songKey: String, duration: TimeInterval?, now: Date, force: Bool) -> CaptureDecision.Reason? {
+        let minimum = settings.minimumListen(forDuration: duration)
         guard !force, minimum > 0 else { return nil }
 
         if pendingKey != songKey {

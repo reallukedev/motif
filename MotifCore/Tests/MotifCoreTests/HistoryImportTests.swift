@@ -122,6 +122,18 @@ struct HistoryImportStoreTests {
         #expect(rows.first?.kind == .radio)
     }
 
+    /// Apple lists a song the moment it starts, so skipping through Motif Radio on the Mac
+    /// filled the iPhone's import with songs never really heard.
+    @Test("a song Motif's player skipped is not imported as a play")
+    func skipsWhatThePlayerPassedOver() throws {
+        let store = try MotifStore(inMemory: true)
+        settings.notePassedOver(title: "Song 2", artistName: "An Artist")
+
+        #expect(try store.importPlayedSongs([played("3"), played("2"), played("1")], settings: settings) == 2)
+        let titles = try store.context.fetch(MotifStore.allCaptures()).map(\.title)
+        #expect(!titles.contains("Song 2"))
+    }
+
     @Test("the same song outside the window is a new play")
     func importsAgainOutsideTheWindow() throws {
         let store = try MotifStore(inMemory: true)

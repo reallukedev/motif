@@ -11,10 +11,10 @@ public enum HistorySettingsWords {
     }
 
     /// The status line: what's kept, then when a play counts.
-    public static func status(keepsOnDemand: Bool, minimumListen: TimeInterval) -> String {
-        let counting = minimumListen <= 0
+    public static func status(keepsOnDemand: Bool, minimumListenShare: Double) -> String {
+        let counting = minimumListenShare <= 0
             ? String(localized: "counts as soon as a song starts")
-            : String(localized: "counts after \(listenLength(minimumListen))")
+            : String(localized: "counts after \(percent(minimumListenShare)) of a song")
         return keepsOnDemand
             ? String(localized: "Keeping everything you play · \(counting)")
             : String(localized: "Keeping radio only · \(counting)")
@@ -26,19 +26,25 @@ public enum HistorySettingsWords {
             .formatted(.units(allowed: [.minutes, .seconds], width: .wide))
     }
 
-    /// The Counts After row's value: "Straight Away" or "30 sec".
-    public static func countsAfterValue(_ seconds: TimeInterval) -> String {
-        guard seconds > 0 else { return String(localized: "Straight Away") }
-        return Duration.seconds(seconds.rounded())
-            .formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated))
+    /// "50%". Whole percents, since the slider moves in fives.
+    public static func percent(_ share: Double) -> String {
+        share.formatted(.percent.precision(.fractionLength(0)))
     }
 
-    /// What the Counts After position means.
-    public static func countsAfterFooter(_ seconds: TimeInterval) -> String {
-        guard seconds > 0 else {
+    /// The Counts After row's value: "Straight Away" or "50%".
+    public static func countsAfterValue(_ share: Double) -> String {
+        guard share > 0 else { return String(localized: "Straight Away") }
+        return percent(share)
+    }
+
+    /// What the Counts After position means, read back as time for a typical song.
+    public static func countsAfterFooter(_ share: Double) -> String {
+        guard share > 0 else {
             return String(localized: "Every song is kept as soon as it starts, even one you skip straight away.")
         }
-        return String(localized: "A song is kept once it has played for \(listenLength(seconds)), so skipping through doesn’t fill your history.")
+        let example = CaptureSettings.assumedSongLength
+        let needs = CaptureSettings.minimumListen(share: share, duration: example)
+        return String(localized: "A song is kept once \(percent(share)) of it has played, so skipping through doesn’t fill your history. For a song \(listenLength(example)) long, that’s \(listenLength(needs)).")
     }
 
     /// "10 min", for the Same Song Again row.

@@ -17,20 +17,24 @@ struct SettingsWordsTests {
 
     @Test("History's status says what's kept, then when a play counts")
     func historyStatus() {
-        #expect(HistorySettingsWords.status(keepsOnDemand: true, minimumListen: 30)
-            == "Keeping everything you play · counts after 30 seconds")
-        #expect(HistorySettingsWords.status(keepsOnDemand: false, minimumListen: 0)
+        #expect(HistorySettingsWords.status(keepsOnDemand: true, minimumListenShare: 0.5)
+            == "Keeping everything you play · counts after 50% of a song")
+        #expect(HistorySettingsWords.status(keepsOnDemand: false, minimumListenShare: 0)
             == "Keeping radio only · counts as soon as a song starts")
-        #expect(HistorySettingsWords.status(keepsOnDemand: true, minimumListen: 90)
-            == "Keeping everything you play · counts after 1 minute, 30 seconds")
     }
 
     @Test("Counts After reads Straight Away at zero, and its footer follows the slider")
     func countsAfter() {
         #expect(HistorySettingsWords.countsAfterValue(0) == "Straight Away")
-        #expect(HistorySettingsWords.countsAfterValue(45) == "45 sec")
+        #expect(HistorySettingsWords.countsAfterValue(0.25) == "25%")
         #expect(HistorySettingsWords.countsAfterFooter(0).hasPrefix("Every song is kept as soon as it starts"))
-        #expect(HistorySettingsWords.countsAfterFooter(30).contains("played for 30 seconds"))
+        #expect(HistorySettingsWords.countsAfterFooter(0.5) == "A song is kept once 50% of it has played, so skipping through doesn’t fill your history. For a song 4 minutes long, that’s 2 minutes.")
+    }
+
+    /// Steps of 0.05 don't add up exactly, so the slider can hand over 0.15000000000000002.
+    @Test("a slider step a hair off a whole percent still reads as one")
+    func percentRounds() {
+        #expect(HistorySettingsWords.countsAfterValue(0.05 * 3) == "15%")
     }
 
     @Test("the same-song window reads in minutes, singular at one")

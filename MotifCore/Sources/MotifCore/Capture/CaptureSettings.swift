@@ -11,9 +11,12 @@ public struct CaptureSettings: Sendable {
     public static let forceCaptureKey = "forceCapture"
     public static let autoPlayBackKey = "autoPlayBack"
     public static let capturesOnDemandKey = "capturesOnDemand"
-    public static let minimumListenKey = "minimumListenSeconds"
+    public static let minimumListenShareKey = "minimumListenShare"
+    /// When a play counted after a set time. Read once, by ``migrateMinimumListen()``.
+    static let legacyMinimumListenKey = "minimumListenSeconds"
     public static let importsRecentlyPlayedKey = "importsRecentlyPlayed"
     public static let forgottenSongsKey = "forgottenSongs"
+    public static let passedOverSongsKey = "passedOverSongs"
     public static let scrobblesToLastFMKey = "scrobblesToLastFM"
     public static let scrobblesImportedKey = "scrobblesImported"
     public static let menuBarLabelStyleKey = "menuBarLabelStyle"
@@ -86,14 +89,50 @@ public struct CaptureSettings: Sendable {
         nonmutating set { defaults.set(newValue, forKey: Self.autoPlayBackKey) }
     }
 
-    /// How long a song must play before it counts. Defaults to 30 seconds, Last.fm's
-    /// threshold. Zero captures as soon as a song is seen.
-    public var minimumListenSeconds: TimeInterval {
+    /// Half, as Last.fm counts a scrobble.
+    public static let defaultMinimumListenShare = 0.5
+    /// The most that can be asked for. The Mac looks every 10 seconds, so a song that had to
+    /// play to the end would often finish before anyone saw it get there.
+    public static let maximumListenShare = 0.9
+    /// The length taken for a song whose own isn't known, such as one on a live stream.
+    public static let assumedSongLength: TimeInterval = 240
+
+    /// How much of a song must play before it counts, 0 to ``maximumListenShare``. Zero
+    /// captures as soon as a song is seen.
+    public var minimumListenShare: Double {
         get {
-            guard defaults.object(forKey: Self.minimumListenKey) != nil else { return 30 }
-            return max(0, defaults.double(forKey: Self.minimumListenKey))
+            guard defaults.object(forKey: Self.minimumListenShareKey) != nil else {
+                return Self.defaultMinimumListenShare
+            }
+            return Self.clampedShare(defaults.double(forKey: Self.minimumListenShareKey))
         }
-        nonmutating set { defaults.set(max(0, newValue), forKey: Self.minimumListenKey) }
+        nonmutating set { defaults.set(Self.clampedShare(newValue), forKey: Self.minimumListenShareKey) }
+    }
+
+    /// How long a song of `duration` must play before it counts, with this device's share.
+    public func minimumListen(forDuration duration: TimeInterval?) -> TimeInterval {
+        Self.minimumListen(share: minimumListenShare, duration: duration)
+    }
+
+    /// How long a song of `duration` must play before `share` of it has.
+    public static func minimumListen(share: Double, duration: TimeInterval?) -> TimeInterval {
+        let length = duration.flatMap { $0 > 0 ? $0 : nil } ?? assumedSongLength
+        return clampedShare(share) * length
+    }
+
+    private static func clampedShare(_ share: Double) -> Double {
+        min(max(0, share), maximumListenShare)
+    }
+
+    /// Keeps Straight Away for someone who chose it when a play counted after a set time.
+    /// Any other time has no matching share, so it gives way to the default. Runs before
+    /// settings sync starts; once there's a share, it does nothing.
+    public func migrateMinimumListen() {
+        guard defaults.object(forKey: Self.minimumListenShareKey) == nil,
+              defaults.object(forKey: Self.legacyMinimumListenKey) != nil,
+              defaults.double(forKey: Self.legacyMinimumListenKey) <= 0
+        else { return }
+        minimumListenShare = 0
     }
 
     /// Whether to keep on-demand plays as well as radio. On by default.
@@ -171,6 +210,20 @@ public struct CaptureSettings: Sendable {
     public var forgottenSongs: Set<String> {
         get { Set(defaults.stringArray(forKey: Self.forgottenSongsKey) ?? []) }
         nonmutating set { defaults.set(Array(newValue).sorted(), forKey: Self.forgottenSongsKey) }
+    }
+
+    /// Songs Motif's player moved on from before they counted, on any of the user's devices.
+    /// They're in Apple's recently-played list, so without this the next import counts them.
+    public var passedOverSongs: PassedOverSongs {
+        get { PassedOverSongs(defaults.stringArray(forKey: Self.passedOverSongsKey) ?? []) }
+        nonmutating set { defaults.set(newValue.entries, forKey: Self.passedOverSongsKey) }
+    }
+
+    /// Notes a song Motif's player moved on from before it counted.
+    public func notePassedOver(title: String, artistName: String, at date: Date = .now) {
+        var songs = passedOverSongs
+        songs.note(HistoryImport.key(title: title, artistName: artistName), at: date)
+        passedOverSongs = songs
     }
 
     /// Whether to send listening to Last.fm. On by default, but nothing is sent until an

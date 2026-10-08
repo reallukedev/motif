@@ -41,7 +41,7 @@ struct SettingsSyncTests {
             CaptureSettings.autoAddKey,
             CaptureSettings.autoPlayBackKey,
             CaptureSettings.capturesOnDemandKey,
-            CaptureSettings.minimumListenKey,
+            CaptureSettings.minimumListenShareKey,
             CaptureSettings.importsRecentlyPlayedKey,
             CaptureSettings.scrobblesToLastFMKey,
             CaptureSettings.scrobblesImportedKey,
@@ -211,15 +211,15 @@ struct SettingsSyncTests {
     @Test("reconciling twice changes nothing the second time")
     func reconcileIsIdempotent() {
         cloud.set(
-            [SettingsSync.valueField: 45.0, SettingsSync.modifiedAtField: 200.0],
-            forKey: CaptureSettings.minimumListenKey
+            [SettingsSync.valueField: 0.25, SettingsSync.modifiedAtField: 200.0],
+            forKey: CaptureSettings.minimumListenShareKey
         )
         let sync = sync()
         sync.reconcileAll()
-        #expect(defaults.double(forKey: CaptureSettings.minimumListenKey) == 45)
+        #expect(defaults.double(forKey: CaptureSettings.minimumListenShareKey) == 0.25)
 
         #expect(sync.pull(keys: SyncedSetting.all.map(\.key)).isEmpty)
-        #expect(defaults.double(forKey: CaptureSettings.minimumListenKey) == 45)
+        #expect(defaults.double(forKey: CaptureSettings.minimumListenShareKey) == 0.25)
     }
 
     // MARK: - The first time a device mirrors
@@ -267,19 +267,19 @@ struct SettingsSyncTests {
     @Test("seeding does not claim a key another device already owns")
     func seedingLeavesClaimedKeysAlone() throws {
         cloud.set(
-            [SettingsSync.valueField: 45.0, SettingsSync.modifiedAtField: 500.0],
-            forKey: CaptureSettings.minimumListenKey
+            [SettingsSync.valueField: 0.25, SettingsSync.modifiedAtField: 500.0],
+            forKey: CaptureSettings.minimumListenShareKey
         )
-        defaults.set(10.0, forKey: CaptureSettings.minimumListenKey)
+        defaults.set(0.75, forKey: CaptureSettings.minimumListenShareKey)
 
         let sync = sync()
         sync.reconcileAll()
 
         let envelope = try #require(
-            cloud.object(forKey: CaptureSettings.minimumListenKey) as? [String: Any]
+            cloud.object(forKey: CaptureSettings.minimumListenShareKey) as? [String: Any]
         )
         #expect(envelope[SettingsSync.modifiedAtField] as? Double == 500.0)
-        #expect(defaults.double(forKey: CaptureSettings.minimumListenKey) == 45)
+        #expect(defaults.double(forKey: CaptureSettings.minimumListenShareKey) == 0.25)
     }
 
     // MARK: - Song statuses

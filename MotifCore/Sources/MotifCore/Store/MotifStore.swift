@@ -544,8 +544,10 @@ public final class MotifStore {
         var known = Set(recent.map {
             HistoryImport.key(title: $0.title, artistName: $0.artistName)
         })
-        // Don't bring back songs the user removed.
+        // Don't bring back songs the user removed, or ones Motif's player skipped: Apple
+        // lists a song the moment it starts.
         known.formUnion(settings.forgottenSongs)
+        known.formUnion(settings.passedOverSongs.keys(since: cutoff))
 
         // The anchor moves only once this list has been dealt with. It used to move before
         // the fetch and save, so a save that failed marked the new songs as seen and the

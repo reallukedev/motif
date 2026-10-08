@@ -676,7 +676,10 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             serverScrobble = (entry.id, false)
             Task.detached { try? await client.scrobble(songID: songID, submission: false) }
         }
-        let needs = min(CaptureSettings().minimumListenSeconds, (entry.track.duration ?? 240) / 2)
+        let needs = min(
+            CaptureSettings().minimumListen(forDuration: entry.track.duration),
+            (entry.track.duration ?? CaptureSettings.assumedSongLength) / 2
+        )
         if serverScrobble?.counted == false, playbackTime >= needs {
             serverScrobble = (entry.id, true)
             Task.detached { try? await client.scrobble(songID: songID, submission: true) }

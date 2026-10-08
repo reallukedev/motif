@@ -1490,6 +1490,7 @@ final class PlayerModel {
         isGoingBack = false
         isAutoSkipping = false
         defer { lastSample = nil }
+        notePassedOver(track)
         guard !wentBack, !autoSkipped, Date.now > replacingQueueUntil, context?.isStation != true,
               let lastSample, lastSample.trackID == track.id
         else { return }
@@ -1498,6 +1499,19 @@ final class PlayerModel {
         guard listen == .skipped else { return }
         signals.recordSkip(of: track.songIdentity)
         signalsStore.save(signals)
+    }
+
+    /// A song from Apple Music left before it counted, however it went: Apple lists it as
+    /// played the moment it starts, and the next import of that list, here or on another of
+    /// the user's devices, mustn't count it.
+    private func notePassedOver(_ track: PlayerTrack) {
+        guard !isDemo, track.local == nil else { return }
+        let settings = CaptureSettings()
+        let playedFor = lastSample.flatMap { $0.trackID == track.id ? $0.time : nil } ?? 0
+        guard playedFor < settings.minimumListen(forDuration: track.duration)
+            || ListeningSignals.isSkip(playedFor: playedFor, duration: track.duration)
+        else { return }
+        settings.notePassedOver(title: track.title, artistName: track.artistName)
     }
 
     /// Samples the position once a second while playing, and checks the sleep timer. Stops

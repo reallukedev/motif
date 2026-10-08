@@ -17,7 +17,7 @@ struct PlaylistQueueTests {
     init() throws {
         store = try MotifStore(inMemory: true)
         settings = scratch.settings
-        settings.minimumListenSeconds = 0
+        settings.minimumListenShare = 0
     }
 
     func coordinator(resolver: (any CatalogResolving)? = nil) -> CaptureCoordinator {

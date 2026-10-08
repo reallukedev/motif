@@ -55,8 +55,8 @@ struct CaptureCoordinatorTests {
     init() throws {
         store = try MotifStore(inMemory: true)
         settings = scratch.settings
-        // The minimum listening time has its own suite below.
-        settings.minimumListenSeconds = 0
+        // The share that must play has its own suite below.
+        settings.minimumListenShare = 0
     }
 
     func coordinator(resolver: (any CatalogResolving)? = nil) -> CaptureCoordinator {
@@ -330,8 +330,8 @@ struct CaptureCoordinatorTests {
     }
 }
 
-/// The minimum listening time: skipping through songs records nothing, and a song left to
-/// play is recorded once.
+/// The share of a song that must play: skipping through songs records nothing, and a song
+/// left to play is recorded once.
 @MainActor
 @Suite("Minimum listening time")
 struct MinimumListenTests {
@@ -345,7 +345,8 @@ struct MinimumListenTests {
     init() throws {
         store = try MotifStore(inMemory: true)
         settings = scratch.settings
-        settings.minimumListenSeconds = 30
+        // A quarter of these two-minute songs is 30 seconds.
+        settings.minimumListenShare = 0.25
         writer = FakePlaylistWriter()
     }
 
@@ -353,12 +354,12 @@ struct MinimumListenTests {
         CaptureCoordinator(store: store, settings: settings, playlistWriter: writer)
     }
 
-    func song(_ title: String) -> NowPlayingObservation {
+    func song(_ title: String, duration: TimeInterval? = 120) -> NowPlayingObservation {
         NowPlayingObservation(
             title: title,
             artistName: "An Artist",
             catalogSongID: title,
-            duration: 200,
+            duration: duration,
             rawFields: ["entry.id": "x::STREAM"]
         )
     }
@@ -417,9 +418,30 @@ struct MinimumListenTests {
 
     @Test("zero means capture straight away")
     func zeroDisablesTheWait() async {
-        settings.minimumListenSeconds = 0
+        settings.minimumListenShare = 0
         let decision = await coordinator().handle(song("Walkin"), now: start)
         #expect(decision.isCapture)
+    }
+
+    @Test("a longer song has to play for longer", arguments: [(120.0, 30.0), (240.0, 60.0), (600.0, 150.0)])
+    func waitFollowsTheSongsLength(duration: TimeInterval, needed: TimeInterval) async {
+        let decision = await coordinator().handle(song("Walkin", duration: duration), now: start)
+        guard case .ignore(.tooShort(_, let needs)) = decision else {
+            Issue.record("Expected tooShort, got \(decision)")
+            return
+        }
+        #expect(needs == needed)
+    }
+
+    /// A live stream can report no length, or zero.
+    @Test("a song of unknown length is taken as four minutes long", arguments: [nil, 0.0])
+    func unknownLength(duration: TimeInterval?) async {
+        let decision = await coordinator().handle(song("Walkin", duration: duration), now: start)
+        guard case .ignore(.tooShort(_, let needs)) = decision else {
+            Issue.record("Expected tooShort, got \(decision)")
+            return
+        }
+        #expect(needs == 60)
     }
 
     /// The caller schedules its re-check from the remaining time.

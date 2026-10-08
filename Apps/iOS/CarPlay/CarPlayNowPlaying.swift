@@ -241,7 +241,7 @@ extension CarPlaySceneDelegate {
         case .kept:
             message = String(localized: "“\(track.title)” is in your listening history.")
         case .counting(let fill):
-            let minimum = CaptureSettings().minimumListenSeconds
+            let minimum = CaptureSettings().minimumListen(forDuration: track.duration)
             let left = Int((minimum * (1 - fill)).rounded(.up))
             message = left > 0
                 ? String(AttributedString(localized: "“\(track.title)” counts toward your history in ^[\(left) second](inflect: true) of listening.").characters)

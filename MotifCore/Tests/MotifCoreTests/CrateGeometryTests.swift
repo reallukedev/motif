@@ -83,6 +83,23 @@ struct CrateGeometryTests {
         #expect(CratePosition(offset: pitch * 7, pitch: pitch, places: 10).place == 7)
     }
 
+    @Test("Resting part way to the next record is between records, though the place rounds back")
+    func restingPartWayIsBetween() {
+        // A Mac window's crate left 0.4 of a record past Motif Radio, under the sidebar's inset.
+        let pitch = 326.0
+        let partWay = CratePosition(offset: pitch * 3.4 - 200, inset: 200, pitch: pitch, places: 10)
+        #expect(partWay.place == 3)
+        #expect(partWay.isBetween)
+        #expect(!CratePosition(offset: pitch * 3 - 200, inset: 200, pitch: pitch, places: 10).isBetween)
+        #expect(!CratePosition(offset: pitch * 3 + 0.25, pitch: pitch, places: 10).isBetween)
+    }
+
+    @Test("Pulled past an end isn't between records: it springs back to the end by itself")
+    func pastEndIsNotBetween() {
+        #expect(!CratePosition(offset: -pitch * 0.4, pitch: pitch, places: 10).isBetween)
+        #expect(!CratePosition(offset: pitch * 9.4, pitch: pitch, places: 10).isBetween)
+    }
+
     @Test("Under the Mac's sidebar the place counts the inset, not the record before the middle")
     func placeCountsTheInset() {
         // As a maximized Mac window reports it at rest on the 18th record: the sidebar's

@@ -25,9 +25,9 @@ struct CaptureSettingsDefaultsTests {
         #expect(settings.importsRecentlyPlayed)
     }
 
-    @Test("a song counts after thirty seconds, Last.fm's threshold")
+    @Test("a song counts once half of it has played, as Last.fm counts a scrobble")
     func minimumListen() {
-        #expect(settings.minimumListenSeconds == 30)
+        #expect(settings.minimumListenShare == 0.5)
     }
 
     @Test("the same song again inside ten minutes counts once")

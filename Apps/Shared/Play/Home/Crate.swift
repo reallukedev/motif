@@ -55,6 +55,8 @@ struct Crate: View {
     @State private var flickStart: Int?
     /// The place in the row passing through the middle of the crate, as it scrolls.
     @State private var centered = 0
+    /// Whether the crate is resting between records, short of half a record from `centered`.
+    @State private var isBetween = false
     /// The scroll view's leading inset and its last record's place, for where a flick rests.
     @State private var snapRange: (inset: CGFloat, last: CGFloat) = (0, 0)
     #if os(iOS)
@@ -246,8 +248,12 @@ struct Crate: View {
             if phase == .idle { flickStart = nil }
             scrollPhase = phase
             isScrolling = phase != .idle
-            // Songs found while it moved are dealt once it's still.
-            if phase == .idle { deal() }
+            // Songs found while it moved are dealt once it's still, and it comes to rest with a
+            // record in the middle, however it was let go.
+            if phase == .idle {
+                deal()
+                keepChosenInMiddle()
+            }
         }
         // Where the middle of the crate is, in records: which one is passing through it, and
         // whether it's being pulled past either end.
@@ -266,6 +272,7 @@ struct Crate: View {
         } action: { oldScroll, newScroll in
             let (old, new) = (oldScroll.position, newScroll.position)
             centered = new.place
+            isBetween = new.isBetween
             if snapRange != (newScroll.inset, newScroll.last) { snapRange = (newScroll.inset, newScroll.last) }
             switch scrollPhase {
             case .idle where isRowChanging:
@@ -519,18 +526,21 @@ struct Crate: View {
 
     /// At rest, the record in the middle is the one chosen, whose details show under it. Songs
     /// dealt in quick succession, or the first layouts, can leave a jump landing on a row that
-    /// has since grown, a few places short: once the layout has settled, it's checked against
-    /// what's really in the middle and put right.
+    /// has since grown, a few places short, and a mouse's wheel, or the records resizing with
+    /// the window, can leave it resting part way to the next: once the layout has settled, it's
+    /// checked against what's really in the middle and put right.
     private func keepChosenInMiddle() {
         settling?.cancel()
         settling = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled, scrollPhase == .idle else { return }
             defer { isRowChanging = false }
-            guard let front, let chosen = place(of: front), centered != chosen else { return }
-            var instant = Transaction()
-            instant.disablesAnimations = true
-            withTransaction(instant) { position.scrollTo(id: front, anchor: .center) }
+            guard let front, let chosen = place(of: front), centered != chosen || isBetween else { return }
+            // Part way to the chosen one, it slides the rest of the way, as it would have
+            // settled; a row changed under it jumps back unseen.
+            var settle = Transaction(animation: centered == chosen && !reduceMotion ? .snappy(duration: 0.24) : nil)
+            settle.disablesAnimations = centered != chosen || reduceMotion
+            withTransaction(settle) { position.scrollTo(id: front, anchor: .center) }
         }
     }
 
