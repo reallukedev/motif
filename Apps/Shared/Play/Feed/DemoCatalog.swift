@@ -1,10 +1,10 @@
 #if DEBUG
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Invented Apple Music songs, artists and albums, made from API JSON, for the pages that
-/// need catalog items when Motif runs on sample data. Every name here is made up.
+/// need catalog items when Tracks runs on sample data. Every name here is made up.
 enum DemoCatalog {
     private static let artistNames = [
         "Paper Lanterns", "Cold Harbour", "June Arcade", "The Quiet Hours", "Luma Vale",

@@ -2,7 +2,7 @@ import Foundation
 import MediaPlayer
 import MusicKit
 import Observation
-import MotifCore
+import TracksCore
 
 /// Offline Mode: Play shows only songs downloaded to this iPhone, which play without a
 /// connection. On when turned on in Settings, and by itself whenever there's no connection.
@@ -23,7 +23,7 @@ struct OfflineSong: Identifiable, Hashable {
     /// The library song, to play. Nil with sample data, which plays by name.
     let song: Song?
 
-    /// The key Motif's history groups plays by.
+    /// The key Tracks’ history groups plays by.
     var identity: String { HistoryImport.key(title: title, artistName: artistName) }
 }
 
@@ -40,8 +40,8 @@ extension Array where Element == OfflineSong {
 /// The songs in the Apple Music library that are downloaded to this iPhone.
 ///
 /// Apple doesn't let other apps download Apple Music songs, but Music does, and once a song
-/// is on this iPhone Motif's player plays it without a connection. With Automatic Downloads
-/// on in Settings › Apps › Music, songs added to the library from Motif download too.
+/// is on this iPhone Tracks’ player plays it without a connection. With Automatic Downloads
+/// on in Settings › Apps › Music, songs added to the library from Tracks download too.
 @MainActor
 @Observable
 final class DownloadedSongs {

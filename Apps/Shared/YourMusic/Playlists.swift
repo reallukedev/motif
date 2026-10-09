@@ -1,17 +1,17 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
-/// The playlists you make in Motif, kept on this iPhone beside the rest of your music's records.
+/// The playlists you make in Tracks, kept on this iPhone beside the rest of your music's records.
 @MainActor
 @Observable
 final class Playlists {
-    private(set) var all: [MotifPlaylist] = []
+    private(set) var all: [TracksPlaylist] = []
     /// Songs being added to a playlist from a menu anywhere: the sheet to choose one shows while
     /// they're here.
     var picking: PlaylistPick?
 
-    /// Playlists not to merge with Apple Music again, by Motif id or Apple Music id: ones you
+    /// Playlists not to merge with Apple Music again, by Tracks id or Apple Music id: ones you
     /// stopped merging, or deleted on one side.
     private(set) var unmerged: Set<String> = Set(UserDefaults.standard.stringArray(forKey: Playlists.unmergedKey) ?? [])
 
@@ -22,22 +22,22 @@ final class Playlists {
         self.isDemo = isDemo
         guard !isDemo,
               let data = try? Data(contentsOf: Self.recordURL),
-              let saved = try? JSONDecoder().decode([MotifPlaylist].self, from: data)
+              let saved = try? JSONDecoder().decode([TracksPlaylist].self, from: data)
         else { return }
         all = saved
     }
 
     /// Most recently changed first, as Music lists them.
-    var recent: [MotifPlaylist] { all.sorted { $0.updatedAt > $1.updatedAt } }
+    var recent: [TracksPlaylist] { all.sorted { $0.updatedAt > $1.updatedAt } }
 
     /// The ones songs can be added to: not smart ones, whose songs are their rules'.
-    var fillable: [MotifPlaylist] { recent.filter { !$0.isSmart } }
+    var fillable: [TracksPlaylist] { recent.filter { !$0.isSmart } }
 
-    func playlist(id: UUID) -> MotifPlaylist? { all.first { $0.id == id } }
+    func playlist(id: UUID) -> TracksPlaylist? { all.first { $0.id == id } }
 
     @discardableResult
-    func create(name: String, tracks: [LocalTrack] = [], rules: SmartRules? = nil) -> MotifPlaylist {
-        var playlist = MotifPlaylist(name: Self.named(name), rules: rules)
+    func create(name: String, tracks: [LocalTrack] = [], rules: SmartRules? = nil) -> TracksPlaylist {
+        var playlist = TracksPlaylist(name: Self.named(name), rules: rules)
         playlist.add(tracks)
         all.append(playlist)
         save()
@@ -47,7 +47,7 @@ final class Playlists {
     /// Changes a playlist, whatever is changed, and keeps it.
     /// - Parameter touches: counts as a change you made, bringing it to the top of the list.
     ///   A merge noting what it's seen doesn't.
-    func update(_ id: UUID, touches: Bool = true, _ change: (inout MotifPlaylist) -> Void) {
+    func update(_ id: UUID, touches: Bool = true, _ change: (inout TracksPlaylist) -> Void) {
         guard let position = all.firstIndex(where: { $0.id == id }) else { return }
         change(&all[position])
         if touches { all[position].updatedAt = .now }
@@ -78,7 +78,7 @@ final class Playlists {
     }
 
     func delete(_ id: UUID) {
-        // Its Apple Music playlist stays, and isn't made into a Motif one again.
+        // Its Apple Music playlist stays, and isn't made into a Tracks one again.
         if let link = playlist(id: id)?.appleMusic { unmerge([link.playlistID]) }
         all.removeAll { $0.id == id }
         save()
@@ -109,7 +109,7 @@ extension YourMusic {
     /// order, each as the library has it since the last sync; a smart one, whichever of yours
     /// match its rules.
     /// - Parameter facts: what's known of each song's plays, by identity, for rules that ask.
-    func songs(in playlist: MotifPlaylist, facts: [String: SongFacts]) -> [LocalTrack] {
+    func songs(in playlist: TracksPlaylist, facts: [String: SongFacts]) -> [LocalTrack] {
         if let rules = playlist.rules {
             return rules.songs(
                 from: tracks(for: rules.source),

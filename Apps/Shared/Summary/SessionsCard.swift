@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// How long people listen for once they start: the average session up top, how the
 /// sessions spread across lengths, and the longest one.

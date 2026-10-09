@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// What's known about an artist beyond your listening: what Apple Music's editors wrote about
 /// them and the genre they're filed under. Only what's there: MusicKit has no hometown or

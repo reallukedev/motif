@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// What can be done with a suggested song in Your Music, at the end of its row: download it
 /// from your server or your Lidarr collection, add one a server like Octo found to your music,

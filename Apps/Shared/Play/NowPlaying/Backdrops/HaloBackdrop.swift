@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// How lively a song is, 0 to 1, by its genres, for anything that keeps time by its feel.
 func songEnergy(_ track: PlayerTrack?) -> Double {
@@ -18,7 +18,7 @@ func songEnergy(_ track: PlayerTrack?) -> Double {
 /// It's centred on the cover wherever the player puts it (see
 /// ``SwiftUI/View/backdropFocus()``), and follows it, gliding, when the cover moves.
 ///
-/// Your own music is heard, band by band. Apple Music plays where Motif can't hear it, so for
+/// Your own music is heard, band by band. Apple Music plays where Tracks can't hear it, so for
 /// it the rays keep time by the song's feel, as Stage's visualizer does. Paused, the light
 /// settles and the drawing stops. Under Reduce Motion it glows, still, in the cover's colours.
 ///

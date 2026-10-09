@@ -1,9 +1,9 @@
 import UIKit
 import CarPlay
-import MotifCore
+import TracksCore
 
 /// SharePlay in the car: a code on the car's screen for passengers to scan with their iPhone's
-/// Camera, which opens Motif on their iPhone to add songs to Up Next here.
+/// Camera, which opens Tracks on their iPhone to add songs to Up Next here.
 ///
 /// It opens from the top of Up Next, where the songs they add will go, as the phone's SharePlay
 /// sits in Up Next's header. The code works while its page is open, and for as long as anyone
@@ -138,8 +138,8 @@ extension CarPlaySceneDelegate {
             title = String(localized: "Local Network Is Off")
             subtitle = String(localized: "Passengers can't join by code")
             body = [
-                String(localized: "When you've stopped, turn on Local Network for Motif in Settings on iPhone."),
-                String(localized: "Turn on Local Network for Motif in Settings."),
+                String(localized: "When you've stopped, turn on Local Network for Tracks in Settings on iPhone."),
+                String(localized: "Turn on Local Network for Tracks in Settings."),
             ]
         case .failed:
             image = CarPlayImages.placeholder(symbol: "qrcode", side: side.width, scale: scale)
@@ -154,8 +154,8 @@ extension CarPlaySceneDelegate {
                 String(localized: "Passengers point their iPhone's Camera at this code to add songs to Up Next."),
                 String(localized: "Scan with iPhone Camera to add songs."),
             ] : [
-                String(localized: "Passengers point their iPhone's Camera at this code to add songs to Up Next. They'll need Motif."),
-                String(localized: "Scan with iPhone Camera to add songs. Needs Motif."),
+                String(localized: "Passengers point their iPhone's Camera at this code to add songs to Up Next. They'll need Tracks."),
+                String(localized: "Scan with iPhone Camera to add songs. Needs Tracks."),
             ]
         }
         return CPListTemplateDetailsHeader(

@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 extension RadioDay.Part {
     var title: String {
@@ -75,7 +75,7 @@ enum RadioDayWords {
         day.isStandard ? String(localized: "Default") : String(localized: "Custom")
     }
 
-    static let footer = String(localized: "Motif Radio plays calmer or brighter songs in each part of the day, and eases from one to the next. On weekends, mornings come round an hour later.")
+    static let footer = String(localized: "Tracks Radio plays calmer or brighter songs in each part of the day, and eases from one to the next. On weekends, mornings come round an hour later.")
 
     /// An hour of the day as the clock says it: "5 AM", or "12 AM" for midnight at either end.
     static func hour(_ hour: Int) -> String {
@@ -119,7 +119,7 @@ struct ThroughTheDayChart: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Motif Radio Through the Day")
+        .accessibilityLabel("Tracks Radio Through the Day")
         .accessibilityValue(RadioDayWords.summary(day))
     }
 
@@ -305,7 +305,7 @@ private struct ThroughTheDayEditing {
             // picked up by anyone who never changed theirs.
             storedDay.wrappedValue = day.isStandard ? "" : day.stored
         }
-        Task { await player.retuneMotifRadio() }
+        Task { await player.retuneTracksRadio() }
     }
 }
 
@@ -323,9 +323,9 @@ struct ThroughTheDayPage: View {
         ScrollViewReader { proxy in
             form(day, editing: editing)
             #if DEBUG
-            // -MotifThroughTheDayAnchor bottom opens the page scrolled to its foot, for screenshots.
+            // -TracksThroughTheDayAnchor bottom opens the page scrolled to its foot, for screenshots.
             .task {
-                guard UserDefaults.standard.string(forKey: "MotifThroughTheDayAnchor") == "bottom" else { return }
+                guard UserDefaults.standard.string(forKey: "TracksThroughTheDayAnchor") == "bottom" else { return }
                 try? await Task.sleep(for: .seconds(1))
                 proxy.scrollTo(Self.footID, anchor: .bottom)
             }
@@ -384,7 +384,7 @@ struct ThroughTheDaySheet: View {
             VStack(alignment: .leading, spacing: SettingsSpacing.tight) {
                 Text("Through the Day")
                     .font(.title2.bold())
-                Text("How calm or lively Motif Radio plays in each part of the day.")
+                Text("How calm or lively Tracks Radio plays in each part of the day.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -424,8 +424,8 @@ struct ThroughTheDaySheet: View {
         #if DEBUG
         .onAppear {
             PlaySettingsScreenshot.applyAppearance()
-            // -MotifAppearance light draws it light on a Mac set to dark, for screenshots.
-            if UserDefaults.standard.string(forKey: "MotifAppearance") == "light" {
+            // -TracksAppearance light draws it light on a Mac set to dark, for screenshots.
+            if UserDefaults.standard.string(forKey: "TracksAppearance") == "light" {
                 NSApp.appearance = NSAppearance(named: .aqua)
             }
         }
@@ -433,8 +433,8 @@ struct ThroughTheDaySheet: View {
     }
 
     #if DEBUG
-    /// `-MotifThroughTheDay YES` opens the sheet from the Play pane, for screenshots.
-    static var opensAtLaunch: Bool { UserDefaults.standard.string(forKey: "MotifThroughTheDay") == "YES" }
+    /// `-TracksThroughTheDay YES` opens the sheet from the Play pane, for screenshots.
+    static var opensAtLaunch: Bool { UserDefaults.standard.string(forKey: "TracksThroughTheDay") == "YES" }
     #else
     static let opensAtLaunch = false
     #endif

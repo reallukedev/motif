@@ -1,6 +1,6 @@
 import SwiftUI
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// Your other devices, on the Mac: they see what Music is playing here and can play, pause and
 /// skip it; the menu bar shows what they're playing, with their controls.
@@ -15,7 +15,7 @@ enum NearbyMac {
         nearby.onCommand = { command in
             Task {
                 let presence = await ScriptingQueue.run { MusicScripting.presence() }
-                if speaksForMotif(model, musicIsPlaying: presence.isPlaying) {
+                if speaksForTracks(model, musicIsPlaying: presence.isPlaying) {
                     switch command {
                     case .playPause: player.togglePlayPause()
                     case .next: player.skipToNext()
@@ -48,20 +48,20 @@ enum NearbyMac {
         }
     }
 
-    /// Whether what this Mac is playing is Motif's own player rather than Music. One voice for
+    /// Whether what this Mac is playing is Tracks’ own player rather than Music. One voice for
     /// the Mac, so your other devices don't see it flick between the two. See ``NearbyVoice``.
-    private static func speaksForMotif(_ model: AppModel, musicIsPlaying: Bool) -> Bool {
+    private static func speaksForTracks(_ model: AppModel, musicIsPlaying: Bool) -> Bool {
         let player = model.player
-        return NearbyVoice.isMotif(hasSong: player.hasQueue, isPlaying: player.isPlaying, musicIsPlaying: musicIsPlaying)
+        return NearbyVoice.isTracks(hasSong: player.hasQueue, isPlaying: player.isPlaying, musicIsPlaying: musicIsPlaying)
     }
 
     /// Tells your devices what this Mac is playing, from whichever player speaks for it. Also
-    /// what the window calls as Motif's own player changes, so that change is told through
+    /// what the window calls as Tracks’ own player changes, so that change is told through
     /// the same choice rather than over Music's song.
     static func tell(_ model: AppModel) async {
         guard !model.isDemoLaunch else { return }
         let presence = await ScriptingQueue.run { MusicScripting.presence() }
-        if speaksForMotif(model, musicIsPlaying: presence.isPlaying) {
+        if speaksForTracks(model, musicIsPlaying: presence.isPlaying) {
             model.tellNearby()
             return
         }

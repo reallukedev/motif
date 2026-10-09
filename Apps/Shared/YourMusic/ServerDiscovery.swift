@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
 /// What your servers have to find: songs picked for you, their newest albums, their most
 /// played, albums picked at random, and songs you've never heard for as long as you scroll.
@@ -104,7 +104,7 @@ final class ServerDiscovery {
         self.isDemo = isDemo
         if !isDemo {
             forYou = savedForYou.load() ?? [:]
-            // So Motif Radio can play last time's picks as new finds.
+            // So Tracks Radio can play last time's picks as new finds.
             music.remember(found: forYou.values.flatMap { $0.songs + $0.suggested + $0.further })
             // Covers from last time: from disk, or fetched again if the system cleared them.
             for picks in forYou.values {

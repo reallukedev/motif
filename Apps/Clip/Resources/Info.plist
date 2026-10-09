@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Motif</string>
+	<string>Tracks</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +22,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>MotifRelayHost</key>
-	<string>$(MOTIF_RELAY_HOST)</string>
-	<key>MotifRelayKey</key>
-	<string>$(MOTIF_RELAY_KEY)</string>
+	<key>TracksRelayHost</key>
+	<string>$(TRACKS_RELAY_HOST)</string>
+	<key>TracksRelayKey</key>
+	<string>$(TRACKS_RELAY_KEY)</string>
 	<key>NSAppClip</key>
 	<dict>
 		<key>NSAppClipRequestEphemeralUserNotification</key>

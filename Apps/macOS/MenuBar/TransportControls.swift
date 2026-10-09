@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Previous, play/pause and next for Music. The monitor reads the state back after each
 /// command, so the glyphs follow the player.

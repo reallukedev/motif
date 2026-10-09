@@ -1,12 +1,12 @@
 import Intents
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Siri's "Play Phoebe Bridgers in Motif", "Play my Workout playlist on Motif", and plain
-/// "Play music" once Siri has learned Motif is where you listen.
+/// Siri's "Play Phoebe Bridgers in Tracks", "Play my Workout playlist on Tracks", and plain
+/// "Play music" once Siri has learned Tracks is where you listen.
 ///
-/// Siri parses the request; this finds what it names, in Motif's own mixes first, then the
-/// library for playlists, then Apple Music's catalog, and plays it in Motif so every song is
+/// Siri parses the request; this finds what it names, in Tracks’ own mixes first, then the
+/// library for playlists, then Apple Music's catalog, and plays it in Tracks so every song is
 /// kept. Handled in the app, which is launched in the background to do it.
 nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
     func resolveMediaItems(for intent: INPlayMediaIntent) async -> [INPlayMediaMediaItemResolutionResult] {
@@ -37,7 +37,7 @@ nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandl
             await Self.remember(asked)
             return INPlayMediaIntentResponse(code: .success, userActivity: nil)
         case .needsSubscription, .accessDenied:
-            // Something to sort out in Motif itself.
+            // Something to sort out in Tracks itself.
             return INPlayMediaIntentResponse(code: .failureRequiringAppLaunch, userActivity: nil)
         case .onlyExplicit, .explicitSong, .blockedArtist:
             return INPlayMediaIntentResponse(code: .failureRestrictedContent, userActivity: nil)
@@ -57,7 +57,7 @@ extension PlayMediaIntentHandler {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         // "Play music" and "something chill" aren't searches.
-        guard !term.isEmpty, MediaRequestResolver.motifChoice(named: term) == nil else { return }
+        guard !term.isEmpty, MediaRequestResolver.tracksChoice(named: term) == nil else { return }
         let key = MusicSource.current == .yourMusic ? "recentYourMusicSearches" : "recentMusicSearches"
         let defaults = UserDefaults.standard
         defaults.set(RecentSearches.adding(term, to: defaults.string(forKey: key) ?? ""), forKey: key)
@@ -81,26 +81,26 @@ nonisolated struct ResolvedMedia: Sendable {
     var artist: String?
 }
 
-/// Turns what Siri heard into something Motif can play, and plays it.
+/// Turns what Siri heard into something Tracks can play, and plays it.
 @MainActor
 enum MediaRequestResolver {
     // Identifiers carried from resolving to handling: "kind:value".
-    private static let motifPrefix = "motif:"
+    private static let tracksPrefix = "tracks:"
 
     static func item(for request: MediaRequest) async -> ResolvedMedia? {
         let (name, artist, type) = (request.name, request.artist, request.type)
 
-        // "Play something chill": one of Motif's moods, when Siri heard one and nothing else.
+        // "Play something chill": one of Tracks’ moods, when Siri heard one and nothing else.
         if name.isEmpty, artist.isEmpty, let mood = request.moods.lazy.compactMap(moodChoice(named:)).first {
-            return motifItem(mood)
+            return tracksItem(mood)
         }
 
-        // "Play music": Motif Radio, which always has something, or this hour's mix with it off.
+        // "Play music": Tracks Radio, which always has something, or this hour's mix with it off.
         if name.isEmpty, artist.isEmpty {
-            return motifItem(PlayPreferences.isMotifRadioOn ? .station : .forYou)
+            return tracksItem(PlayPreferences.isTracksRadioOn ? .station : .forYou)
         }
-        if artist.isEmpty, let choice = motifChoice(named: name) {
-            return motifItem(choice)
+        if artist.isEmpty, let choice = tracksChoice(named: name) {
+            return tracksItem(choice)
         }
         if MusicSource.current == .yourMusic {
             return localItem(name: name, artist: artist, type: type)
@@ -170,9 +170,9 @@ enum MediaRequestResolver {
         case "local-artist":
             guard let artist = model.yourMusic.index.artist(id: parts[1]) else { return .nothingToPlay }
             await player.start(.local(artist.tracks), from: PlayContext(kind: .artist, title: artist.name), shuffled: true)
-        case "motif":
+        case "tracks":
             guard let choice = PlayChoice(rawValue: parts[1]) else { return .nothingToPlay }
-            await MotifPlayback.start(choice, model: model)
+            await TracksPlayback.start(choice, model: model)
         case "song":
             guard let song = await song(id) else { return .nothingToPlay }
             // The song, then more by the same artist, so the music doesn't stop after one.
@@ -224,9 +224,9 @@ enum MediaRequestResolver {
 
     // MARK: - Finding things
 
-    private static func motifItem(_ choice: PlayChoice) -> ResolvedMedia {
-        let title = String(localized: PlayChoice.caseDisplayRepresentations[choice]?.title ?? "Motif Radio")
-        return ResolvedMedia(identifier: motifPrefix + choice.rawValue, title: title, type: .music)
+    private static func tracksItem(_ choice: PlayChoice) -> ResolvedMedia {
+        let title = String(localized: PlayChoice.caseDisplayRepresentations[choice]?.title ?? "Tracks Radio")
+        return ResolvedMedia(identifier: tracksPrefix + choice.rawValue, title: title, type: .music)
     }
 
     /// A mood Siri named, matched loosely by the start of a word: "chill", "relaxing",
@@ -245,11 +245,11 @@ enum MediaRequestResolver {
         return starts.first { spoken.contains(" " + $0.0) }?.1
     }
 
-    /// One of Motif's own names, however Siri spelled it.
-    static func motifChoice(named name: String) -> PlayChoice? {
+    /// One of Tracks’ own names, however Siri spelled it.
+    static func tracksChoice(named name: String) -> PlayChoice? {
         let folded = StatsCalculator.folded(name)
         let names: [(String, PlayChoice)] = [
-            ("motif radio", .station), ("motif station", .station), ("my station", .station), ("my radio", .station),
+            ("tracks radio", .station), ("tracks station", .station), ("my station", .station), ("my radio", .station),
             ("my mix", .forYou), ("discover", .discover), ("something new", .discover),
             ("on repeat", .onRepeat), ("all-time favorites", .favorites), ("all time favorites", .favorites),
             ("my favorites", .favorites), ("deep cuts", .deepCuts), ("radio finds", .radioFinds),

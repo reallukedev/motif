@@ -11,7 +11,7 @@ struct CollectionTrack: Identifiable, Hashable {
     let title: String
     let artist: String
     let album: String
-    /// Your plays, from Motif's history, for a column that's hidden until asked for.
+    /// Your plays, from Tracks’ history, for a column that's hidden until asked for.
     let plays: Int
     let duration: TimeInterval
     var isExplicit = false
@@ -52,8 +52,8 @@ struct CollectionMacLayout<Header: View, Content: View>: View {
 
 #if DEBUG
 /// For screenshots of collection pages, which a launch argument can't otherwise give:
-/// `-MotifAppearance dark` draws the app dark whatever the system's set to, and
-/// `-MotifWindowSize 900x640` sizes the window. Debug builds only.
+/// `-TracksAppearance dark` draws the app dark whatever the system's set to, and
+/// `-TracksWindowSize 900x640` sizes the window. Debug builds only.
 enum CollectionScreenshotSetup {
     @MainActor private static var hasApplied = false
 
@@ -62,10 +62,10 @@ enum CollectionScreenshotSetup {
         guard !hasApplied else { return }
         hasApplied = true
         let defaults = UserDefaults.standard
-        if defaults.string(forKey: "MotifAppearance") == "dark" {
+        if defaults.string(forKey: "TracksAppearance") == "dark" {
             NSApp.appearance = NSAppearance(named: .darkAqua)
         }
-        if let size = defaults.string(forKey: "MotifWindowSize")?.split(separator: "x").compactMap({ Double($0) }),
+        if let size = defaults.string(forKey: "TracksWindowSize")?.split(separator: "x").compactMap({ Double($0) }),
            size.count == 2, let window = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }) {
             window.setContentSize(NSSize(width: size[0], height: size[1]))
         }
@@ -392,7 +392,7 @@ private struct CollectionSongRow: View {
 
 /// What a row carries when it's dragged to a new place in its playlist.
 enum CollectionTableDrag {
-    private static let prefix = "motif-collection-row:"
+    private static let prefix = "tracks-collection-row:"
 
     static func payload(_ id: CollectionTrack.ID) -> String { prefix + id }
 

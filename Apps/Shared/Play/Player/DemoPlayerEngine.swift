@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A player that only pretends, for sample data: the songs are made up, so nothing may reach
 /// Apple Music. Time runs and songs change, so the screens can be seen as they'd really look.
@@ -234,11 +234,11 @@ final class DemoPlayerEngine: PlayerEngine {
         )
     }
 
-    /// `-MotifDemoCovers "https://…|https://…"`, in a Debug build: real covers for the sample
+    /// `-TracksDemoCovers "https://…|https://…"`, in a Debug build: real covers for the sample
     /// songs, one after another, to see the player's backgrounds with real artwork.
     private static func demoCover(number: Int) -> CoverArt? {
         #if DEBUG
-        guard let list = UserDefaults.standard.string(forKey: "MotifDemoCovers") else { return nil }
+        guard let list = UserDefaults.standard.string(forKey: "TracksDemoCovers") else { return nil }
         let covers = list.split(separator: "|").map(String.init)
         guard !covers.isEmpty else { return nil }
         return .url(covers[(number - 1) % covers.count], seed: "demo")

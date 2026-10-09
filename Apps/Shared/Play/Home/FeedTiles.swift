@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A mix on the shelf: its covers, its name and why.
 struct MixTile: View {

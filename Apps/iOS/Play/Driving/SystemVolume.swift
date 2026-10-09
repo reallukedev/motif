@@ -1,6 +1,6 @@
 import AVFoundation
 import MediaPlayer
-import MotifCore
+import TracksCore
 import UIKit
 
 /// iPhone's own volume, for Louder at Speed with Apple Music, whose level only the system can
@@ -8,17 +8,17 @@ import UIKit
 ///
 /// It starts from the volume you have and moves it in whole half-steps, never more than once a
 /// second, so the changes are few and small. Pressing the volume buttons is always yours: the
-/// volume you pick becomes the one for the speed you're at, and Motif follows on from there.
+/// volume you pick becomes the one for the speed you're at, and Tracks follows on from there.
 @MainActor
 final class SystemVolume {
     /// The volume you'd set, at the level Louder at Speed was at. Nil until the first reading
     /// after it starts, or after the audio moves somewhere else.
     private var anchor: SystemVolumeAnchor?
-    /// The volume as last seen, to tell your changes from Motif's.
+    /// The volume as last seen, to tell your changes from Tracks’.
     private var lastSeen: Double?
     private var lastSet = Date.distantPast
     /// The one way an app can move the volume: the slider in the system's volume view. Kept in
-    /// the window, out of sight, so iPhone doesn't show its volume display for Motif's changes.
+    /// the window, out of sight, so iPhone doesn't show its volume display for Tracks’ changes.
     private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
 
     /// Changes smaller than half a step aren't made: too small to hear over a road.
@@ -71,7 +71,7 @@ final class SystemVolume {
         lastSet = .now
         slider.setValue(Float(value), animated: false)
         slider.sendActions(for: .valueChanged)
-        // The system may round to its own steps: what it settles on is what counts as Motif's.
+        // The system may round to its own steps: what it settles on is what counts as Tracks’.
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard let self else { return }

@@ -1,6 +1,6 @@
 import AVFoundation
 import CoreLocation
-import MotifCore
+import TracksCore
 import UIKit
 
 /// Louder at Speed: while you drive, the music comes up as the car speeds up and eases down as
@@ -8,9 +8,9 @@ import UIKit
 /// lights, as a car's own speed-sensitive volume is. ``SpeedLoudness`` decides the level and
 /// how it moves; this follows the car and the player and sets it.
 ///
-/// Your own music is set on Motif's own player level, under the volume you set, so your volume
+/// Your own music is set on Tracks’ own player level, under the volume you set, so your volume
 /// is the highway's and the music comes down from it as you slow. Apple Music plays in the
-/// system's player, whose level only iPhone's volume changes, so there Motif moves iPhone's
+/// system's player, whose level only iPhone's volume changes, so there Tracks moves iPhone's
 /// volume, a half-step at a time (see ``SystemVolume``). Over CarPlay the car keeps its volume
 /// to itself, so Apple Music can't follow there.
 ///
@@ -37,7 +37,7 @@ final class SpeedVolume {
     private(set) var level: Double = 0
 
     enum Output: Equatable {
-        /// Motif's own player level: your own music.
+        /// Tracks’ own player level: your own music.
         case playerLevel
         /// iPhone's volume: Apple Music.
         case systemVolume
@@ -151,8 +151,8 @@ final class SpeedVolume {
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.routeChanged() }
         })
-        // Access changed in Settings while away; and a drive that started with Motif in the
-        // background can keep its speed coming once Motif is in use again.
+        // Access changed in Settings while away; and a drive that started with Tracks in the
+        // background can keep its speed coming once Tracks is in use again.
         for name in [UIApplication.didBecomeActiveNotification, UIScene.didActivateNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.becameActive() }

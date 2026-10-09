@@ -1,23 +1,23 @@
 import UIKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
-import MotifCore
+import TracksCore
 
 /// A SharePlay code as a picture: black squares on white, drawn square by square so every
 /// edge is sharp at any size, with the white margin a camera needs to find it. For the car's
 /// screen and the iPhone's.
 enum SharePlayCodeImage {
     /// What the code holds: Apple's App Clip link once the App Clip is live, so anyone can
-    /// join, and Motif's own link until then. See `MOTIF_APP_CLIP_LIVE`.
+    /// join, and Tracks’ own link until then. See `TRACKS_APP_CLIP_LIVE`.
     static func link(for invite: SharePlayInvite) -> URL {
-        guard isForEveryone, let clip = Bundle.main.infoDictionary?["MotifAppClipBundleID"] as? String else { return invite.url }
+        guard isForEveryone, let clip = Bundle.main.infoDictionary?["TracksAppClipBundleID"] as? String else { return invite.url }
         return invite.appClipURL(bundleID: clip)
     }
 
-    /// Whether anyone can join with the code, Motif or not: the App Clip is live, and there's
+    /// Whether anyone can join with the code, Tracks or not: the App Clip is live, and there's
     /// a relay for it to reach this iPhone through.
     static var isForEveryone: Bool {
-        (Bundle.main.infoDictionary?["MotifAppClipIsLive"] as? String)?.uppercased() == "YES"
+        (Bundle.main.infoDictionary?["TracksAppClipIsLive"] as? String)?.uppercased() == "YES"
             && SharePlayRelayConfig.main != nil
     }
 

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One server's shelves on Play: what's new on it, what it plays most, and albums at random.
 /// What it picks for you is a section of its own, ``ServerForYouSection``.

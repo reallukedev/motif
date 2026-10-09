@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The genres played most, as a ranked list with bars measured against the top one. Shares
 /// are out of the plays whose genre is known, and the card says so when that isn't nearly all.

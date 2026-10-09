@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Handpicked's page: the station at the top, and under it the songs it's made from, to add
 /// to, start from, or take out. With none picked yet, the page asks for a few, in place.

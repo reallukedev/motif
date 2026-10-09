@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 extension SongLens {
     /// Each lens's colour, for its chip and the deck's glow before a cover's is read.

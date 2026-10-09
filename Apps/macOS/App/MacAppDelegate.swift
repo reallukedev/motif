@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 import Observation
-import MotifMusic
+import TracksMusic
 
 /// Owns what lives as long as the process, and starts it when the app finishes launching.
 ///
@@ -29,7 +29,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         trackCaptureActivity()
         Task { await model.startCapture() }
         NearbyMac.start(model)
-        followMotifPlayer()
+        followTracksPlayer()
         watchSpaceBar()
     }
 
@@ -71,32 +71,32 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Pauses Music when Motif starts playing, as any player on the Mac takes over from the
+    /// Pauses Music when Tracks starts playing, as any player on the Mac takes over from the
     /// one before it. A Mac has no audio session to do it, and two songs at once is nobody's
     /// idea of listening.
     ///
     /// Only on a start, and with Music's own `pause`, which does nothing to a Music that isn't
     /// playing: a start can be reported more than once, and a toggle would set Music going again.
-    private func followMotifPlayer() {
+    private func followTracksPlayer() {
         let player = model.player
         let isPlaying = withObservationTracking {
             player.isPlaying
         } onChange: { [weak self] in
             // Fires just before the change lands; read it back once it has.
-            Task { @MainActor in self?.followMotifPlayer() }
+            Task { @MainActor in self?.followTracksPlayer() }
         }
-        defer { motifWasPlaying = isPlaying }
-        guard isPlaying, !motifWasPlaying, !model.isDemoLaunch else { return }
+        defer { tracksWasPlaying = isPlaying }
+        guard isPlaying, !tracksWasPlaying, !model.isDemoLaunch else { return }
         Task { [monitor] in
             _ = await ScriptingQueue.run { MediaTransportControl.pause() }
             await monitor.refresh()
         }
     }
 
-    /// Whether Motif's player was playing at the last look, so only a start pauses Music.
-    private var motifWasPlaying = false
+    /// Whether Tracks’ player was playing at the last look, so only a start pauses Music.
+    private var tracksWasPlaying = false
 
-    /// Right-clicking Motif in the Dock: the song playing and its controls, as Music's Dock
+    /// Right-clicking Tracks in the Dock: the song playing and its controls, as Music's Dock
     /// menu has.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let player = model.player

@@ -1,104 +1,104 @@
 import Foundation
-import MotifCore
+import TracksCore
 
 /// Where to start, from launch arguments. Used for screenshots and UI checks, so a given
 /// screen can be reached without tapping through the app. Debug builds only.
 ///
-///     -MotifTab charts            Summary, Play, History or Charts (iPhone)
-///     -MotifSearch YES            open search on the first tab (iPhone)
-///     -MotifDemoPlaying YES       with sample data, start the Play tab's first mix (iPhone);
-///                                 "station" for Motif Radio, or a mood such as "chill"
-///     -MotifDemoPlaying one       or just its first song, for Autoplay to follow on from
-///     -MotifDemoSkips 3           then skip that many songs in a row, a few seconds apart
-///     -MotifDemoMoreLikeThis YES  or ask for more like the song on, a few seconds in
-///     -MotifNowPlaying YES        open Now Playing once something plays (iPhone)
-///     -MotifQueue YES             and show Up Next in it (iPhone), or the panel (Mac)
-///     -MotifQualityDetails YES    and open the audio quality badge's details
-///     -MotifStage YES             and open Stage (iPhone, from Now Playing), or its window (Mac)
-///     -MotifStageControls YES     with its controls up, and kept up
-///     -MotifStageCustomize YES    with Customize Stage open
-///     -MotifSleeve YES            and turn the cover over to Your History
-///     -MotifMix onRepeat          open one of the Play tab's mixes by id (iPhone)
-///     -MotifSampleAlbum YES       open an invented Apple Music album page (iPhone)
-///     -MotifMood chill            open a mood's page (iPhone)
-///     -MotifParty YES             open Party, or "dinnerParty" to open it on that party
-///     -MotifPartyDelay 60         with sample data, how long Party's playlists take to come
-///     -MotifPage songs            open the Song Finder (or "songs.chill" for a lens), the
+///     -TracksTab charts            Summary, Play, History or Charts (iPhone)
+///     -TracksSearch YES            open search on the first tab (iPhone)
+///     -TracksDemoPlaying YES       with sample data, start the Play tab's first mix (iPhone);
+///                                 "station" for Tracks Radio, or a mood such as "chill"
+///     -TracksDemoPlaying one       or just its first song, for Autoplay to follow on from
+///     -TracksDemoSkips 3           then skip that many songs in a row, a few seconds apart
+///     -TracksDemoMoreLikeThis YES  or ask for more like the song on, a few seconds in
+///     -TracksNowPlaying YES        open Now Playing once something plays (iPhone)
+///     -TracksQueue YES             and show Up Next in it (iPhone), or the panel (Mac)
+///     -TracksQualityDetails YES    and open the audio quality badge's details
+///     -TracksStage YES             and open Stage (iPhone, from Now Playing), or its window (Mac)
+///     -TracksStageControls YES     with its controls up, and kept up
+///     -TracksStageCustomize YES    with Customize Stage open
+///     -TracksSleeve YES            and turn the cover over to Your History
+///     -TracksMix onRepeat          open one of the Play tab's mixes by id (iPhone)
+///     -TracksSampleAlbum YES       open an invented Apple Music album page (iPhone)
+///     -TracksMood chill            open a mood's page (iPhone)
+///     -TracksParty YES             open Party, or "dinnerParty" to open it on that party
+///     -TracksPartyDelay 60         with sample data, how long Party's playlists take to come
+///     -TracksPage songs            open the Song Finder (or "songs.chill" for a lens), the
 ///                                 Artist Finder ("artists") or New from Your Artists
 ///                                 ("releases") (iPhone)
-///     -MotifCrate 4               start Play's crate that many records from the lead, or back
+///     -TracksCrate 4               start Play's crate that many records from the lead, or back
 ///                                 with a negative number, into the suggested songs
-///     -MotifRadioTuner YES        open Motif Radio's tuning from its card (iPhone), or
-///                                 "queue" from Up Next, with -MotifQueue
-///     -MotifSettings play         open Settings at one of its pages: play, history, radio,
+///     -TracksRadioTuner YES        open Tracks Radio's tuning from its card (iPhone), or
+///                                 "queue" from Up Next, with -TracksQueue
+///     -TracksSettings play         open Settings at one of its pages: play, history, radio,
 ///                                 appleMusic, lastFM or iCloud (iPhone)
-///     -MotifEditPlay YES          open Edit Play (iPhone)
-///     -MotifSidebar history       a sidebar item (Mac): listenNow, radio, summary, history,
+///     -TracksEditPlay YES          open Edit Play (iPhone)
+///     -TracksSidebar history       a sidebar item (Mac): listenNow, radio, summary, history,
 ///                                 topSongs, playlists, albums and the like
-///     -MotifScroll rhythm         a section of Summary to scroll to
-///     -MotifOpen "artist:mara solis"   an artist, song:<title>|<artist>,
+///     -TracksScroll rhythm         a section of Summary to scroll to
+///     -TracksOpen "artist:mara solis"   an artist, song:<title>|<artist>,
 ///                                      or album:<title>|<artist>
-///     -MotifSettings YES          open Settings
-///     -MotifSearchText "mara"     search for this in the sidebar (Mac)
-///     -MotifMiniPlayer YES        open the Mini Player too (Mac)
-///     -MotifActivate YES          come to the front, so the window is drawn focused (Mac)
+///     -TracksSettings YES          open Settings
+///     -TracksSearchText "mara"     search for this in the sidebar (Mac)
+///     -TracksMiniPlayer YES        open the Mini Player too (Mac)
+///     -TracksActivate YES          come to the front, so the window is drawn focused (Mac)
 ///     -statsRange year            the range, since it's stored under that key
-///     -MotifPeriodsBack 1         start Summary that many weeks, months or years back
+///     -TracksPeriodsBack 1         start Summary that many weeks, months or years back
 ///     -chartSpan day              Top Charts' period: day, week, month, year or allTime
-///     -MotifChartDate 2026-09-01  start Top Charts on the period holding this day
+///     -TracksChartDate 2026-09-01  start Top Charts on the period holding this day
 ///     -separatesMusicSources YES  count Apple Music and Your Music apart, and
 ///     -statsSourceScope yourMusic show one of them: all, appleMusic or yourMusic
-///     -MotifDemoDriving YES       Motif Radio as if driving
-///     -MotifRadioTunerAnchor moments  open the Tune sheet at Time and Driving
-///     -MotifRadioTunerAnchor day  open the Tune sheet on Through the Day (iPhone)
-///     -MotifThroughTheDayAnchor bottom  scroll Through the Day to its foot
-///     -MotifThroughTheDay YES     open Through the Day from the Play pane (Mac)
-///     -MotifAppearance light      draw the Mac sheet light whatever the Mac's setting
-///     -MotifNearbyDemo YES        a device nearby playing a song (or "paused", or "control"
+///     -TracksDemoDriving YES       Tracks Radio as if driving
+///     -TracksRadioTunerAnchor moments  open the Tune sheet at Time and Driving
+///     -TracksRadioTunerAnchor day  open the Tune sheet on Through the Day (iPhone)
+///     -TracksThroughTheDayAnchor bottom  scroll Through the Day to its foot
+///     -TracksThroughTheDay YES     open Through the Day from the Play pane (Mac)
+///     -TracksAppearance light      draw the Mac sheet light whatever the Mac's setting
+///     -TracksNearbyDemo YES        a device nearby playing a song (or "paused", or "control"
 ///                                 to show it in the player)
-///     -MotifDevices YES           open Your Devices
-///     -MotifSharePlayDemo host    a pretend SharePlay with sample data (iPhone): "host", or
+///     -TracksDevices YES           open Your Devices
+///     -TracksSharePlayDemo host    a pretend SharePlay with sample data (iPhone): "host", or
 ///                                 "guest" and its states (see SharePlayDemo)
-///     -MotifSharePlaySearch "sun" and search for this on the guest page
+///     -TracksSharePlaySearch "sun" and search for this on the guest page
 enum LaunchScene {
-    static var tab: String? { value("MotifTab") }
-    static var sidebar: String? { value("MotifSidebar") }
-    static var scrollAnchor: String? { value("MotifScroll") }
-    static var opensSettings: Bool { value("MotifSettings") != nil }
-    static var opensDevices: Bool { value("MotifDevices") == "YES" }
+    static var tab: String? { value("TracksTab") }
+    static var sidebar: String? { value("TracksSidebar") }
+    static var scrollAnchor: String? { value("TracksScroll") }
+    static var opensSettings: Bool { value("TracksSettings") != nil }
+    static var opensDevices: Bool { value("TracksDevices") == "YES" }
     /// The page of Settings to open on, by its name.
-    static var settingsPageName: String? { value("MotifSettings") }
-    static var opensPlaySettings: Bool { value("MotifSettings") == "play" }
+    static var settingsPageName: String? { value("TracksSettings") }
+    static var opensPlaySettings: Bool { value("TracksSettings") == "play" }
     /// How many weeks, months or years back Summary starts.
-    static var periodOffset: Int { -(value("MotifPeriodsBack").flatMap(Int.init).map(abs) ?? 0) }
-    static var opensEditPlay: Bool { value("MotifEditPlay") == "YES" }
-    static var activates: Bool { value("MotifActivate") == "YES" }
-    static var opensSearch: Bool { value("MotifSearch") == "YES" }
+    static var periodOffset: Int { -(value("TracksPeriodsBack").flatMap(Int.init).map(abs) ?? 0) }
+    static var opensEditPlay: Bool { value("TracksEditPlay") == "YES" }
+    static var activates: Bool { value("TracksActivate") == "YES" }
+    static var opensSearch: Bool { value("TracksSearch") == "YES" }
     /// Text already in the search field (Mac).
-    static var searchText: String? { value("MotifSearchText") }
-    static var opensNowPlaying: Bool { value("MotifNowPlaying") == "YES" }
-    static var opensQueue: Bool { value("MotifQueue") == "YES" }
-    static var opensQualityDetails: Bool { value("MotifQualityDetails") == "YES" }
-    static var opensStage: Bool { value("MotifStage") == "YES" }
-    static var opensStageControls: Bool { value("MotifStageControls") == "YES" }
-    static var opensStageCustomizer: Bool { value("MotifStageCustomize") == "YES" }
-    static var opensSleeve: Bool { value("MotifSleeve") == "YES" }
-    static var opensRadioTuner: Bool { value("MotifRadioTuner") == "YES" }
+    static var searchText: String? { value("TracksSearchText") }
+    static var opensNowPlaying: Bool { value("TracksNowPlaying") == "YES" }
+    static var opensQueue: Bool { value("TracksQueue") == "YES" }
+    static var opensQualityDetails: Bool { value("TracksQualityDetails") == "YES" }
+    static var opensStage: Bool { value("TracksStage") == "YES" }
+    static var opensStageControls: Bool { value("TracksStageControls") == "YES" }
+    static var opensStageCustomizer: Bool { value("TracksStageCustomize") == "YES" }
+    static var opensSleeve: Bool { value("TracksSleeve") == "YES" }
+    static var opensRadioTuner: Bool { value("TracksRadioTuner") == "YES" }
     /// Records from the crate's lead to start on.
-    static var crateOffset: Int? { value("MotifCrate").flatMap(Int.init) }
-    static var opensRadioTunerFromQueue: Bool { value("MotifRadioTuner") == "queue" }
+    static var crateOffset: Int? { value("TracksCrate").flatMap(Int.init) }
+    static var opensRadioTunerFromQueue: Bool { value("TracksRadioTuner") == "queue" }
     /// A pretend SharePlay session's scene, with sample data.
-    static var sharePlayDemo: String? { value("MotifSharePlayDemo") }
-    static var sharePlaySearch: String? { value("MotifSharePlaySearch") }
+    static var sharePlayDemo: String? { value("TracksSharePlayDemo") }
+    static var sharePlaySearch: String? { value("TracksSharePlaySearch") }
     /// Opens the SharePlay code's sheet over Now Playing.
-    static var opensSharePlayCode: Bool { value("MotifSharePlayCode") == "YES" }
+    static var opensSharePlayCode: Bool { value("TracksSharePlayCode") == "YES" }
     /// The day Top Charts starts on, as yyyy-MM-dd.
     static var chartDate: Date? {
-        value("MotifChartDate").flatMap { try? Date($0, strategy: .iso8601.year().month().day()) }
+        value("TracksChartDate").flatMap { try? Date($0, strategy: .iso8601.year().month().day()) }
     }
 
     static var route: Route? {
-        guard let open = value("MotifOpen") else { return nil }
+        guard let open = value("TracksOpen") else { return nil }
         let parts = open.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
         switch parts[0] {
@@ -131,10 +131,10 @@ extension LaunchScene {
     /// Starts the first mix with sample data, for screenshots of the player. Once per launch.
     @MainActor
     static func startDemoPlayback(_ model: AppModel) {
-        guard model.isDemoLaunch, let playing = value("MotifDemoPlaying"), !hasStartedDemoPlayback else { return }
+        guard model.isDemoLaunch, let playing = value("TracksDemoPlaying"), !hasStartedDemoPlayback else { return }
         if playing == "station" {
             hasStartedDemoPlayback = true
-            model.player.playMotifRadio()
+            model.player.playTracksRadio()
             skipForDemo(model)
             askForMoreForDemo(model)
             return
@@ -156,22 +156,22 @@ extension LaunchScene {
         skipForDemo(model)
     }
 
-    /// `-MotifDemoMoreLikeThis`: asks for more like the song on, a few seconds in, as someone
+    /// `-TracksDemoMoreLikeThis`: asks for more like the song on, a few seconds in, as someone
     /// who likes what they hear would from its menu.
     @MainActor
     private static func askForMoreForDemo(_ model: AppModel) {
-        guard value("MotifDemoMoreLikeThis") == "YES" else { return }
+        guard value("TracksDemoMoreLikeThis") == "YES" else { return }
         Task {
             try? await Task.sleep(for: .seconds(6))
             model.player.playMoreLikeThis()
         }
     }
 
-    /// `-MotifDemoSkips`: skips that many songs soon after each starts, as someone who isn't
+    /// `-TracksDemoSkips`: skips that many songs soon after each starts, as someone who isn't
     /// feeling it would, to see a live mix or Autoplay steer.
     @MainActor
     private static func skipForDemo(_ model: AppModel) {
-        guard let skips = value("MotifDemoSkips").flatMap(Int.init), skips > 0 else { return }
+        guard let skips = value("TracksDemoSkips").flatMap(Int.init), skips > 0 else { return }
         Task {
             try? await Task.sleep(for: .seconds(6))
             for _ in 0..<skips {
@@ -183,16 +183,16 @@ extension LaunchScene {
 
     @MainActor private static var hasStartedDemoPlayback = false
 
-    /// Opens the mix named by `-MotifMix` on the Play tab, once its mixes exist.
+    /// Opens the mix named by `-TracksMix` on the Play tab, once its mixes exist.
     @MainActor
     static func openMix(_ model: AppModel) {
         #if DEBUG
-        if let name = value("MotifMood"), let mood = Mood(rawValue: name), !hasOpenedMix {
+        if let name = value("TracksMood"), let mood = Mood(rawValue: name), !hasOpenedMix {
             hasOpenedMix = true
             show(.mood(mood), in: model)
             return
         }
-        if let party = value("MotifParty"), !hasOpenedMix {
+        if let party = value("TracksParty"), !hasOpenedMix {
             hasOpenedMix = true
             if let vibe = PartyVibe(rawValue: party) {
                 UserDefaults.standard.set(vibe.rawValue, forKey: PartyVibe.storageKey)
@@ -200,28 +200,28 @@ extension LaunchScene {
             show(.party, in: model)
             return
         }
-        // `-MotifAlbum "night ferry"` or `-MotifArtist "umbra"`: one of yours, by the start of its name.
-        if let name = value("MotifAlbum").map(StatsCalculator.folded), !hasOpenedMix,
+        // `-TracksAlbum "night ferry"` or `-TracksArtist "umbra"`: one of yours, by the start of its name.
+        if let name = value("TracksAlbum").map(StatsCalculator.folded), !hasOpenedMix,
            let album = model.yourMusic.index.albums.first(where: { StatsCalculator.folded($0.title).hasPrefix(name) }) {
             hasOpenedMix = true
-            // `-MotifDownloadAlbum YES`: and download it, to see downloads come down.
-            if value("MotifDownloadAlbum") == "YES" {
+            // `-TracksDownloadAlbum YES`: and download it, to see downloads come down.
+            if value("TracksDownloadAlbum") == "YES" {
                 model.yourMusic.downloads.download(album.tracks.filter(\.isFromServer))
             }
-            if let page = value("MotifPage"), page == "downloads" {
+            if let page = value("TracksPage"), page == "downloads" {
                 show(.yourMusic(.downloads), in: model)
             } else {
                 show(.localAlbum(album.id), in: model)
             }
             return
         }
-        if let name = value("MotifArtist").map(StatsCalculator.folded), !hasOpenedMix,
+        if let name = value("TracksArtist").map(StatsCalculator.folded), !hasOpenedMix,
            let artist = model.yourMusic.index.artists.first(where: { $0.id.hasPrefix(name) }) {
             hasOpenedMix = true
             show(.localArtist(artist.id), in: model)
             return
         }
-        if let page = value("MotifPage"), !hasOpenedMix {
+        if let page = value("TracksPage"), !hasOpenedMix {
             let parts = page.split(separator: ".").map(String.init)
             let route: PlayRoute? = switch parts.first {
             case "songs": .songFinder(parts.count > 1 ? SongLens.all.first { $0.id == parts[1] || $0.id == "mood.\(parts[1])" } ?? .forYou : .forYou)
@@ -244,13 +244,13 @@ extension LaunchScene {
                 return
             }
         }
-        if value("MotifSampleAlbum") == "YES", !hasOpenedMix {
+        if value("TracksSampleAlbum") == "YES", !hasOpenedMix {
             hasOpenedMix = true
             show(.album(PreviewMusic.album()), in: model)
             return
         }
         #endif
-        guard let id = value("MotifMix"), !hasOpenedMix, model.playFeed.mixes.mix(id: id) != nil else { return }
+        guard let id = value("TracksMix"), !hasOpenedMix, model.playFeed.mixes.mix(id: id) != nil else { return }
         hasOpenedMix = true
         show(.mix(id), in: model)
     }
@@ -278,7 +278,7 @@ extension LaunchScene {
 import SwiftUI
 
 extension View {
-    /// `-MotifScrollBy 900`: scrolls the page that far down once it's drawn, for screenshots of
+    /// `-TracksScrollBy 900`: scrolls the page that far down once it's drawn, for screenshots of
     /// what's below the fold. Debug builds only.
     func launchScroll() -> some View {
         modifier(LaunchScroll())
@@ -289,11 +289,11 @@ private struct LaunchScroll: ViewModifier {
     @State private var position = ScrollPosition(edge: .top)
 
     func body(content: Content) -> some View {
-        if let offset = UserDefaults.standard.string(forKey: "MotifScrollBy").flatMap(Double.init) {
+        if let offset = UserDefaults.standard.string(forKey: "TracksScrollBy").flatMap(Double.init) {
             content
                 .scrollPosition($position)
                 .task {
-                    try? await Task.sleep(for: .seconds(UserDefaults.standard.string(forKey: "MotifScrollDelay").flatMap(Double.init) ?? 4))
+                    try? await Task.sleep(for: .seconds(UserDefaults.standard.string(forKey: "TracksScrollDelay").flatMap(Double.init) ?? 4))
                     position.scrollTo(y: offset)
                 }
         } else {

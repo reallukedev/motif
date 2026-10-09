@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import MotifCore
+import TracksCore
 
 enum HistoryFilter: String, CaseIterable, Identifiable {
     case all, radio, onDemand, recovered, lastFM

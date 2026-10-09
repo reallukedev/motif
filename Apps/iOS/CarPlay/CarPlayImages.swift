@@ -3,11 +3,11 @@ import SwiftUI
 import MediaPlayer
 import CoreImage.CIFilterBuiltins
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Pictures for CarPlay's templates, which take finished `UIImage`s rather than views. Covers
-/// are fetched and drawn at the car screen's scale, and everything Motif draws itself (a mix's
-/// four covers, a mood's field, Motif Radio) is the phone's own artwork, rendered, so the car
+/// are fetched and drawn at the car screen's scale, and everything Tracks draws itself (a mix's
+/// four covers, a mood's field, Tracks Radio) is the phone's own artwork, rendered, so the car
 /// and the phone look like the same app.
 @MainActor
 enum CarPlayImages {
@@ -96,7 +96,7 @@ enum CarPlayImages {
         render(GeneratedCover(seed: seed).frame(width: side, height: side), scale: scale)
     }
 
-    // MARK: - Motif's own artwork
+    // MARK: - Tracks’ own artwork
 
     /// A mix as the phone draws it: four of its covers to a square, and its symbol in the corner.
     static func mix(_ mix: Mix, side: CGFloat, scale: CGFloat, badged: Bool = true) async -> UIImage {
@@ -116,10 +116,10 @@ enum CarPlayImages {
         }
     }
 
-    /// Motif Radio for the car: its colour, and the car large where the radio waves would be.
+    /// Tracks Radio for the car: its colour, and the car large where the radio waves would be.
     /// Without its name, which the car writes itself beside or under it.
-    static func motifRadio(side: CGFloat, scale: CGFloat) async -> UIImage {
-        await cached("motifRadio|\(side)|\(scale)") {
+    static func tracksRadio(side: CGFloat, scale: CGFloat) async -> UIImage {
+        await cached("tracksRadio|\(side)|\(scale)") {
             render(CarRadioTile(side: side), scale: scale)
         }
     }
@@ -180,20 +180,20 @@ enum CarPlayImages {
                 width: textSize.width + textSize.height * 0.7,
                 height: textSize.height + 2
             )
-            UIColor(MotifRadioArt.color).setFill()
+            UIColor(TracksRadioArt.color).setFill()
             UIBezierPath(roundedRect: pill, cornerRadius: pill.height / 2).fill()
             text.draw(at: CGPoint(x: pill.minX + textSize.height * 0.35, y: pill.minY + 1))
         }
     }
 
-    /// A symbol in Motif's red, centred on a square the size of a row's cover, so rows that
+    /// A symbol in Tracks’ red, centred on a square the size of a row's cover, so rows that
     /// stand for a place (Playlists, Albums) line up with rows that have covers.
     static func symbol(_ name: String, side: CGFloat, scale: CGFloat) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         let configuration = UIImage.SymbolConfiguration(pointSize: side * 0.5, weight: .medium)
         let symbol = UIImage(systemName: name, withConfiguration: configuration)?
-            .withTintColor(UIColor(MotifRadioArt.color), renderingMode: .alwaysOriginal)
+            .withTintColor(UIColor(TracksRadioArt.color), renderingMode: .alwaysOriginal)
         return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { _ in
             guard let symbol else { return }
             let origin = CGPoint(x: (side - symbol.size.width) / 2, y: (side - symbol.size.height) / 2)
@@ -345,7 +345,7 @@ private extension UIFont {
     }
 }
 
-/// Motif Radio as a station tile: Motif's red, lighter in one corner, with rings spreading
+/// Tracks Radio as a station tile: Tracks’ red, lighter in one corner, with rings spreading
 /// from the middle like a signal, and the car large at their centre.
 private struct CarRadioTile: View {
     let side: CGFloat
@@ -353,7 +353,7 @@ private struct CarRadioTile: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [MotifRadioArt.color.mix(with: .white, by: 0.18), MotifRadioArt.color, MotifRadioArt.color.mix(with: .black, by: 0.18)],
+                colors: [TracksRadioArt.color.mix(with: .white, by: 0.18), TracksRadioArt.color, TracksRadioArt.color.mix(with: .black, by: 0.18)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -436,17 +436,17 @@ enum LibraryArtwork {
 import CarPlay
 
 extension CarPlayImages {
-    /// `-MotifCarPlayArt YES`: draws the car's artwork on one sheet in the app's temporary
+    /// `-TracksCarPlayArt YES`: draws the car's artwork on one sheet in the app's temporary
     /// folder, CarPlayArt.png, to check it without a car. Debug builds only.
     static func writeSampleSheet(_ model: AppModel) async {
-        guard UserDefaults.standard.string(forKey: "MotifCarPlayArt") == "YES" else { return }
+        guard UserDefaults.standard.string(forKey: "TracksCarPlayArt") == "YES" else { return }
         let scale: CGFloat = 2
         let tile = CPListImageRowItemImageGridElement.maximumImageSize.height
         let card = CPListImageRowItemCardElement.maximumFullHeightImageSize
         let row = CPListItem.maximumImageSize.height
         var images: [UIImage] = []
         for each in Mood.allCases { images.append(await mood(each, side: tile, scale: scale)) }
-        images.append(await motifRadio(side: card.height, scale: scale))
+        images.append(await tracksRadio(side: card.height, scale: scale))
         for mix in model.playFeed.mixes.mixes.prefix(3) { images.append(await self.mix(mix, side: card.height, scale: scale)) }
         images.append(live(generated(seed: "Station", side: row, scale: scale)))
         images.append(symbol("music.note.list", side: row, scale: scale))

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Opens Motif Radio's tuning from inside a player whose own look (a dark stage, white type)
+/// Opens Tracks Radio's tuning from inside a player whose own look (a dark stage, white type)
 /// mustn't reach the sheet: the player presents it from outside that look, and what's inside
 /// only asks.
 struct OpenRadioTunerAction: Equatable {

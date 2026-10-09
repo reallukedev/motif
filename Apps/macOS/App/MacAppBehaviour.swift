@@ -32,7 +32,7 @@ final class MacAppBehaviour {
         NSApp.setActivationPolicy(showsDockIcon ? .regular : .accessory)
     }
 
-    /// Whether Motif is set to open at login. Waiting for approval in System Settings counts:
+    /// Whether Tracks is set to open at login. Waiting for approval in System Settings counts:
     /// the choice has been made, and showing the switch off would invite a second attempt.
     var launchesAtLogin: Bool {
         loginItemStatus == .enabled || loginItemStatus == .requiresApproval

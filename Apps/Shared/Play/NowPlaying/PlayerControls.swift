@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Where Now Playing can send the person, after it has closed.
 enum NowPlayingDestination {
@@ -152,7 +152,7 @@ struct SkipArrows: View {
     }
 }
 
-/// Motif's line under the song: how often you've heard it, rolling up the moment it's kept.
+/// Tracks’ line under the song: how often you've heard it, rolling up the moment it's kept.
 struct PlayCountLine: View {
     let track: PlayerTrack
     /// "since August" after the count. Left off where there's only room for the count.
@@ -233,7 +233,7 @@ struct NowPlayingMenuItems: View {
     let track: PlayerTrack
     /// Where Go to Album and the like lead. Nil pushes onto the stack the view is in.
     var onNavigate: ((NowPlayingDestination) -> Void)?
-    /// Opens Motif Radio's tuning, where the menu can show it. Nil leaves Tune out.
+    /// Opens Tracks Radio's tuning, where the menu can show it. Nil leaves Tune out.
     var onTuneRadio: (() -> Void)?
     @Environment(PlayerModel.self) private var player
     @Environment(\.openPlayRoute) private var openPlayRoute
@@ -275,9 +275,9 @@ struct NowPlayingMenuItems: View {
         if track.local == nil {
             BlockArtistButton(songBy: track.artistName)
         }
-        if let onTuneRadio, player.isPlayingMotifRadio, track.songIdentity == player.current?.songIdentity {
+        if let onTuneRadio, player.isPlayingTracksRadio, track.songIdentity == player.current?.songIdentity {
             Divider()
-            Button("Tune Motif Radio", systemImage: "slider.horizontal.3", action: onTuneRadio)
+            Button("Tune Tracks Radio", systemImage: "slider.horizontal.3", action: onTuneRadio)
         }
     }
 
@@ -345,7 +345,7 @@ struct SleepTimerItems: View {
     }
 }
 
-/// A ring that fills as a song plays, until it has played long enough for Motif to keep it,
+/// A ring that fills as a song plays, until it has played long enough for Tracks to keep it,
 /// then turns into a check. Shows how close a song is to counting without a number to read.
 struct KeepIndicator: View {
     let track: PlayerTrack

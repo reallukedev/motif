@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 extension View {
     /// Search under the large title, as Music and Settings do, with a toolbar button for
@@ -9,12 +9,12 @@ extension View {
     ///   - scopeKey: where the chosen scope is remembered, per screen.
     ///   - defaultScope: where a first search looks: History on Summary, Apple Music on Play.
     ///   - source: whose library "Your Library" searches, and so which scopes there are.
-    func motifSearch(isPresented: Binding<Bool>, scopeKey: String, defaultScope: SearchScope, source: MusicSource = .appleMusic) -> some View {
-        modifier(MotifSearch(isPresented: isPresented, scope: AppStorage(wrappedValue: defaultScope, scopeKey), source: source))
+    func tracksSearch(isPresented: Binding<Bool>, scopeKey: String, defaultScope: SearchScope, source: MusicSource = .appleMusic) -> some View {
+        modifier(TracksSearch(isPresented: isPresented, scope: AppStorage(wrappedValue: defaultScope, scopeKey), source: source))
     }
 }
 
-private struct MotifSearch: ViewModifier {
+private struct TracksSearch: ViewModifier {
     @Binding var isPresented: Bool
     @AppStorage var scope: SearchScope
     let source: MusicSource
@@ -47,7 +47,7 @@ private struct MotifSearch: ViewModifier {
             }
         }
         #if DEBUG
-        // `-MotifSearchText`, for screenshots of results.
+        // `-TracksSearchText`, for screenshots of results.
         .task {
             guard typesLaunchText, let text = LaunchScene.searchText, isPresented else { return }
             typesLaunchText = false
@@ -71,7 +71,7 @@ private struct MotifSearch: ViewModifier {
     }
 }
 
-private extension MotifSearch {
+private extension TracksSearch {
     func keepScope(in scopes: [SearchScope]) {
         if !scopes.contains(scope) { scope = scopes[0] }
     }

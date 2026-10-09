@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A genre's page, as Apple Music's are, with your own listening beside it: its station at the
 /// top, then what's most played in it on Apple Music, and what you play of it. With your own
@@ -43,7 +43,7 @@ struct GenreView: View {
                         "Nothing in \(genre.title) Yet",
                         systemImage: genre.symbol,
                         description: Text(model.musicSource == .yourMusic
-                            ? "None of your music is tagged \(genre.title). Motif goes by each song's genre."
+                            ? "None of your music is tagged \(genre.title). Tracks goes by each song's genre."
                             : "Apple Music couldn't be reached, and you haven't played any \(genre.title) yet.")
                     )
                 }

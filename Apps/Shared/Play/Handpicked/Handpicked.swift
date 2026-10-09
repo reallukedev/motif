@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Handpicked: a station made from songs you choose, as Music makes a station from a song.
 /// Pick a few songs you love, from your playlists, what you play, or a search, and it plays

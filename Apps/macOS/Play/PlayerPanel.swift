@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Which page the player's panel shows.
 enum PlayerPanelPage: String, CaseIterable, Identifiable {
@@ -162,8 +162,8 @@ struct UpNextList: View {
                         }
                     }
                     // Tuning opens from the station it changes.
-                    if player.isPlayingMotifRadio {
-                        Button("Tune Motif Radio\u{2026}") { showsTuner = true }
+                    if player.isPlayingTracksRadio {
+                        Button("Tune Tracks Radio\u{2026}") { showsTuner = true }
                             .buttonStyle(.link)
                             .font(.subheadline)
                             .help("How adventurous it is, the genres it leans into, and old favorites")
@@ -282,7 +282,7 @@ struct UpNextList: View {
         }
     }
 
-    /// A new find Motif Radio is getting ready: downloading, or waiting for its server.
+    /// A new find Tracks Radio is getting ready: downloading, or waiting for its server.
     private func isGettingReady(_ track: PlayerTrack) -> Bool {
         guard let local = track.local, local.isFromServer else { return false }
         let copy = music.resolved(local)

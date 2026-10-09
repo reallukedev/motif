@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 #if os(iOS)
 extension View {
@@ -36,14 +36,14 @@ private struct CollectionChrome: ViewModifier {
 #endif
 
 #if DEBUG
-/// Sample playlists for screenshots, with sample data only. `-MotifDemoPlaylists YES` makes
+/// Sample playlists for screenshots, with sample data only. `-TracksDemoPlaylists YES` makes
 /// them; `list` opens them all, and a number one of them: 1 a long one, 2 a short one, 3 an
-/// empty one with a long name, 4 a smart one. `-MotifCollectionSheet add` then opens Add Songs on it, and
+/// empty one with a long name, 4 a smart one. `-TracksCollectionSheet add` then opens Add Songs on it, and
 /// `pick` the sheet that adds songs to a playlist. Debug builds only.
 enum CollectionDemo {
     @MainActor
     static func seedPlaylists(music: YourMusic, isDemo: Bool, open: OpenPlayRouteAction) {
-        guard isDemo, let value = UserDefaults.standard.string(forKey: "MotifDemoPlaylists"),
+        guard isDemo, let value = UserDefaults.standard.string(forKey: "TracksDemoPlaylists"),
               music.playlists.all.isEmpty, !music.index.tracks.isEmpty
         else { return }
         let tracks = music.index.tracks
@@ -59,10 +59,10 @@ enum CollectionDemo {
         if value == "list" {
             open(.yourMusic(.playlists))
         } else if let number = Int(value), made.indices.contains(number - 1) {
-            open(.motifPlaylist(made[number - 1].id))
+            open(.tracksPlaylist(made[number - 1].id))
         }
     }
 
-    static var sheet: String? { UserDefaults.standard.string(forKey: "MotifCollectionSheet") }
+    static var sheet: String? { UserDefaults.standard.string(forKey: "TracksCollectionSheet") }
 }
 #endif

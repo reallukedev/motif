@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Where Search looks: Apple Music's catalog, the Apple Music library, or Motif's history.
+/// Where Search looks: Apple Music's catalog, the Apple Music library, or Tracks’ history.
 enum SearchScope: String, CaseIterable, Identifiable {
     case appleMusic, library, history
 

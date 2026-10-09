@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Your Apple Music library's artists. On the Mac, Music's Artists view: the list on the
 /// left, the chosen artist's albums on the right. On iPhone, a list with their pictures and

@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 extension PlaySettingsWords.Standing {
     /// Where Play stands right now. `offlineSongs` is iPhone's Offline Mode, nil when it's off.
@@ -33,7 +33,7 @@ extension PlaySettingsWords.QuickSwitchState {
     }
 }
 
-/// Merging your Motif playlists with your Apple Music ones: off until you turn it on, since it
+/// Merging your Tracks playlists with your Apple Music ones: off until you turn it on, since it
 /// asks for Apple Music.
 struct PlaySettingsPlaylistMerge: View {
     @Environment(YourMusic.self) private var music
@@ -46,7 +46,7 @@ struct PlaySettingsPlaylistMerge: View {
             SettingsSwitch(
                 "Merge with Apple Music",
                 detail: isOn
-                    ? Text("Playlists with the same name in Motif and Apple Music are one.")
+                    ? Text("Playlists with the same name in Tracks and Apple Music are one.")
                     : Text("Keep your playlists and Apple Music’s apart."),
                 isOn: Binding(get: { isOn }, set: toggle)
             )
@@ -97,8 +97,8 @@ struct PlaySettingsPlaylistMerge: View {
 
     private func lastMerged(_ merge: PlaylistMerge) -> Text {
         if merge.isMerging { return Text("Merging…") }
-        guard let last = merge.lastMerged else { return Text("Not merged yet. Motif merges each time it opens.") }
-        return Text("Merged \(last.formatted(.relative(presentation: .named))). Motif merges each time it opens.")
+        guard let last = merge.lastMerged else { return Text("Not merged yet. Tracks merges each time it opens.") }
+        return Text("Merged \(last.formatted(.relative(presentation: .named))). Tracks merges each time it opens.")
     }
 
     private func footer(_ merge: PlaylistMerge) -> Text {
@@ -106,7 +106,7 @@ struct PlaySettingsPlaylistMerge: View {
             return Text(problem).foregroundStyle(.ink(.red))
         }
         guard isOn else {
-            return Text("Playlists with the same name in Motif and Apple Music become one, and each gets the other’s songs. Songs added in Apple Music are found on your server and downloaded; songs added in Motif are added in Apple Music.")
+            return Text("Playlists with the same name in Tracks and Apple Music become one, and each gets the other’s songs. Songs added in Apple Music are found on your server and downloaded; songs added in Tracks are added in Apple Music.")
         }
         var lines: [String] = []
         #if os(iOS)
@@ -115,9 +115,9 @@ struct PlaySettingsPlaylistMerge: View {
         }
         #endif
         if merge.leftToFind > 0 {
-            lines.append(PlaySettingsWords.plain(AttributedString(localized: "^[\(merge.leftToFind) song](inflect: true) from Apple Music still to find on your server, a few each time Motif opens.")))
+            lines.append(PlaySettingsWords.plain(AttributedString(localized: "^[\(merge.leftToFind) song](inflect: true) from Apple Music still to find on your server, a few each time Tracks opens.")))
         }
-        lines.append(String(localized: "Apple Music doesn’t let apps take songs out of playlists, so songs taken out in Motif stay in Apple Music. Songs taken out in Apple Music come out here too."))
+        lines.append(String(localized: "Apple Music doesn’t let apps take songs out of playlists, so songs taken out in Tracks stay in Apple Music. Songs taken out in Apple Music come out here too."))
         return Text(lines.joined(separator: " "))
     }
 }

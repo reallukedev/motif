@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import MusicKit
 import Intents
-import MotifCore
+import TracksCore
 
 /// Everything the Play page shows: mixes worked out from the history, and stations, recent
 /// albums and recommendations from Apple Music.
@@ -33,7 +33,7 @@ final class PlayFeed {
 
     /// The artists Discover and New Releases draw from, most played first.
     /// Where suggestions start: the artists you play, the recent plays counting most, so what
-    /// Motif suggests moves with your taste rather than staying where it was months ago.
+    /// Tracks suggests moves with your taste rather than staying where it was months ago.
     var topArtists: [String] { Array(tasteArtists.prefix(10)) }
     /// The artists you play, most first, a play half as telling a month on: more than
     /// ``topArtists``, for a mix that wanders past the top of your taste.
@@ -118,7 +118,7 @@ final class PlayFeed {
 
     // MARK: - From Apple Music
 
-    /// Follows the account's subscription, which can start or lapse while Motif is open.
+    /// Follows the account's subscription, which can start or lapse while Tracks is open.
     func followSubscription() async {
         guard !isDemo else { return }
         for await update in MusicSubscription.subscriptionUpdates {
@@ -259,7 +259,7 @@ final class PlayFeed {
             return repeats * 2 < row.items.count && !StatsCalculator.folded(row.title).contains("recently played")
         }
         if rows.count < Self.pickRows, let albums = await loadTopAlbums(), !albums.isEmpty {
-            rows.append(Recommendation(id: "motif.topAlbums", title: String(localized: "Top Albums on Apple Music"), items: albums))
+            rows.append(Recommendation(id: "tracks.topAlbums", title: String(localized: "Top Albums on Apple Music"), items: albums))
         }
         return Array(rows.prefix(Self.pickRows))
     }

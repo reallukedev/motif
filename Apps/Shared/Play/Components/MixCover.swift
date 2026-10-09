@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A mix's cover: the covers of the songs in it, four to a square when there are four, with
 /// the mix's symbol in the corner. Made from what was actually played, never a stock gradient.

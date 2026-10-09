@@ -6,14 +6,14 @@ import UIKit
 #else
 import AppKit
 #endif
-import MotifCore
+import TracksCore
 
 /// Plays your own music: files, downloads and songs streamed from your servers, through
 /// AVFoundation. FLAC plays as it is, bit for bit.
 ///
 /// The next song is always queued behind the one playing, so an album flows from track to
 /// track without a gap. The lock screen, Control Center and headphone buttons control it, and
-/// every change is handed to capture, so Motif keeps these plays as it keeps Apple Music's.
+/// every change is handed to capture, so Tracks keeps these plays as it keeps Apple Music's.
 @MainActor
 final class LocalPlayerEngine: NSObject, PlayerEngine {
     var onChange: (() -> Void)?

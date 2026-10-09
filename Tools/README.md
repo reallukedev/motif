@@ -26,19 +26,19 @@ from sample data:
 ./Tools/screenshots.sh            # writes to build/screenshots, and the README's to images/
 ```
 
-It launches each app with `-MotifDemoData YES`, which fills an in-memory store with invented
+It launches each app with `-TracksDemoData YES`, which fills an in-memory store with invented
 listening and never touches real history, iCloud or Last.fm, plus the Debug-only launch
 arguments in `Apps/Shared/App/LaunchScene.swift` that open a given tab, section or page.
 iPhone images come out at App Store sizes. The Mac shots need Screen Recording
 permission for your terminal (System Settings › Privacy & Security)
 
-Add `-MotifDemoLive YES` to a Debug demo launch and a sample song finishes every five
+Add `-TracksDemoLive YES` to a Debug demo launch and a sample song finishes every five
 seconds, which is the quickest way to see how the screens animate as listening arrives.
 
 ## App Store frames
 
 `AppStoreScreenshots/` turns raw captures into the framed App Store sets: a headline over
-Motif red, the capture in an iPhone or a Mac window, and the icon's record as the one
+Tracks red, the capture in an iPhone or a Mac window, and the icon's record as the one
 graphic element. The hero record slides out of the device like a sleeve, its grooves run
 faintly through every frame, and the closing frame completes the ring.
 

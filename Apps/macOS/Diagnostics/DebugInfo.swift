@@ -1,7 +1,7 @@
 import AppKit
 import SwiftData
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Gathers what "Copy Debug Info" reports. See ``DebugReport`` for what it leaves out.
 @MainActor
@@ -15,7 +15,7 @@ enum DebugInfo {
             ])
             sections.append(quit)
         }
-        sections.append(motif(model: model))
+        sections.append(tracks(model: model))
         return DebugReport(sections: sections)
     }
 
@@ -57,7 +57,7 @@ enum DebugInfo {
         return DebugReport.Section("System", rows)
     }
 
-    private static func motif(model: AppModel) -> DebugReport.Section {
+    private static func tracks(model: AppModel) -> DebugReport.Section {
         let settings = CaptureSettings()
         var rows: [(key: String, value: String)] = [
             ("Demo data", model.isDemoLaunch ? "Yes" : "No"),
@@ -77,15 +77,15 @@ enum DebugInfo {
             ("Scrobbling", settings.scrobblesToLastFM ? "On" : "Off"),
         ]
         if let context = model.store?.context {
-            var scrobbles = MotifStore.pendingScrobbles(includingImported: settings.scrobblesImported)
+            var scrobbles = TracksStore.pendingScrobbles(includingImported: settings.scrobblesImported)
             scrobbles.fetchLimit = nil
             rows += [
                 ("Plays", count(FetchDescriptor<Capture>(), in: context)),
-                ("Waiting for the playlist", count(MotifStore.pendingPlaylistWrites(), in: context)),
+                ("Waiting for the playlist", count(TracksStore.pendingPlaylistWrites(), in: context)),
                 ("Waiting for Last.fm", count(scrobbles, in: context)),
             ]
         }
-        return DebugReport.Section("Motif", rows)
+        return DebugReport.Section("Tracks", rows)
     }
 
     private static func count(_ descriptor: FetchDescriptor<Capture>, in context: ModelContext) -> String {

@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Play with Apple Music as the source: the whole page with a connection, and only what's
 /// downloaded to this iPhone without one, or with Offline Mode on.
@@ -154,7 +154,7 @@ struct OfflineScreen: View {
         PlayStateCard(
             symbol: "arrow.down.circle",
             title: String(localized: "Nothing Downloaded Yet"),
-            message: String(localized: "Songs you download in Apple Music play here without a connection. To download the songs you add to your library from Motif, turn on Automatic Downloads in Settings › Apps › Music.")
+            message: String(localized: "Songs you download in Apple Music play here without a connection. To download the songs you add to your library from Tracks, turn on Automatic Downloads in Settings › Apps › Music.")
         ) {
             EmptyView()
         }
@@ -162,7 +162,7 @@ struct OfflineScreen: View {
 
     // MARK: - Shelves
 
-    /// Motif's mixes, with only their downloaded songs, when enough of them are.
+    /// Tracks’ mixes, with only their downloaded songs, when enough of them are.
     private var downloadedMixes: [DownloadedMix] {
         let downloaded = downloads.byIdentity
         return feed.mixes.all.compactMap { mix in
@@ -171,7 +171,7 @@ struct OfflineScreen: View {
         }
     }
 
-    /// The downloaded songs you play most, from Motif's history.
+    /// The downloaded songs you play most, from Tracks’ history.
     private var mostPlayed: [OfflineSong] {
         let plays = downloads.songs.compactMap { song in feed.facts[song.identity].map { (song, $0.plays) } }
         return Array(plays.filter { $0.1 > 1 }.sorted { $0.1 > $1.1 }.prefix(15).map(\.0))

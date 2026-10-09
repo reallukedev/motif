@@ -1,8 +1,8 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// The crate at the top of Play: this hour's mix, Motif Radio, Discover and the rest of the
+/// The crate at the top of Play: this hour's mix, Tracks Radio, Discover and the rest of the
 /// day's mixes, flipped through like records, as Cover Flow flipped through albums. The one in
 /// front says why it's there and plays in one tap; the page behind glows in its colour.
 ///
@@ -12,7 +12,7 @@ import MotifCore
 /// ever moves.
 struct Crate: View {
     let cards: [ForYouCard]
-    /// The card to start in front of: Motif Radio, with this hour's mix beside it.
+    /// The card to start in front of: Tracks Radio, with this hour's mix beside it.
     let leadID: String?
     /// Suggested songs, in the order they were found.
     var songs: [CrateSong] = []
@@ -166,7 +166,7 @@ struct Crate: View {
         self.trailing = trailing
     }
 
-    /// `-MotifCrate`, for screenshots: once there are records that far from the lead.
+    /// `-TracksCrate`, for screenshots: once there are records that far from the lead.
     private func startWhereLaunchAsks() {
         #if DEBUG
         guard let offset = LaunchScene.crateOffset, !hasMoved else { return }
@@ -304,7 +304,7 @@ struct Crate: View {
         .sensoryFeedback(CrateHaptics.end, trigger: bumps)
         #endif
         // What's in front has to be the record chosen. The cards can change under it, as the
-        // history arrives and Motif Radio joins them in the middle, songs are dealt to either
+        // history arrives and Tracks Radio joins them in the middle, songs are dealt to either
         // side, and the page's width is only known after the first layout, which moves the
         // middle: each time, back to the one chosen, or to the lead until someone has moved
         // it themselves.
@@ -990,7 +990,7 @@ private struct CrateMenu: View {
         }
         if record.isStation {
             Divider()
-            Button("Tune Motif Radio", systemImage: "slider.horizontal.3") { showsTuner = true }
+            Button("Tune Tracks Radio", systemImage: "slider.horizontal.3") { showsTuner = true }
         }
     }
 }
@@ -1061,7 +1061,7 @@ private struct CrateGlow: View {
 
 // MARK: - A record
 
-/// One of the crate's records, however it plays: a mix, Motif Radio, Discover or a song.
+/// One of the crate's records, however it plays: a mix, Tracks Radio, Discover or a song.
 struct CrateRecord {
     let card: ForYouCard
     let player: PlayerModel
@@ -1082,7 +1082,7 @@ struct CrateRecord {
     var title: String {
         switch card {
         case .mix(let mix): mix.kind.title
-        case .station: String(localized: "Motif Radio")
+        case .station: String(localized: "Tracks Radio")
         case .discover: String(localized: "Discover")
         case .song(let song): song.title
         }
@@ -1116,13 +1116,13 @@ struct CrateRecord {
     var context: PlayContext {
         switch card {
         case .mix(let mix): PlayContext(kind: .mix, title: mix.kind.title)
-        case .station: .motifRadio
+        case .station: .tracksRadio
         case .discover: PlayContext(kind: .mix, title: String(localized: "Discover"))
         case .song: .songs(String(localized: "Suggested Songs"))
         }
     }
 
-    /// Where opening the record goes. Motif Radio has no list to show, and a song is itself:
+    /// Where opening the record goes. Tracks Radio has no list to show, and a song is itself:
     /// they play.
     var route: PlayRoute? {
         switch card {
@@ -1154,7 +1154,7 @@ struct CrateRecord {
     @MainActor func play() {
         switch card {
         case .mix(let mix): player.play(.history(player.songs(in: mix)), from: context)
-        case .station: player.playMotifRadio()
+        case .station: player.playTracksRadio()
         case .discover(let songs): player.play(.songs(songs), from: context)
         case .song(let song): playSongs(from: song)
         }
@@ -1184,7 +1184,7 @@ struct CrateRecord {
         }
     }
 
-    /// Nil for Motif Radio, which picks its own order as it plays, and for a song.
+    /// Nil for Tracks Radio, which picks its own order as it plays, and for a song.
     @MainActor var shuffle: (() -> Void)? {
         switch card {
         case .mix(let mix): { player.play(.history(player.songs(in: mix)), from: context, shuffled: true) }
@@ -1210,7 +1210,7 @@ struct CrateRecord {
         case .mix(let mix):
             MixCover(mix: mix, size: side)
         case .station:
-            MotifRadioArt(side: side, isLive: player.isPlayingMotifRadio && player.isPlaying, isDriving: player.isRadioDriving)
+            TracksRadioArt(side: side, isLive: player.isPlayingTracksRadio && player.isPlaying, isDriving: player.isRadioDriving)
         case .discover(let songs):
             MosaicCover(covers: songs.prefix(4).map { $0.artwork.map(CoverArt.artwork) ?? .url(nil, seed: $0.title) }, symbol: "sparkles", size: side)
         case .song(let song):
@@ -1229,7 +1229,7 @@ struct CrateRecord {
             guard let first = mix.covers.first else { return nil }
             return await CoverTint.glow(for: .url(first.url, seed: first.seed))
         case .station:
-            return MotifRadioArt.color
+            return TracksRadioArt.color
         case .discover(let songs):
             guard let artwork = songs.first?.artwork else { return nil }
             return await CoverTint.glow(for: .artwork(artwork))

@@ -1,6 +1,6 @@
 import SwiftUI
 import AVKit
-import MotifCore
+import TracksCore
 
 extension View {
     /// The song playing, on a glass bar floating at the foot of the page, as the iPhone's

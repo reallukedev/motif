@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Party, from its tile on Find Your Mood: finding the playlist for the party you're having.
 /// You say what kind of party, and the whole page turns to it: the field takes its colours,
@@ -139,7 +139,7 @@ struct PartyView: View {
             ContentUnavailableView {
                 Label("Nothing for \(vibe.title) Yet", systemImage: vibe.symbol)
             } description: {
-                Text("None of your music suits it yet, and none of your playlists look like party ones. Motif goes by each song's genre.")
+                Text("None of your music suits it yet, and none of your playlists look like party ones. Tracks goes by each song's genre.")
             } actions: {
                 Button("Try Another Vibe", action: tryAnotherVibe)
                     .buttonStyle(.bordered)
@@ -241,13 +241,13 @@ private struct PartyPlaylistsPlaceholder: View {
 
 /// One of your own playlists in the grid, for your music.
 private struct PartyOwnPlaylistTile: View {
-    let playlist: MotifPlaylist
+    let playlist: TracksPlaylist
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
 
     var body: some View {
         let songs = music.songs(in: playlist, facts: feed.facts)
-        NavigationLink(value: PlayRoute.motifPlaylist(playlist.id)) {
+        NavigationLink(value: PlayRoute.tracksPlaylist(playlist.id)) {
             PartyTileLabel(title: playlist.name, subtitle: PlaylistRow.summary(playlist, count: songs.count)) { side in
                 PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: side)
             }

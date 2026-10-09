@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// How a summary names its period. This month reads "this month" and "this time last
 /// month"; August, seen from September, reads "in August 2026" and "the month before".

@@ -1,8 +1,8 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
-/// Brings the connected account's Last.fm history into Motif, and says how that's going.
+/// Brings the connected account's Last.fm history into Tracks, and says how that's going.
 ///
 /// Owned by the app model rather than Settings, so a long first import keeps going when
 /// Settings closes.
@@ -19,11 +19,11 @@ final class LastFMHistorySync {
     /// What's been imported so far, for the account that's connected now.
     private(set) var progress: LastFMHistory.Progress?
 
-    private let store: MotifStore
+    private let store: TracksStore
     private let settings: CaptureSettings
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    init(store: MotifStore, settings: CaptureSettings = CaptureSettings()) {
+    init(store: TracksStore, settings: CaptureSettings = CaptureSettings()) {
         self.store = store
         self.settings = settings
         readProgress()
@@ -51,7 +51,7 @@ final class LastFMHistorySync {
         isImporting ? stop() : start()
     }
 
-    /// Reads everything Motif doesn't have yet: the whole history the first time, then only
+    /// Reads everything Tracks doesn't have yet: the whole history the first time, then only
     /// what's new. Does nothing while a run is going.
     func start() {
         guard task == nil else { return }

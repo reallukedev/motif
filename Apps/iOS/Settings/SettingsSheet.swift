@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Settings on iPhone: one list of pages, each row saying where its page stands.
 struct SettingsSheet: View {
@@ -82,7 +82,7 @@ struct SettingsSheet: View {
     }
 }
 
-/// A page of iPhone Settings. Also what `-MotifSettings <page>` opens on.
+/// A page of iPhone Settings. Also what `-TracksSettings <page>` opens on.
 enum SettingsPage: String, Hashable, CaseIterable {
     case play, history, radio, appleMusic, lastFM, iCloud
     /// Inside Play.

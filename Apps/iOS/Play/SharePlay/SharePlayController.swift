@@ -2,20 +2,20 @@ import SwiftUI
 import Combine
 import GroupActivities
 import MusicKit
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
-/// Motif's SharePlay sessions, for the whole process: hosting, where this iPhone plays and
+/// Tracks’ SharePlay sessions, for the whole process: hosting, where this iPhone plays and
 /// takes songs from the group, and joining someone else's, where this iPhone only picks.
 ///
 /// The host tells the group what's on whenever it changes; a guest asks for a song, the host
 /// looks it up the way its player would play it and answers. The rules for what goes in live
-/// in MotifCore (``SharePlayGate``, ``SharePlayGuest``); this is the plumbing around them.
+/// in TracksCore (``SharePlayGate``, ``SharePlayGuest``); this is the plumbing around them.
 ///
 /// People join one of two ways, and the host treats them the same:
 /// - In Messages, from the share sheet: a real SharePlay session.
 /// - By scanning the host's code, shown in the car or on its iPhone: Apple keeps the car's
-///   SharePlay code to Music, so Motif shows its own, and the passenger's Motif connects
+///   SharePlay code to Music, so Tracks shows its own, and the passenger's Tracks connects
 ///   straight to the host's iPhone nearby (see ``SharePlayInvite`` and
 ///   ``SharePlayNearbyHost``).
 @MainActor
@@ -46,7 +46,7 @@ final class SharePlayController {
         case off
         case starting
         case ready
-        /// Local Network is off for Motif, so nothing nearby can reach it.
+        /// Local Network is off for Tracks, so nothing nearby can reach it.
         case needsLocalNetwork
         /// Couldn't offer itself nearby. It tries again on its own.
         case failed
@@ -86,7 +86,7 @@ final class SharePlayController {
     private(set) var guestConnection: GuestConnection = .sharePlay
     /// Joined by code, and the connection to the host dropped: looking for it again.
     var isReconnecting: Bool { codeGuest?.isReconnecting ?? false }
-    /// Joined by code, but Local Network is off for Motif here and there's no other way.
+    /// Joined by code, but Local Network is off for Tracks here and there's no other way.
     var guestNeedsLocalNetwork: Bool { codeGuest?.needsLocalNetwork ?? false }
     /// Someone else's SharePlay, joined by code.
     private(set) var codeGuest: SharePlayCodeGuest?
@@ -155,7 +155,7 @@ final class SharePlayController {
                 self?.receive(session)
             }
         }
-        // iOS stops listening nearby while Motif is suspended: back in the foreground, the
+        // iOS stops listening nearby while Tracks is suspended: back in the foreground, the
         // code works again straight away.
         foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {

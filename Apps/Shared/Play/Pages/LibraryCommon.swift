@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 // MARK: - Page header
 
@@ -477,7 +477,7 @@ extension View {
 
 /// The Apple Music library, or why it can't be shown: no access yet, or access turned off.
 /// Sample data never asks Apple Music, so it explains that instead, unless the sample library
-/// stands in (`-MotifDemoLibrary YES`).
+/// stands in (`-TracksDemoLibrary YES`).
 struct LibraryAccessGate<Content: View>: View {
     /// The page's title, in the content on the Mac, where it isn't in the toolbar.
     var title: String?
@@ -619,7 +619,7 @@ struct LibraryLoadFailed: View {
         PlayStateCard(
             symbol: "exclamationmark.triangle",
             title: String(localized: "Couldn't Load Your Library"),
-            message: String(localized: "Apple Music didn't answer. Check your connection, and that Motif can use Apple Music.")
+            message: String(localized: "Apple Music didn't answer. Check your connection, and that Tracks can use Apple Music.")
         ) {
             Button("Try Again") { Task { await retry() } }
                 .buttonStyle(.bordered)
@@ -651,14 +651,14 @@ extension View {
     }
 }
 
-/// A library state forced by `-MotifLibraryState loading|empty|failed`, for screenshots of the
+/// A library state forced by `-TracksLibraryState loading|empty|failed`, for screenshots of the
 /// states sample data can't reach. Debug builds only.
 enum LibraryDebugState: String {
     case loading, empty, failed
 
     static var current: LibraryDebugState? {
         #if DEBUG
-        UserDefaults.standard.string(forKey: "MotifLibraryState").flatMap(LibraryDebugState.init)
+        UserDefaults.standard.string(forKey: "TracksLibraryState").flatMap(LibraryDebugState.init)
         #else
         nil
         #endif
@@ -666,26 +666,26 @@ enum LibraryDebugState: String {
 }
 
 #if DEBUG
-/// Opens a page over a library page at launch, for screenshots: `-MotifLibraryPush localArtist`
+/// Opens a page over a library page at launch, for screenshots: `-TracksLibraryPush localArtist`
 /// (the first artist in your music), `localArtist.longest` (the longest name),
 /// `localArtist.missing` (one that's gone), `lidarrArtist`, or `appleSongs`, `appleAlbums`,
 /// `appleArtists` and `applePlaylists` (Apple Music's library, which sample data can't reach
 /// from Play). `appleOverview` shows ``LibraryOverview`` on a page of its own, as Play will
-/// show it, on iPhone. Once per launch. On iPhone, `-MotifPage yourArtists` reaches a page
+/// show it, on iPhone. Once per launch. On iPhone, `-TracksPage yourArtists` reaches a page
 /// that pushes it.
 @MainActor
 enum LibraryLaunch {
     private static var hasPushed = false
 
-    /// `-MotifArtistPictures YES`: artists without a picture get a drawn one, to see the
+    /// `-TracksArtistPictures YES`: artists without a picture get a drawn one, to see the
     /// picture header with sample data, which has none.
-    static var drawsSamplePictures: Bool { UserDefaults.standard.bool(forKey: "MotifArtistPictures") }
+    static var drawsSamplePictures: Bool { UserDefaults.standard.bool(forKey: "TracksArtistPictures") }
 
     /// Whether the playlists page stands in for the overview, for `appleOverview`.
-    static var showsOverview: Bool { UserDefaults.standard.string(forKey: "MotifLibraryPush") == "appleOverview" }
+    static var showsOverview: Bool { UserDefaults.standard.string(forKey: "TracksLibraryPush") == "appleOverview" }
 
     static func push(in model: AppModel) {
-        guard !hasPushed, let value = UserDefaults.standard.string(forKey: "MotifLibraryPush"),
+        guard !hasPushed, let value = UserDefaults.standard.string(forKey: "TracksLibraryPush"),
               let route = route(value, in: model)
         else { return }
         hasPushed = true
@@ -711,12 +711,12 @@ enum LibraryLaunch {
         }
     }
 
-    /// `-MotifLibrarySteps appleAlbum,back,play`: what to do next, a second and a half apart,
-    /// to record moving through the library as taps would: push any page `-MotifLibraryPush`
+    /// `-TracksLibrarySteps appleAlbum,back,play`: what to do next, a second and a half apart,
+    /// to record moving through the library as taps would: push any page `-TracksLibraryPush`
     /// names, or the sample library's first `appleAlbum`, `applePlaylist` or `appleArtist`; go
     /// `back`; or `play` a mix, which brings in the mini player.
     private static func walk(in model: AppModel) {
-        guard let steps = UserDefaults.standard.string(forKey: "MotifLibrarySteps") else { return }
+        guard let steps = UserDefaults.standard.string(forKey: "TracksLibrarySteps") else { return }
         Task {
             for step in steps.split(separator: ",") {
                 try? await Task.sleep(for: .seconds(1.5))

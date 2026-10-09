@@ -9,24 +9,24 @@ struct AboutSection: View {
                 title: "Report a Problem",
                 systemImage: "exclamationmark.bubble.fill",
                 tint: .blue,
-                destination: URL(string: "https://github.com/reallukedev/motif/issues")!
+                destination: URL(string: "https://github.com/reallukedev/tracks/issues")!
             )
             SettingsLinkRow(
                 title: "Privacy Policy",
                 systemImage: "hand.raised.fill",
                 tint: .blue,
-                destination: URL(string: "https://github.com/reallukedev/motif/blob/main/PRIVACY.md")!
+                destination: URL(string: "https://github.com/reallukedev/tracks/blob/main/PRIVACY.md")!
             )
             SettingsLinkRow(
                 title: "Source Code",
                 systemImage: "chevron.left.forwardslash.chevron.right",
                 tint: .gray,
-                destination: URL(string: "https://github.com/reallukedev/motif")!
+                destination: URL(string: "https://github.com/reallukedev/tracks")!
             )
         } header: {
             Text("About")
         } footer: {
-            Text("Motif has no servers and no analytics. Your history stays on your devices and in your iCloud account.")
+            Text("Tracks has no servers and no analytics. Your history stays on your devices and in your iCloud account.")
         }
     }
 

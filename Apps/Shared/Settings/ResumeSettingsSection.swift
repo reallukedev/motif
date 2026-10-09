@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Settings ▸ Play: whether the song that was on when Motif closed waits for you, paused
+/// Settings ▸ Play: whether the song that was on when Tracks closed waits for you, paused
 /// where you left it, and for how long. Shared by the iPhone's page and the Mac's pane.
 struct ResumeSettingsSection: View {
     @AppStorage(LastSessionStore.resumesKey) private var resumes = true
@@ -27,13 +27,13 @@ struct ResumeSettingsSection: View {
 
     private var footer: String {
         guard resumes else {
-            return String(localized: "Motif opens with nothing playing.")
+            return String(localized: "Tracks opens with nothing playing.")
         }
         return switch window {
         case .always:
-            String(localized: "The song that was on when you closed Motif waits, paused where you left it, until you play something else.")
+            String(localized: "The song that was on when you closed Tracks waits, paused where you left it, until you play something else.")
         default:
-            String(localized: "The song that was on when you closed Motif waits, paused where you left it, for \(Self.name(window).lowercased()). After that, Motif opens with nothing playing.")
+            String(localized: "The song that was on when you closed Tracks waits, paused where you left it, for \(Self.name(window).lowercased()). After that, Tracks opens with nothing playing.")
         }
     }
 

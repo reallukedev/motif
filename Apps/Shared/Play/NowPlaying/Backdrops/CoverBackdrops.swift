@@ -1,6 +1,6 @@
 import SwiftUI
 import Combine
-import MotifCore
+import TracksCore
 
 /// Keeps a background's time: running while `isMoving`, gliding to a stop when it isn't and
 /// picking up from there, and drawing nothing new once it's still. Livelier songs run a

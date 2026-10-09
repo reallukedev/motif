@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 struct ArtistDetailView: View {
     let artistID: String

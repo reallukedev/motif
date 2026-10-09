@@ -1,6 +1,6 @@
 import SwiftUI
 import AuthenticationServices
-import MotifCore
+import TracksCore
 #if os(macOS)
 import AppKit
 #endif
@@ -81,7 +81,7 @@ struct LastFMSettingsPage: View {
         Section {
             connectButton
         } footer: {
-            Text("Motif opens Last.fm so you can allow it. Your password is never shared with Motif.")
+            Text("Tracks opens Last.fm so you can allow it. Your password is never shared with Tracks.")
         }
     }
 
@@ -129,7 +129,7 @@ struct LastFMSettingsPage: View {
             // closes the sheet (or when it's cancelled after the poll succeeds).
             _ = try? await webAuthentication.authenticate(
                 using: url,
-                callbackURLScheme: "motif",
+                callbackURLScheme: "tracks",
                 preferredBrowserSession: .shared
             )
             #else
@@ -167,7 +167,7 @@ struct LastFMSettingsPage: View {
             SettingsSwitch(
                 "Scrobble What You Play",
                 detail: scrobbles
-                    ? Text("Every song Motif keeps goes to Last.fm, radio included.")
+                    ? Text("Every song Tracks keeps goes to Last.fm, radio included.")
                     : Text("Nothing is sent to Last.fm until you turn this back on."),
                 isOn: $scrobbles
             )
@@ -175,7 +175,7 @@ struct LastFMSettingsPage: View {
                 SettingsSwitch(
                     "Include Recovered Songs",
                     detail: scrobblesRecovered
-                        ? Text("Sent with the time Motif found them, since Recently Played doesn’t say when you played them.")
+                        ? Text("Sent with the time Tracks found them, since Recently Played doesn’t say when you played them.")
                         : Text("Songs recovered from Recently Played stay off Last.fm, so nothing arrives with a guessed time."),
                     isOn: $scrobblesRecovered
                 )
@@ -196,9 +196,9 @@ struct LastFMSettingsPage: View {
         case (false, _):
             "Nothing is sent to Last.fm until you turn scrobbling back on."
         case (true, true):
-            "Every song Motif keeps is scrobbled, radio included. Recovered songs are sent with the time Motif found them, because Apple Music’s Recently Played doesn’t say when you played them."
+            "Every song Tracks keeps is scrobbled, radio included. Recovered songs are sent with the time Tracks found them, because Apple Music’s Recently Played doesn’t say when you played them."
         case (true, false):
-            "Every song Motif keeps is scrobbled, radio included. Songs recovered from Recently Played are left out, so nothing reaches Last.fm with a guessed time."
+            "Every song Tracks keeps is scrobbled, radio included. Songs recovered from Recently Played are left out, so nothing reaches Last.fm with a guessed time."
         }
     }
     #endif
@@ -226,7 +226,7 @@ struct LastFMSettingsPage: View {
             #if os(macOS)
             SettingsDetailRow(
                 title: Text("Disconnect"),
-                detail: Text("Motif stops scrobbling. What’s already on Last.fm stays there.")
+                detail: Text("Tracks stops scrobbling. What’s already on Last.fm stays there.")
             ) {
                 Button("Disconnect", role: .destructive, action: disconnect)
             }
@@ -235,7 +235,7 @@ struct LastFMSettingsPage: View {
             #endif
         } footer: {
             #if os(iOS)
-            Text("Motif stops scrobbling. What’s already on Last.fm stays there.")
+            Text("Tracks stops scrobbling. What’s already on Last.fm stays there.")
             #endif
         }
     }
@@ -255,11 +255,11 @@ extension LastFMSettingsStatus {
 
 extension LastFMSessionStore {
     /// The defaults key holding the connected username, in `CaptureSettings.sharedDefaults`.
-    /// The same string as MotifCore's internal `usernameKey`, which can't be renamed without
+    /// The same string as TracksCore's internal `usernameKey`, which can't be renamed without
     /// signing everyone out.
     ///
     /// Views watch it with `@AppStorage` to follow connecting and disconnecting. Saving and
     /// clearing a session write it after the Keychain, so when it changes, ``current`` is
     /// already up to date.
-    static let usernameDefaultsKey = "MotifLastFMUsername"
+    static let usernameDefaultsKey = "TracksLastFMUsername"
 }

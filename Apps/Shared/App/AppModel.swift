@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftData
 import CoreData
 import Observation
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 import MusicKit
 
 /// Everything the app needs at launch, built once and shared by every scene.
@@ -11,7 +11,7 @@ import MusicKit
 @Observable
 final class AppModel {
     /// The real store. `nil` only if it couldn't be opened at all.
-    let store: MotifStore?
+    let store: TracksStore?
     let capture: CaptureService?
     let playback: PlaybackController?
     let startupError: String?
@@ -32,20 +32,24 @@ final class AppModel {
     /// when Settings closes. Nil in a demo launch, which mustn't write the account's history.
     let lastFMHistory: LastFMHistorySync?
 
-    /// True when launched with `-MotifDemoData YES`. The real store is never opened, so a
+    /// Bringing history over from Motif, the app Tracks replaces. Here rather than in Settings
+    /// so it keeps going when Settings closes.
+    private(set) var motifImport: MotifImportState = .idle
+
+    /// True when launched with `-TracksDemoData YES`. The real store is never opened, so a
     /// screenshot session can't touch anyone's history, iCloud or Last.fm.
     let isDemoLaunch: Bool
 
     let library = Library()
 
-    /// Your other devices running Motif close by: what they're playing, and their controls.
+    /// Your other devices running Tracks close by: what they're playing, and their controls.
     let nearby = NearbyDevices()
 
-    /// Motif's own player, for the Play tab. One per process, like the capture service.
+    /// Tracks’ own player, for the Play tab. One per process, like the capture service.
     let player: PlayerModel
     /// The Play tab's mixes and Apple Music shelves.
     let playFeed: PlayFeed
-    /// Songs and artists you've never played that Motif suggests.
+    /// Songs and artists you've never played that Tracks suggests.
     let discovery: Discovery
     /// Your own music: files on this iPhone and songs on your servers.
     let yourMusic: YourMusic
@@ -94,7 +98,8 @@ final class AppModel {
 
     /// The iPhone's tab. Lives here so Summary's "See All" can move to Charts, which owns the
     /// full lists, instead of pushing a second copy inside Summary.
-    var selectedTab: AppTab = AppTab(launchName: LaunchScene.tab) ?? AppTab.opening
+    /// A launch link opens on Summary, whose stack it's pushed onto (see `RootView`).
+    var selectedTab: AppTab = AppTab(launchName: LaunchScene.tab) ?? (LaunchScene.route != nil ? .summary : AppTab.opening)
 
     /// Apple Music access, as last read. Summary and Settings explain what it's for and offer
     /// to ask, rather than the app asking out of nowhere at launch.
@@ -127,7 +132,7 @@ final class AppModel {
             let local: (any PlayerEngine)? = startsWithYourMusic ? LocalPlayerEngine(music: yourMusic, capture: .yourMusic) : nil
             yourMusicEngine = local
             player = PlayerModel(engine: local ?? appleMusicEngine)
-            // The song on when Motif last closed, paused where it was left.
+            // The song on when Tracks last closed, paused where it was left.
             player.restoreLastSession()
         }
         discovery = Discovery(feed: playFeed, player: player, isDemo: isDemoLaunch)
@@ -141,7 +146,7 @@ final class AppModel {
         syncMonitor?.start()
         self.syncMonitor = syncMonitor
         do {
-            let store = isDemoLaunch ? try DemoMode.makeStore() : try MotifStore.shared()
+            let store = isDemoLaunch ? try DemoMode.makeStore() : try TracksStore.shared()
             // Start watching saves before anything writes. Not in a demo launch, which
             // mustn't open the real store.
             if !isDemoLaunch { _ = WidgetRefresher.shared }
@@ -169,7 +174,7 @@ final class AppModel {
             self.reconciler = nil
             self.lastFMHistory = nil
         }
-        player.makeMotifRadio = MotifRadioSource.make(library: library, discovery: discovery, yourMusic: yourMusic, player: player)
+        player.makeTracksRadio = TracksRadioSource.make(library: library, discovery: discovery, yourMusic: yourMusic, player: player)
         player.radioDownloads = yourMusic
         player.makeAutoplay = AutoplaySource.make(library: library, yourMusic: yourMusic, player: player)
         player.restartMood = { [weak self] title, first in
@@ -177,6 +182,14 @@ final class AppModel {
             await MoodPlayback.start(mood, model: self, startingWith: first)
         }
         followLibraryAndMixes()
+        // Motif's history comes across by itself the first time, a few seconds in, so it
+        // doesn't compete with the first read of the history.
+        if !isDemoLaunch, MotifImport.shouldRunAutomatically {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                await self?.importFromMotif()
+            }
+        }
         nearby.onCommand = { [weak player] command in
             switch command {
             case .playPause: player?.togglePlayPause()
@@ -194,7 +207,7 @@ final class AppModel {
         }
         #if DEBUG
         nearby.showSample()
-        if UserDefaults.standard.string(forKey: "MotifNearbyDemo") == "control" { controlledDeviceID = "sample" }
+        if UserDefaults.standard.string(forKey: "TracksNearbyDemo") == "control" { controlledDeviceID = "sample" }
         #endif
     }
 
@@ -205,7 +218,7 @@ final class AppModel {
         if player.isPlaying { controlledDeviceID = nil }
     }
 
-    /// What Motif is playing, as your other devices are told it. Nil with nothing queued.
+    /// What Tracks is playing, as your other devices are told it. Nil with nothing queued.
     var nearbyState: NearbyState? {
         guard let track = player.current else { return nil }
         return NearbyState(
@@ -357,7 +370,7 @@ final class AppModel {
         }
     }
 
-    /// Songs opened in Motif from elsewhere: copied into Your Music, which becomes the source,
+    /// Songs opened in Tracks from elsewhere: copied into Your Music, which becomes the source,
     /// and shown on Play.
     func openInYourMusic(_ urls: [URL]) {
         selectedTab = .play
@@ -373,7 +386,7 @@ final class AppModel {
 
     /// Gets the process ready to play without a window: capture running, and the history's
     /// first read done with the mixes built from it. For Siri and CarPlay, which can start
-    /// Motif in the background.
+    /// Tracks in the background.
     func prepareForPlaying() async {
         // Its catch-up can take a while, and nothing here needs to wait for it.
         Task { await startCapture() }
@@ -390,7 +403,7 @@ final class AppModel {
 
     /// Keeps the history and the Play tab's mixes current for as long as the process runs.
     ///
-    /// Here rather than on a view, because Motif also runs with no window at all: playing for
+    /// Here rather than on a view, because Tracks also runs with no window at all: playing for
     /// CarPlay, or started by Siri in the background.
     private func followLibraryAndMixes() {
         let center = NotificationCenter.default
@@ -484,7 +497,7 @@ final class AppModel {
         catchUpIfNewlyAuthorized(since: previous)
     }
 
-    /// Reads access again. It can be changed in Settings while Motif keeps running.
+    /// Reads access again. It can be changed in Settings while Tracks keeps running.
     func refreshMusicAuthorization() {
         let previous = musicAuthorization
         musicAuthorization = MusicAuthorization.currentStatus
@@ -502,6 +515,21 @@ final class AppModel {
 
     /// Catches up with iCloud when the app comes back to the front.
     ///
+    /// Brings Motif's history over. Runs by itself once, and again whenever asked from Settings.
+    func importFromMotif() async {
+        guard !isDemoLaunch, let store, motifImport != .running else { return }
+        motifImport = .running
+        do {
+            let outcome = try await MotifImport.run(into: store)
+            motifImport = .finished(outcome)
+            if outcome.plays > 0 {
+                player.confirm(String(localized: "Brought Over \(outcome.plays.formatted()) Plays from Motif"))
+            }
+        } catch {
+            motifImport = .failed(error.localizedDescription)
+        }
+    }
+
     /// Both sides go quiet while the app is away — iOS suspends it, and a Mac window can sit
     /// closed for days — so this is where the user is most likely to be looking at stale
     /// settings or at rows another device has already merged.
@@ -511,6 +539,14 @@ final class AppModel {
         settingsSync?.reconcileAll()
         reconciler?.reconcile()
     }
+}
+
+/// Where bringing over Motif's history has got to. See ``MotifImport``.
+enum MotifImportState: Equatable {
+    case idle
+    case running
+    case finished(MotifImport.Outcome)
+    case failed(String)
 }
 
 /// The iPhone's tabs.
@@ -546,11 +582,14 @@ enum AppTab: String, Hashable {
     }
 }
 
-/// The tab Motif opens to on iPhone, chosen in Settings.
+/// The tab Tracks opens to on iPhone, chosen in Settings.
 enum OpeningTab: String, CaseIterable, Identifiable {
     case summary, play
 
     static let storageKey = "openingTab"
+
+    /// Where Tracks opens until it's changed in Settings: Play, the heart of the app.
+    static let standard: OpeningTab = .play
 
     var id: String { rawValue }
 
@@ -569,7 +608,7 @@ enum OpeningTab: String, CaseIterable, Identifiable {
     }
 
     static var current: OpeningTab {
-        UserDefaults.standard.string(forKey: storageKey).flatMap(OpeningTab.init(rawValue:)) ?? .summary
+        UserDefaults.standard.string(forKey: storageKey).flatMap(OpeningTab.init(rawValue:)) ?? standard
     }
 }
 
@@ -633,7 +672,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         }
     }
 
-    /// Playing, then your listening, or the other way round: whichever Motif opens to comes
+    /// Playing, then your listening, or the other way round: whichever Tracks opens to comes
     /// first, as the iPhone's tabs do. ⌘1 onwards follow this order.
     static func leading(opening: OpeningTab) -> [SidebarItem] {
         let playing: [SidebarItem] = [.listenNow, .radio]

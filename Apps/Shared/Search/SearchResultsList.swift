@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Songs, artists and albums matching a query. With an empty query it suggests top artists.
 struct SearchResultsList: View {

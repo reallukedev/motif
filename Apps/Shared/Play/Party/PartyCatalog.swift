@@ -1,6 +1,6 @@
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Apple Music's playlists and stations for a party, found by searching for each of its terms
 /// and ranked by ``PartyPlaylistRanking``.
@@ -86,9 +86,9 @@ extension Playlist {
 /// with sample data. Every name and description here is made up.
 enum PartyDemo {
     static func find(_ vibe: PartyVibe) async -> PartyCatalog.Outcome {
-        // A moment's wait, as a search takes; `-MotifPartyDelay 60` holds the loading state
+        // A moment's wait, as a search takes; `-TracksPartyDelay 60` holds the loading state
         // for a screenshot.
-        let delay = UserDefaults.standard.string(forKey: "MotifPartyDelay").flatMap(Double.init) ?? 0.6
+        let delay = UserDefaults.standard.string(forKey: "TracksPartyDelay").flatMap(Double.init) ?? 0.6
         try? await Task.sleep(for: .seconds(delay))
         let names = names(for: vibe)
         let offset = 2_000 + (PartyVibe.allCases.firstIndex(of: vibe) ?? 0) * 100

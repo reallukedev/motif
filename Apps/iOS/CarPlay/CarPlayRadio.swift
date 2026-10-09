@@ -1,9 +1,9 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Radio: everything that plays on its own once started. Motif Radio heads the tab as a
+/// Radio: everything that plays on its own once started. Tracks Radio heads the tab as a
 /// station of its own, every mood sits under it as a tile with Driving first, and Apple's live
 /// stations follow.
 extension CarPlaySceneDelegate {
@@ -14,7 +14,7 @@ extension CarPlaySceneDelegate {
         var sections: [CPListSection] = []
 
         radioRowState = radioState.rawValue
-        if let row = await motifRadioRow() {
+        if let row = await tracksRadioRow() {
             sections.append(CPListSection(items: [row]))
         }
 
@@ -53,7 +53,7 @@ extension CarPlaySceneDelegate {
         return sections
     }
 
-    /// Redraws Radio when Motif Radio's row would say something else: it's started, paused,
+    /// Redraws Radio when Tracks Radio's row would say something else: it's started, paused,
     /// or become available.
     func refreshRadioIfNeeded() {
         guard radioRowState != radioState.rawValue else { return }
@@ -65,45 +65,45 @@ extension CarPlaySceneDelegate {
     }
 
     private var radioState: RadioState {
-        guard hasMotifRadio else { return .off }
-        // By what's playing, not its name: a playlist called Motif Radio isn't it.
-        guard model.player.isPlayingMotifRadio else { return .idle }
+        guard hasTracksRadio else { return .off }
+        // By what's playing, not its name: a playlist called Tracks Radio isn't it.
+        guard model.player.isPlayingTracksRadio else { return .idle }
         // A song still coming from your server is playing, not paused.
         return model.player.isPlaying || model.player.status == .loading ? .playing : .paused
     }
 
-    /// Motif Radio as a station: its artwork, and a line that says where it stands, with the
+    /// Tracks Radio as a station: its artwork, and a line that says where it stands, with the
     /// playing marker while it's on. A tap works out what to do then, so it's never a step
     /// behind the music: play it, pick it up where it paused, or show it.
-    private func motifRadioRow() async -> CPListItem? {
+    private func tracksRadioRow() async -> CPListItem? {
         let state = radioState
         guard state != .off else { return nil }
-        let image = await CarPlayImages.motifRadio(side: CPListItem.maximumImageSize.height, scale: scale)
+        let image = await CarPlayImages.tracksRadio(side: CPListItem.maximumImageSize.height, scale: scale)
         let line = switch state {
         case .playing: String(localized: "Now Playing")
         case .paused: String(localized: "Paused")
         case .idle, .off: String(localized: "Your station, picked as you drive")
         }
-        let row = CPListItem(text: String(localized: "Motif Radio"), detailText: line, image: image)
+        let row = CPListItem(text: String(localized: "Tracks Radio"), detailText: line, image: image)
         row.isPlaying = state == .playing
         row.handler = { [weak self] _, completion in
-            self?.motifRadioTapped(completion: completion)
+            self?.tracksRadioTapped(completion: completion)
         }
         return row
     }
 
-    /// Motif Radio from a card or a suggestion: picked up where it paused if it's what's on,
+    /// Tracks Radio from a card or a suggestion: picked up where it paused if it's what's on,
     /// otherwise started. Never started over while it plays.
-    func startOrResumeMotifRadio() async {
+    func startOrResumeTracksRadio() async {
         let player = model.player
-        if player.isPlayingMotifRadio {
+        if player.isPlayingTracksRadio {
             if !player.isPlaying { player.togglePlayPause() }
         } else {
-            await player.startMotifRadio()
+            await player.startTracksRadio()
         }
     }
 
-    private func motifRadioTapped(completion: @escaping () -> Void) {
+    private func tracksRadioTapped(completion: @escaping () -> Void) {
         let player = model.player
         switch radioState {
         case .playing:
@@ -114,7 +114,7 @@ extension CarPlaySceneDelegate {
             showNowPlaying()
             completion()
         case .idle, .off:
-            play({ await player.startMotifRadio() }, completion: completion)
+            play({ await player.startTracksRadio() }, completion: completion)
         }
     }
 }

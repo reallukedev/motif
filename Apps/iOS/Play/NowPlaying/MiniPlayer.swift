@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The song playing, above the tab bar on every tab, as Music's mini player is. Tapping it
 /// opens Now Playing.

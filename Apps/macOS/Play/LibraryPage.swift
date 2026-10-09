@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A library row of the sidebar: Apple Music's library, or your own music's, following the
 /// music source.
@@ -16,8 +16,8 @@ struct LibraryPage: View {
             #if DEBUG
             .task(id: model.yourMusic.index.artists.count) {
                 CollectionScreenshotSetup.apply()
-                // `-MotifAppearance light`, for light screenshots on a Mac set to dark.
-                if UserDefaults.standard.string(forKey: "MotifAppearance") == "light" {
+                // `-TracksAppearance light`, for light screenshots on a Mac set to dark.
+                if UserDefaults.standard.string(forKey: "TracksAppearance") == "light" {
                     NSApp.appearance = NSAppearance(named: .aqua)
                 }
                 LibraryLaunch.push(in: model)

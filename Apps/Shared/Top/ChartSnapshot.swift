@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One chart as its page shows it: the period, its entries, and the nearest periods either
 /// side that have listening in them.

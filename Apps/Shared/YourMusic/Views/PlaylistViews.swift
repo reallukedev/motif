@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Every playlist you've made in Motif, most recently changed first, with new ones a tap away:
+/// Every playlist you've made in Tracks, most recently changed first, with new ones a tap away:
 /// a list of mosaics on iPhone, a grid of covers on the Mac.
 struct PlaylistsPage: View {
     @Environment(YourMusic.self) private var music
@@ -9,8 +9,8 @@ struct PlaylistsPage: View {
     @Environment(\.openPlayRoute) private var openPlayRoute
     @State private var makesPlaylist = false
     @State private var makesSmartPlaylist = false
-    @State private var deleting: MotifPlaylist?
-    @State private var renaming: MotifPlaylist?
+    @State private var deleting: TracksPlaylist?
+    @State private var renaming: TracksPlaylist?
     @State private var name = ""
     @State private var query = ""
     @Environment(PlayerModel.self) private var player
@@ -21,10 +21,10 @@ struct PlaylistsPage: View {
         content
             .navigationTitle("Playlists")
             .sheet(isPresented: $makesPlaylist) {
-                NewPlaylistSheet { openPlayRoute(.motifPlaylist($0.id)) }
+                NewPlaylistSheet { openPlayRoute(.tracksPlaylist($0.id)) }
             }
             .sheet(isPresented: $makesSmartPlaylist) {
-                SmartPlaylistEditor(playlistID: nil) { openPlayRoute(.motifPlaylist($0)) }
+                SmartPlaylistEditor(playlistID: nil) { openPlayRoute(.tracksPlaylist($0)) }
             }
             .alert("Rename Playlist", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $name)
@@ -53,7 +53,7 @@ struct PlaylistsPage: View {
             #endif
     }
 
-    private func menu(_ playlist: MotifPlaylist) -> some View {
+    private func menu(_ playlist: TracksPlaylist) -> some View {
         PlaylistMenu(playlist: playlist) {
             name = playlist.name
             renaming = playlist
@@ -93,7 +93,7 @@ struct PlaylistsPage: View {
             if !playlists.isEmpty {
                 Section {
                     ForEach(playlists) { playlist in
-                        NavigationLink(value: PlayRoute.motifPlaylist(playlist.id)) {
+                        NavigationLink(value: PlayRoute.tracksPlaylist(playlist.id)) {
                             PlaylistRow(playlist: playlist)
                         }
                         .navigationLinkIndicatorVisibility(.hidden)
@@ -117,7 +117,7 @@ struct PlaylistsPage: View {
         .searchable(text: $query, placement: .pageSearch(alwaysShown: false), prompt: "Filter Playlists")
     }
 
-    private func play(_ playlist: MotifPlaylist) {
+    private func play(_ playlist: TracksPlaylist) {
         let playable = music.songs(in: playlist, facts: feed.facts).filter(music.isPlayable)
         guard !playable.isEmpty else { return }
         player.play(.local(playable), from: PlayContext(kind: .playlist, title: playlist.name))
@@ -190,7 +190,7 @@ struct PlaylistsPage: View {
 
 /// What can be done with one of your playlists from its row or tile.
 private struct PlaylistMenu: View {
-    let playlist: MotifPlaylist
+    let playlist: TracksPlaylist
     let rename: () -> Void
     let delete: () -> Void
     @Environment(YourMusic.self) private var music
@@ -220,7 +220,7 @@ private struct PlaylistMenu: View {
 /// A playlist in the Mac's grid, as the library's covers are: Play and More under the pointer,
 /// its name and how many songs.
 private struct PlaylistTile<Menu: View>: View {
-    let playlist: MotifPlaylist
+    let playlist: TracksPlaylist
     @ViewBuilder var menu: Menu
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
@@ -232,7 +232,7 @@ private struct PlaylistTile<Menu: View>: View {
         LibraryCoverTile(
             title: playlist.name,
             subtitle: PlaylistRow.summary(playlist, count: songs.count),
-            route: .motifPlaylist(playlist.id),
+            route: .tracksPlaylist(playlist.id),
             play: playable.isEmpty ? nil : { player.play(.local(playable), from: PlayContext(kind: .playlist, title: playlist.name)) }
         ) { side in
             Color.clear
@@ -251,7 +251,7 @@ private struct PlaylistTile<Menu: View>: View {
 
 /// A playlist in a list, as Music lists them: its cover, its name, and how many songs.
 struct PlaylistRow: View {
-    let playlist: MotifPlaylist
+    let playlist: TracksPlaylist
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
     @ScaledMetric(relativeTo: .body) private var side: CGFloat = 56
@@ -274,7 +274,7 @@ struct PlaylistRow: View {
     }
 
     /// "12 songs", or "Smart Playlist · 12 songs".
-    static func summary(_ playlist: MotifPlaylist, count: Int) -> String {
+    static func summary(_ playlist: TracksPlaylist, count: Int) -> String {
         let songs = String(AttributedString(localized: "^[\(count) song](inflect: true)").characters)
         return playlist.isSmart ? String(localized: "Smart Playlist · \(songs)") : songs
     }
@@ -351,7 +351,7 @@ struct PlaylistCover: View {
 
 /// A playlist you made: play it, shuffle it, and change it. One you fill yourself can be
 /// reordered and have songs taken out; a smart one changes as its rules find other songs.
-struct MotifPlaylistPage: View {
+struct TracksPlaylistPage: View {
     let playlistID: UUID
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
@@ -377,7 +377,7 @@ struct MotifPlaylistPage: View {
         }
     }
 
-    private func content(_ playlist: MotifPlaylist) -> some View {
+    private func content(_ playlist: TracksPlaylist) -> some View {
         let songs = music.songs(in: playlist, facts: feed.facts)
         let playable = songs.filter(music.isPlayable)
         let context = PlayContext(kind: .playlist, title: playlist.name)
@@ -428,7 +428,7 @@ struct MotifPlaylistPage: View {
     }
 
     #if os(iOS)
-    private func page(_ playlist: MotifPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
+    private func page(_ playlist: TracksPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
         List {
             Section {
                 header(playlist, songs: songs, playable: playable, context: context)
@@ -489,7 +489,7 @@ struct MotifPlaylistPage: View {
         CollectionFooter(lines: [TrackListFooter.summary(count: songs.count, seconds: songs.compactMap(\.duration).reduce(0, +))])
     }
     #else
-    private func page(_ playlist: MotifPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
+    private func page(_ playlist: TracksPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
         CollectionMacLayout {
             header(playlist, songs: songs, playable: playable, context: context)
         } content: {
@@ -502,7 +502,7 @@ struct MotifPlaylistPage: View {
         .navigationTitle(playlist.name)
     }
 
-    private func macTable(_ playlist: MotifPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
+    private func macTable(_ playlist: TracksPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
         // A playlist you fill yourself has an entry per song, so the same song can be in it
         // twice and each be moved or taken out on its own; a smart one's songs are unique.
         let ids = playlist.isSmart ? songs.map(\.id) : playlist.entries.map(\.id.uuidString)
@@ -549,7 +549,7 @@ struct MotifPlaylistPage: View {
     }
     #endif
 
-    private func header(_ playlist: MotifPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
+    private func header(_ playlist: TracksPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
         let history = CollectionHistory.summary(songIdentities: songs.map(\.identity), facts: feed.facts)
         let first = PlaylistCover.distinctCovers(of: songs).first
         let length = CollectionFacts.length(count: songs.count, seconds: songs.compactMap(\.duration).reduce(0, +))
@@ -583,7 +583,7 @@ struct MotifPlaylistPage: View {
     }
 
     @ViewBuilder
-    private func moreItems(_ playlist: MotifPlaylist) -> some View {
+    private func moreItems(_ playlist: TracksPlaylist) -> some View {
         if playlist.isSmart {
             Button("Edit Rules…", systemImage: "slider.horizontal.3") { editsRules = true }
         } else {
@@ -604,7 +604,7 @@ struct MotifPlaylistPage: View {
 
     /// In the list's own place: what an empty playlist needs next.
     @ViewBuilder
-    private func emptyNote(_ playlist: MotifPlaylist) -> some View {
+    private func emptyNote(_ playlist: TracksPlaylist) -> some View {
         if playlist.isSmart {
             CollectionMessage(
                 text: String(localized: "No songs match its rules yet. It fills itself as songs that fit come into your music."),
@@ -665,7 +665,7 @@ enum SmartRulesSummary {
 /// Names a new playlist, with songs already chosen for it or none.
 struct NewPlaylistSheet: View {
     var tracks: [LocalTrack] = []
-    var onCreate: (MotifPlaylist) -> Void = { _ in }
+    var onCreate: (TracksPlaylist) -> Void = { _ in }
     @Environment(YourMusic.self) private var music
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -843,7 +843,7 @@ struct PlaylistPickerSheet: View {
     }
     #endif
 
-    private func add(to playlist: MotifPlaylist) {
+    private func add(to playlist: TracksPlaylist) {
         music.playlists.add(pick.tracks, to: playlist.id)
         player.confirm(String(localized: "Added to \u{201C}\(playlist.name)\u{201D}"))
         dismiss()

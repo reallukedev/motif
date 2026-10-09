@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
 /// Songs downloaded from your servers to play without a connection: the original files, FLAC
 /// and all, or a smaller copy the server makes, as Download Quality asks. Downloads carry on
@@ -74,11 +74,11 @@ final class Downloads {
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }()
     @ObservationIgnored private let delegate = DownloadDelegate()
-    /// iOS hands this over when it wakes Motif to finish downloads, and wants it called when
+    /// iOS hands this over when it wakes Tracks to finish downloads, and wants it called when
     /// they've been dealt with.
     @ObservationIgnored var backgroundCompletion: (() -> Void)?
 
-    static let sessionIdentifier = "com.luke.motif.downloads"
+    static let sessionIdentifier = "com.luke.tracks.downloads"
     private static var recordURL: URL { LibraryFolders.index.appending(path: "downloads.json") }
     private static var pendingURL: URL { LibraryFolders.index.appending(path: "downloads-pending.json") }
 
@@ -86,7 +86,7 @@ final class Downloads {
         self.servers = servers
         items = Self.load(Self.recordURL) ?? [:]
         pending = Self.load(Self.pendingURL) ?? [:]
-        // Files deleted behind Motif's back aren't downloaded any more.
+        // Files deleted behind Tracks’ back aren't downloaded any more.
         items = items.filter { FileManager.default.fileExists(atPath: Self.fileURL($0.value.fileName).path(percentEncoded: false)) }
         delegate.owner = self
         // Picks up downloads still running from before.
@@ -127,7 +127,7 @@ final class Downloads {
     }
 
     /// Called with the songs each ``download(_:)`` asks for, before they start: Your Music
-    /// hears which ones are wanted to keep, as against the ones Motif Radio gets ready.
+    /// hears which ones are wanted to keep, as against the ones Tracks Radio gets ready.
     @ObservationIgnored var onAsked: (([LocalTrack]) -> Void)?
 
     /// Downloads songs, as asked already: again after a change of setting, or a retry.
@@ -275,7 +275,7 @@ final class Downloads {
     }
 
     /// Shows the progress of downloads still running from before. Ones that finished while
-    /// Motif wasn't running are reported by the session as it reconnects, so they're left be.
+    /// Tracks wasn't running are reported by the session as it reconnects, so they're left be.
     private func restoreProgress() async {
         let tasks = await session.allTasks
         for task in tasks {
@@ -354,7 +354,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         guard let error, let (id, attempt) = Downloads.parse(task.taskDescription) else { return }
-        // A cancel Motif didn't ask for (the app was quit, say) is a failure, to try again; one it
+        // A cancel Tracks didn't ask for (the app was quit, say) is a failure, to try again; one it
         // did ask for is ignored by the owner, which knows the attempt was stopped.
         let reason = (error as? URLError)?.code == .cancelled
             ? String(localized: "Stopped before it finished.")

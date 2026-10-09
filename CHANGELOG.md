@@ -1,13 +1,20 @@
-# What's New in Motif
+# What's New in Tracks
 
-## Motif 2.0
+## Tracks 1.0
 
-Motif can now play your music on iPhone and Mac. Every song you play in Motif is kept, even
-with the app in the background, so your history no longer depends on having Motif open.
+Motif is now Tracks, a new app with a new name and icon, made for playing and finding music
+as much as keeping it. On a device with Motif, Tracks brings your Motif history over the
+first time it opens: every play, station and session, with your blocked artists, forgotten
+songs and radio playlist. Settings › History can bring it over again.
+
+Tracks opens to Play.
+
+Tracks can now play your music on iPhone and Mac. Every song you play in Tracks is kept, even
+with the app in the background, so your history no longer depends on having Tracks open.
 
 ### A New Look
 
-- The crate leads Play: Motif Radio in front, with this hour's mix, Discover and the rest of
+- The crate leads Play: Tracks Radio in front, with this hour's mix, Discover and the rest of
   the day's mixes fanned either side, to flip through like records. The page glows with the
   colour of the one in front
 - The back of the sleeve: tap the cover in Now Playing and it turns over to your history with
@@ -36,15 +43,15 @@ with the app in the background, so your history no longer depends on having Moti
   Camera
 - In the car, SharePlay sits at the top of Up Next: the code, who's joined and the songs
   passengers added, with End SharePlay when you're done
-- Passengers without Motif join from an App Clip, with nothing to install: see what's
+- Passengers without Tracks join from an App Clip, with nothing to install: see what's
   playing, search Apple Music and add songs
-- Passengers with Motif can also add from their own library: Recently Played, Playlists and
+- Passengers with Tracks can also add from their own library: Recently Played, Playlists and
   Recently Added
 - Joining by code works with no network in the car, straight between iPhones, and over the
   internet when they can't reach each other. Every message is encrypted with a key only the
   code holds
 
-### Motif Radio
+### Tracks Radio
 
 - Follows the time of day: your morning songs in the morning, calmer late at night
 - Notices when you're driving, on iPhone, and plays for the road: songs you play in the car,
@@ -59,22 +66,22 @@ with the app in the background, so your history no longer depends on having Moti
 - Up Next and Your History rise from the bar (⌥⌘U, ⌥⌘Y). Reorder, remove, or double-click
   a song to play it now
 - A Controls menu with Music's shortcuts: Space to play and pause, ⌘→ and ⌘← to skip, ⇧⌘F
-  for the full player, ⇧⌘M for the Mini Player, ⌥⌘R for Motif Radio and ⌥⌘N to play
+  for the full player, ⇧⌘M for the Mini Player, ⌥⌘R for Tracks Radio and ⌥⌘N to play
   something new
 - The Mini Player: the cover in a small window that stays in front, with the controls on it
   while the pointer is there
-- The menu bar and the Dock show and control what Motif is playing. Starting music in Motif
+- The menu bar and the Dock show and control what Tracks is playing. Starting music in Tracks
   pauses Music
 - Your Music plays FLAC and other files on the Mac: import songs or folders, or drop them in
-  Motif's Music folder, which Add Music shows in Finder
+  Tracks’ Music folder, which Add Music shows in Finder
 
 ### Play
 
-- Picks up where you left off: the song that was on when you closed Motif waits, paused, for
+- Picks up where you left off: the song that was on when you closed Tracks waits, paused, for
   as long as you choose in Settings
-- A new Play tab plays Apple Music inside Motif: your library, live radio, stations you've
+- A new Play tab plays Apple Music inside Tracks: your library, live radio, stations you've
   listened to, albums, playlists and anything in Apple Music's catalog
-- Motif Radio, your own station: everything you love, weighted to what you play most, with
+- Tracks Radio, your own station: everything you love, weighted to what you play most, with
   new finds like it, picked one song at a time as it plays. Tune how adventurous it is, the
   genres it leans into, and whether it brings back old favorites, or turn it off in Settings
 - Suggested Songs and Suggested Artists lead the tab: songs and artists you've never played,
@@ -88,12 +95,12 @@ with the app in the background, so your history no longer depends on having Moti
 - Offline Mode: without a connection, Play shows the Apple Music songs downloaded to your
   iPhone, the mixes they make, your most played and everything downloaded, all playing
   offline and kept in your history. Turn it on yourself in Settings › Play to save data. With
-  Automatic Downloads on in Settings › Apps › Music, songs you add to your library from Motif
+  Automatic Downloads on in Settings › Apps › Music, songs you add to your library from Tracks
   download too
 - Find Your Mood: Feel Good, Energy, Workout, Focus, Chill, Love, Heartbreak, Party and
   Sleep. Go with the flow, your songs, new ones or both picked as it plays, or look through
   new songs and artists for the mood, your own songs that suit it, and Apple's playlists
-- Motif Radio and the moods pick each song as the one before starts, as a radio station
+- Tracks Radio and the moods pick each song as the one before starts, as a radio station
   does, so Up Next shows just the next song. Skip as much as you like: skipping an artist
   makes them rarer for the rest of the listen, and skipping new finds means fewer of them
 - For You cards to swipe through: what you usually play at this time of day, and mixes for
@@ -114,23 +121,23 @@ with the app in the background, so your history no longer depends on having Moti
   Station from any song or artist, AirPlay and a sleep timer
 - Your play counts appear beside songs on albums, playlists and in search
 - Edit Play: reorder the tab's sections, or hide the ones you don't use
-- Shake to Play: shake iPhone for a song you haven't heard that Motif thinks you'll like, with
-  Motif Radio after it, from Apple Music or your own music
+- Shake to Play: shake iPhone for a song you haven't heard that Tracks thinks you'll like, with
+  Tracks Radio after it, from Apple Music or your own music
 - Quick Switch, for people who use both Apple Music and their own music: Play's title switches
   between them, and what's playing carries on until you play something from the other. Play
   offers your downloads when you're offline, and Apple Music when your server isn't answering.
   A Focus filter picks one for each Focus, and Switch Music Source works in Shortcuts and on the
   Action button. Off by default, and only offered with both set up
-- Your other devices: Play shows what Motif on your Mac or iPad is playing, live, with its
+- Your other devices: Play shows what Tracks on your Mac or iPad is playing, live, with its
   controls, and Play Here brings the song to your iPhone from where it's got to. The Mac's menu
   bar shows your iPhone's song the same way. Only your own devices, signed in to your iCloud,
   can connect
-- Explicit Songs: on, Motif plays the explicit version of a song that has both; off, it plays
+- Explicit Songs: on, Tracks plays the explicit version of a song that has both; off, it plays
   clean versions and skips explicit songs, stations included
 - Song Transitions: none, or a crossfade of 1 to 12 seconds
-- Siri: "Play music in Motif" starts Motif Radio, and "Play my mix", "Play something new",
-  "Play On Repeat in Motif" and moods like "Play Chill in Motif" work too. Ask for any
-  artist, song, album, playlist or station in Motif, and Siri can learn to use Motif when
+- Siri: "Play music in Tracks" starts Tracks Radio, and "Play my mix", "Play something new",
+  "Play On Repeat in Tracks" and moods like "Play Chill in Tracks" work too. Ask for any
+  artist, song, album, playlist or station in Tracks, and Siri can learn to use Tracks when
   you just say "Play music"
 - CarPlay: Listen Now with your moods, Radio, Library and Insights, with your week's top
   artists and songs a tap from playing
@@ -140,7 +147,7 @@ with the app in the background, so your history no longer depends on having Moti
 - Choose where Play's music comes from: Apple Music, or Your Music, the music you own. Apple
   Music stays the default
 - Play FLAC, ALAC, MP3, AAC, WAV and AIFF files from your iPhone: import songs or whole
-  folders, open them in Motif from anywhere, or drop them into On My iPhone › Motif › Music
+  folders, open them in Tracks from anywhere, or drop them into On My iPhone › Tracks › Music
   in Files. Tags, covers and folder names are read for you
 - Connect your own music server: Navidrome, Gonic, Airsonic, Ampache, LMS and any other that
   speaks the Subsonic API. Its whole library joins yours, streamed as you play it
@@ -155,10 +162,10 @@ with the app in the background, so your history no longer depends on having Moti
 - With a server, Your Music needs no Apple Music at all: Suggested Songs (artists new to you),
   Picked for You (artists you play), moods and Keep Exploring all come from your server, go on
   for as long as you scroll, and mix songs you have with new ones. Only Music I Have keeps them
-  to what you have. Motif asks your server for more a little at a time, so it isn't overwhelmed
+  to what you have. Tracks asks your server for more a little at a time, so it isn't overwhelmed
 - Picks follow your taste as it moves: recent listening counts most, the artists you picked
-  give way as Motif learns what you play, and songs you skip drop out
-- Motif Radio can start with songs already on your iPhone and download its new finds in the
+  give way as Tracks learns what you play, and songs you skip drop out
+- Tracks Radio can start with songs already on your iPhone and download its new finds in the
   background: they wait in Up Next, play as soon as they're here, and can be swiped away
 - From Your Downloads, and a Downloads page to look after them: storage, stats, most played,
   sorting, and Free Up Space for what you haven't played in months. Shuffle Downloads plays
@@ -168,13 +175,13 @@ with the app in the background, so your history no longer depends on having Moti
 - Smart playlists fill themselves: songs from your downloads or all your music, by artist,
   album, genre, year, plays, last played, date added or quality, in the order you like, as many
   as you like. They change as your music and your plays do
-- Merge with Apple Music, off by default: playlists of the same name in Motif and Apple Music
-  become one. Songs added in Apple Music are found on your server and downloaded each time Motif
-  opens; songs added in Motif are added in Apple Music
+- Merge with Apple Music, off by default: playlists of the same name in Tracks and Apple Music
+  become one. Songs added in Apple Music are found on your server and downloaded each time Tracks
+  opens; songs added in Tracks are added in Apple Music
 - Search finds albums and artists on your servers too, with Octo's finds, and each has its page
 - Suggested Songs, Picked for You and Keep Exploring show each song as it's ready, and stop
   asking your server for more once you've scrolled past
-- Motif Radio's Delete After Playing, off by default: new finds are downloaded, played, and
+- Tracks Radio's Delete After Playing, off by default: new finds are downloaded, played, and
   removed. Keep any you liked from Up Next, or add it to a playlist
 - Downloads use cellular unless you turn it off; then they wait, and start by themselves back
   on Wi-Fi
@@ -183,7 +190,7 @@ with the app in the background, so your history no longer depends on having Moti
   connection. Downloads carry on in the background
 - Discover on your servers: what's new, what's most played, songs like the artist you play
   most, albums picked at random, and Keep Exploring for as long as you scroll
-- Motif Radio, your mixes and the moods are made from your own music too, and "Waiting to Be
+- Tracks Radio, your mixes and the moods are made from your own music too, and "Waiting to Be
   Heard" turns up songs you own but have never played
 - Hi-Res Lossless and Lossless are marked on albums and in Now Playing, with the bit depth
   and sample rate
@@ -193,7 +200,7 @@ with the app in the background, so your history no longer depends on having Moti
 - Suggestions work with your own music too: every suggested song is checked against your
   files, your servers and Lidarr. Ones you have play; ones you don't show as Not Available.
   Choose Everything, Only Music I Have, or Off
-- Lidarr: add artists and ask for albums from anywhere in Motif, see what's downloading,
+- Lidarr: add artists and ask for albums from anywhere in Tracks, see what's downloading,
   wanted and coming soon, and download anything in your Lidarr collection through your
   server
 
@@ -201,9 +208,9 @@ with the app in the background, so your history no longer depends on having Moti
 
 - Search moves to the top of Summary and Play, and can search Apple Music, your library or
   your history
-- Choose whether Motif opens to Summary or Play in Settings. The tab it opens to sits on the
+- Choose whether Tracks opens to Summary or Play in Settings. The tab it opens to sits on the
   far left
-- Play on a song or album page plays it in Motif, so the play is kept. Settings can send
+- Play on a song or album page plays it in Tracks, so the play is kept. Settings can send
   them to Apple Music instead
 
 ## Motif 1.0

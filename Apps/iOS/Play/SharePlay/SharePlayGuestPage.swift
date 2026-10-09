@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 extension View {
     /// Opens the SharePlay page when this iPhone joins someone else's SharePlay, over whatever
@@ -142,7 +142,7 @@ struct SharePlayGuestPage: View {
             ContentUnavailableView {
                 Label("Allow Local Network", systemImage: "network")
             } description: {
-                Text("Motif connects straight to the iPhone that's playing. Turn on Local Network for Motif in Settings to join.")
+                Text("Tracks connects straight to the iPhone that's playing. Turn on Local Network for Tracks in Settings to join.")
             } actions: {
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
@@ -489,9 +489,9 @@ private struct SharePlayAccessCard: View {
 
     private var message: LocalizedStringKey {
         switch authorization {
-        case .notDetermined: "Allow Motif to use Apple Music to search for songs to add, and to pick them from your library and playlists. You don't need a subscription to search."
+        case .notDetermined: "Allow Tracks to use Apple Music to search for songs to add, and to pick them from your library and playlists. You don't need a subscription to search."
         case .restricted: "Screen Time or a device profile doesn't allow Apple Music access, so you can't search here."
-        default: "To find songs to add, turn on Media & Apple Music for Motif in Settings."
+        default: "To find songs to add, turn on Media & Apple Music for Tracks in Settings."
         }
     }
 

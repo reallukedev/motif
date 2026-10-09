@@ -1,11 +1,11 @@
 import SwiftUI
 import MusicKit
 import UniformTypeIdentifiers
-import MotifCore
+import TracksCore
 
 /// Songs being dragged: from a list or a table onto Up Next, the player, or a playlist.
 ///
-/// Each song carries every way Motif has of finding it again, because where it came from
+/// Each song carries every way Tracks has of finding it again, because where it came from
 /// decides how it plays: a song of your own by its id in your music, an Apple Music library
 /// song by its library id, anything else by its catalog id and name, as the history knows it.
 nonisolated struct SongDrag: Codable, Hashable, Sendable, Transferable {
@@ -16,7 +16,7 @@ nonisolated struct SongDrag: Codable, Hashable, Sendable, Transferable {
         var albumTitle: String?
         /// An Apple Music library id, "i." and the like.
         var libraryID: String?
-        /// ``MotifCore/LocalTrack/id``, for a song in your own music.
+        /// ``TracksCore/LocalTrack/id``, for a song in your own music.
         var localID: String?
     }
 
@@ -41,7 +41,7 @@ nonisolated struct SongDrag: Codable, Hashable, Sendable, Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .motifSongs)
+        CodableRepresentation(contentType: .tracksSongs)
         // Anywhere else, the songs as text, a line each.
         ProxyRepresentation { drag in
             drag.songs.map { "\($0.title), \($0.artistName)" }.joined(separator: "\n")
@@ -72,6 +72,6 @@ extension SongDrag {
 }
 
 extension UTType {
-    /// Songs dragged within Motif. Declared in both apps' Info.plist.
-    nonisolated static let motifSongs = UTType(exportedAs: "com.luke.motif.songs")
+    /// Songs dragged within Tracks. Declared in both apps' Info.plist.
+    nonisolated static let tracksSongs = UTType(exportedAs: "com.luke.tracks.songs")
 }

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One highlight, as a card: coloured heading, symbol, sentence.
 struct HighlightCard: View {

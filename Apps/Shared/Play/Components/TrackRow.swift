@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Pushes a page onto the stack the view is in. Each stack that shows Apple Music content
 /// sets one, so a context menu's Go to Album lands in the right place.
@@ -30,7 +30,7 @@ struct TrackRow: View {
     let subtitle: String?
     var cover: CoverArt?
     var number: Int?
-    /// Your plays, from Motif's history. Shown when there are any.
+    /// Your plays, from Tracks’ history. Shown when there are any.
     var plays: Int?
     var isExplicit = false
     var isCurrent = false
@@ -198,7 +198,7 @@ struct SongMenu: View {
     }
 }
 
-/// "Suggest Less", which keeps a song out of Motif's mixes. Undone from the same place.
+/// "Suggest Less", which keeps a song out of Tracks’ mixes. Undone from the same place.
 struct SuggestLessButton: View {
     let songIdentity: String
     @Environment(PlayerModel.self) private var player
@@ -216,7 +216,7 @@ struct SuggestLessButton: View {
     }
 }
 
-/// "Block", which stops Motif playing or suggesting an artist anywhere, on every device.
+/// "Block", which stops Tracks playing or suggesting an artist anywhere, on every device.
 /// Undone from the same place, or from Blocked Artists in Settings.
 struct BlockArtistButton: View {
     /// The artist, as their page names them.

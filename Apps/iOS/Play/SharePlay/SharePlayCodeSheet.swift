@@ -1,9 +1,9 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The code on this iPhone, for the people with you to scan with their Camera, as Wallet shows
 /// a pass: large, on white, with the screen turned up and kept awake while it's out. They land
-/// in Motif, on the same page as someone invited in Messages.
+/// in Tracks, on the same page as someone invited in Messages.
 ///
 /// The code works while the sheet is up, and for as long as anyone who joined with it stays.
 struct SharePlayCodeSheet: View {
@@ -72,7 +72,7 @@ struct SharePlayCodeSheet: View {
             screen.restore()
         }
         .onChange(of: scenePhase) { _, phase in
-            // Back as it was while Motif's away, as Wallet leaves it.
+            // Back as it was while Tracks’ away, as Wallet leaves it.
             if phase == .active { screen.brighten() } else { screen.restore() }
         }
         // Ended here or from the menu: nothing left to show.
@@ -142,11 +142,11 @@ struct SharePlayCodeSheet: View {
 
     private var message: LocalizedStringKey {
         switch sharePlay.codeStatus {
-        case .needsLocalNetwork: "People nearby can join with a code once Local Network is on for Motif. You can still invite them in Messages."
+        case .needsLocalNetwork: "People nearby can join with a code once Local Network is on for Tracks. You can still invite them in Messages."
         case .failed: "This iPhone couldn't offer itself nearby. It's trying again."
         default: SharePlayCodeImage.isForEveryone
             ? "Point an iPhone's Camera at this code to add songs to your Up Next. No app needed."
-            : "Point the Camera on an iPhone with Motif at this code to add songs to your Up Next."
+            : "Point the Camera on an iPhone with Tracks at this code to add songs to your Up Next."
         }
     }
 

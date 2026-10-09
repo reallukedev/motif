@@ -1,13 +1,13 @@
 import Foundation
 import Observation
 import MusicKit
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
-/// Keeps your Motif playlists and your Apple Music playlists together, when you choose to.
+/// Keeps your Tracks playlists and your Apple Music playlists together, when you choose to.
 /// Playlists with the same name are merged, and each side gets the other's that it doesn't
-/// have. Each time Motif opens: songs added in Apple Music are found in your music, or on your
-/// server, which a server like Octo fetches, and are downloaded; songs added in Motif are added
+/// have. Each time Tracks opens: songs added in Apple Music are found in your music, or on your
+/// server, which a server like Octo fetches, and are downloaded; songs added in Tracks are added
 /// in Apple Music; songs taken out in Apple Music come out here too. Apple Music doesn't let
 /// apps take songs out, so ones taken out here stay there, and aren't brought back.
 @MainActor
@@ -50,7 +50,7 @@ final class PlaylistMerge {
         var status = MusicAuthorization.currentStatus
         if status == .notDetermined { status = await MusicAuthorization.request() }
         guard status == .authorized else {
-            problem = String(localized: "Motif isn't allowed to use Apple Music. Allow it in Settings › Apps › Motif.")
+            problem = String(localized: "Tracks isn't allowed to use Apple Music. Allow it in Settings › Apps › Tracks.")
             return false
         }
         UserDefaults.standard.set(true, forKey: Self.storageKey)
@@ -80,15 +80,15 @@ final class PlaylistMerge {
             lastMerged = .now
             problem = nil
         } catch {
-            problem = String(localized: "Couldn't reach Apple Music. Motif tries again next time it opens.")
+            problem = String(localized: "Couldn't reach Apple Music. Tracks tries again next time it opens.")
         }
     }
 
     // MARK: - Pairing
 
-    /// Each Motif playlist you fill yourself with its Apple Music playlist: the one it's merged
+    /// Each Tracks playlist you fill yourself with its Apple Music playlist: the one it's merged
     /// with, one of the same name, or a new one; and each Apple Music playlist left, with a new
-    /// Motif one. Ones unmerged, or deleted on one side, are left out.
+    /// Tracks one. Ones unmerged, or deleted on one side, are left out.
     private func pair(_ apple: [Playlist], in music: YourMusic) async throws -> [(UUID, Playlist)] {
         let playlists = music.playlists
         let byID = Dictionary(apple.map { ($0.id.rawValue, $0) }, uniquingKeysWith: { first, _ in first })
@@ -133,12 +133,12 @@ final class PlaylistMerge {
 
     private func link(_ id: UUID, to partner: Playlist, in playlists: Playlists) {
         playlists.update(id, touches: false) {
-            $0.appleMusic = MotifPlaylist.AppleMusicLink(playlistID: partner.id.rawValue, name: partner.name)
+            $0.appleMusic = TracksPlaylist.AppleMusicLink(playlistID: partner.id.rawValue, name: partner.name)
         }
     }
 
     /// Your own Apple Music playlists: not Apple's, not ones made for you, and not Heard on
-    /// Radio, which Motif fills from the radio.
+    /// Radio, which Tracks fills from the radio.
     private func libraryPlaylists() async throws -> [Playlist] {
         var request = MusicLibraryRequest<Playlist>()
         request.limit = 100
@@ -303,7 +303,7 @@ final class PlaylistMerge {
     /// can't, Apple Music is asked directly and the playlist read back from the library. Nil
     /// while the library hasn't caught up with it yet: the next merge pairs the two by name.
     private static func createPlaylist(named name: String) async throws -> Playlist? {
-        let description = String(localized: "Merged with Motif")
+        let description = String(localized: "Merged with Tracks")
         #if os(iOS)
         return try await MusicLibrary.shared.createPlaylist(name: name, description: description)
         #else

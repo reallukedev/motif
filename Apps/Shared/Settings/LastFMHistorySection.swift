@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Bringing the Last.fm history into Motif: one button that imports, stops, continues or
+/// Bringing the Last.fm history into Tracks: one button that imports, stops, continues or
 /// syncs, and a line saying how far it has got.
 ///
 /// Takes the state rather than ``LastFMHistorySync``, so previews can show every state

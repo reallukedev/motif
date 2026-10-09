@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import MotifCore
+import TracksCore
 
 /// Every play as a sortable table, with the selected song in an inspector.
 ///
@@ -269,7 +269,7 @@ private struct MacHistoryTable: View {
                 .foregroundStyle(.secondary)
                 .help("Scrobbled")
                 .accessibilityLabel("Scrobbled")
-        } else if capture.scrobbleAttempts >= MotifStore.maxScrobbleAttempts {
+        } else if capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts {
             Image(systemName: "exclamationmark.circle")
                 .foregroundStyle(.orange)
                 .help(capture.lastScrobbleError ?? "Last.fm didn't accept this one")

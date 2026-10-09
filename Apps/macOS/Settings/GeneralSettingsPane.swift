@@ -1,6 +1,6 @@
 import SwiftUI
 import ServiceManagement
-import MotifCore
+import TracksCore
 
 /// Opening at login, the Dock, Apple Music access, and About.
 struct GeneralSettingsPane: View {
@@ -33,7 +33,7 @@ struct GeneralSettingsPane: View {
                     detail: dockDetail,
                     isOn: $behaviour.showsDockIcon
                 )
-                // With the menu bar extra hidden too there'd be no way back into Motif.
+                // With the menu bar extra hidden too there'd be no way back into Tracks.
                 .disabled(behaviour.showsDockIcon && !showsMenuBarExtra)
             } header: {
                 Text("Startup")
@@ -60,11 +60,11 @@ struct GeneralSettingsPane: View {
 
     private var statusLine: String {
         if behaviour.launchAtLoginNeedsApproval {
-            return String(localized: "Allow Motif under Login Items to finish turning on Open at Login.")
+            return String(localized: "Allow Tracks under Login Items to finish turning on Open at Login.")
         }
         return behaviour.launchesAtLogin
             ? String(localized: "Opens when you log in, so nothing you play gets missed.")
-            : String(localized: "Motif only notices what’s playing while it’s open.")
+            : String(localized: "Tracks only notices what’s playing while it’s open.")
     }
 
     private var statusTone: SettingsTone {
@@ -79,17 +79,17 @@ struct GeneralSettingsPane: View {
             return Text("Waiting for you to allow it in System Settings ▸ General ▸ Login Items.")
         }
         return behaviour.launchesAtLogin
-            ? Text("Motif starts in the background when you log in.")
-            : Text("Open Motif yourself. It fills in what it missed from Recently Played.")
+            ? Text("Tracks starts in the background when you log in.")
+            : Text("Open Tracks yourself. It fills in what it missed from Recently Played.")
     }
 
     private var dockDetail: Text {
         if behaviour.showsDockIcon && !showsMenuBarExtra {
-            return Text("Needed while Motif is hidden from the menu bar, so there’s a way back in.")
+            return Text("Needed while Tracks is hidden from the menu bar, so there’s a way back in.")
         }
         return behaviour.showsDockIcon
-            ? Text("Motif shows in the Dock and the app switcher.")
-            : Text("Motif lives in the menu bar only.")
+            ? Text("Tracks shows in the Dock and the app switcher.")
+            : Text("Tracks lives in the menu bar only.")
     }
 }
 
@@ -98,7 +98,7 @@ struct GeneralSettingsPane: View {
 /// app's defaults, and a preview never opens the real store.
 @MainActor
 private let previewModel: AppModel = {
-    UserDefaults.standard.setVolatileDomain(["MotifDemoData": true], forName: UserDefaults.argumentDomain)
+    UserDefaults.standard.setVolatileDomain(["TracksDemoData": true], forName: UserDefaults.argumentDomain)
     return AppModel()
 }()
 

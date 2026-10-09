@@ -4,12 +4,12 @@ import MusicKit
 
 /// Invented Apple Music items for screenshots of the About sections with sample data, which
 /// can't reach the catalog: an artist with a biography, and a song with its credits and how
-/// it's mastered. `-MotifSampleArtist YES` beside `-MotifSampleAlbum YES` opens the artist
+/// it's mastered. `-TracksSampleArtist YES` beside `-TracksSampleAlbum YES` opens the artist
 /// from the sample album. Debug builds only.
 enum AboutSamples {
     static let artistID = MusicItemID("700")
 
-    static var opensArtist: Bool { UserDefaults.standard.bool(forKey: "MotifSampleArtist") }
+    static var opensArtist: Bool { UserDefaults.standard.bool(forKey: "TracksSampleArtist") }
 
     static func isSample(_ artist: Artist) -> Bool { artist.id == artistID }
 

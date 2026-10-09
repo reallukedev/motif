@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// What fills the player behind the song, chosen in Settings.
 enum NowPlayingBackground: String, CaseIterable, Identifiable {
@@ -39,7 +39,7 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
         case .living: "The cover comes alive: its colours flow and swirl into one another while the music plays, and settle when it's paused."
         case .glass: "The cover, seen through a pane of ribbed glass, drifts slowly past while the music plays."
         case .aurora: "Curtains of light in the cover's colours ripple across a night sky while the music plays."
-        case .halo: "Light spills from behind the cover in its colours and moves with the music: every beat and note of your own music, and the feel of each Apple Music song, which Motif can't hear."
+        case .halo: "Light spills from behind the cover in its colours and moves with the music: every beat and note of your own music, and the feel of each Apple Music song, which Tracks can't hear."
         }
     }
 
@@ -326,7 +326,7 @@ struct NowPlayingBackdropPicker: View {
     private var cover: CoverArt { player.current?.cover ?? .url(nil, seed: Self.sample) }
 
     /// A stand-in cover in a few colours, so each style shows what it does with one.
-    static let sample = "Motif Sample"
+    static let sample = "Tracks Sample"
 }
 
 /// A style at the size of a thumb: the player in miniature over it, a cover and its lines,

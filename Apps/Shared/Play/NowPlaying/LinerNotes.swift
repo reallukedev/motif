@@ -1,9 +1,9 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The back of the sleeve: your history with the song playing. How many times you've heard
 /// it, since when and from where, a year of it month by month, and when in the day it's
-/// yours. The one thing on Now Playing only Motif can say.
+/// yours. The one thing on Now Playing only Tracks can say.
 ///
 /// Inks with the hierarchical styles, so it reads on a cover's colour (the iPhone's sleeve)
 /// and on the window (the Mac's panel) alike.
@@ -57,7 +57,7 @@ struct LinerNotes: View {
                     facts(story, limit: limit)
                 }
             } else if readFor == key, showsBars {
-                Text("Motif keeps this song once you've heard enough of it to count. Its story starts here.")
+                Text("Tracks keeps this song once you've heard enough of it to count. Its story starts here.")
                     .font(isCompact ? .subheadline : .callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

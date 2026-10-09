@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 import CoreImage
 import CoreImage.CIFilterBuiltins
 

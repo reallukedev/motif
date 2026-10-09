@@ -2,16 +2,16 @@ import Foundation
 import Network
 import CryptoKit
 import Observation
-import MotifCore
+import TracksCore
 #if os(iOS)
 import UIKit
 #endif
 
-/// Your other devices running Motif close by: what each is playing, live, and its controls.
+/// Your other devices running Tracks close by: what each is playing, live, and its controls.
 ///
 /// Each device offers itself on the local network with Bonjour, peer-to-peer Wi-Fi included
 /// as AirDrop does, and looks for the others. Only yours connect: every connection is TLS with
-/// a key your devices share through iCloud, so a stranger's Motif on the same Wi-Fi can't see
+/// a key your devices share through iCloud, so a stranger's Tracks on the same Wi-Fi can't see
 /// or reach yours, and a device that isn't signed in to your iCloud has no key.
 @MainActor
 @Observable
@@ -26,7 +26,7 @@ final class NearbyDevices {
     /// Devices connected and introduced.
     private(set) var devices: [Device] = []
 
-    /// Local Network is off for Motif, so it can't look for your devices or be found. Settings
+    /// Local Network is off for Tracks, so it can't look for your devices or be found. Settings
     /// says so, since nothing else would.
     private(set) var needsLocalNetwork = false
 
@@ -85,7 +85,7 @@ final class NearbyDevices {
     @ObservationIgnored private var keyObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var isRunning = false
 
-    private static let serviceType = "_motif._tcp"
+    private static let serviceType = "_tracks._tcp"
     private nonisolated static let keyName = "nearbyKey"
     private static let idKey = "nearbyDeviceID"
 
@@ -114,9 +114,9 @@ final class NearbyDevices {
     }
 
     #if DEBUG
-    /// `-MotifNearbyDemo YES` (or `paused`): a device nearby, for screenshots.
+    /// `-TracksNearbyDemo YES` (or `paused`): a device nearby, for screenshots.
     func showSample() {
-        guard let mode = UserDefaults.standard.string(forKey: "MotifNearbyDemo") else { return }
+        guard let mode = UserDefaults.standard.string(forKey: "TracksNearbyDemo") else { return }
         devices = [Device(id: "sample", name: "Luke's MacBook Pro", platform: "Mac", state: NearbyState(
             title: "Golden Moon", artist: "Nova Harbor", album: "Golden Moon",
             isPlaying: mode != "paused", position: 84, duration: 212
@@ -205,7 +205,7 @@ final class NearbyDevices {
     }
 
     /// Back in the foreground, where iOS may have stopped listening, and connections may have
-    /// ended while Motif was suspended: any device not connected is tried again.
+    /// ended while Tracks was suspended: any device not connected is tried again.
     func resume() {
         guard Self.isOn else { return }
         if listener?.state != .ready {
@@ -433,7 +433,7 @@ final class NearbyDevices {
     /// peer-to-peer Wi-Fi as well as the network.
     private static func parameters(key: SymmetricKey) -> NWParameters {
         let tls = NWProtocolTLS.Options()
-        let identity = Data("Motif Nearby".utf8)
+        let identity = Data("Tracks Nearby".utf8)
         let secret = Data(HMAC<SHA256>.authenticationCode(for: identity, using: key))
         secret.withUnsafeBytes { secretBytes in
             identity.withUnsafeBytes { identityBytes in

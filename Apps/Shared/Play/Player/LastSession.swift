@@ -1,7 +1,7 @@
 import Foundation
-import MotifCore
+import TracksCore
 
-/// What was on when Motif last closed: the song, where it had got to, and what was due after
+/// What was on when Tracks last closed: the song, where it had got to, and what was due after
 /// it, so the next launch can open on it, paused, rather than on nothing.
 struct LastSession: Codable {
     /// The song that was on, then Up Next.
@@ -23,7 +23,7 @@ struct LastSession: Codable {
         case "playlist": .playlist
         case "artist": .artist
         case "mix": .mix
-        // Motif Radio or a mood, which picks up live again when it's played.
+        // Tracks Radio or a mood, which picks up live again when it's played.
         case "endless": .endless
         default: .songs
         }
@@ -50,7 +50,7 @@ extension PlayContext.Kind {
 
 /// Keeps ``LastSession`` in a file of its own in Application Support, beside nothing else.
 enum LastSessionStore {
-    /// Whether Motif opens on the song left paused. On by default.
+    /// Whether Tracks opens on the song left paused. On by default.
     static let resumesKey = "playResumesLastSession"
     /// How long it waits for you. See ``ResumeWindow``.
     static let windowKey = "playResumeWindow"

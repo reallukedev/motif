@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// An album in your music, as Music lays out an album: its cover, its format, and its songs
 /// with your plays. A server's album can be downloaded whole.
@@ -164,7 +164,7 @@ struct LocalAlbumContent: View {
         .confirmationDialog(deleteTitle, isPresented: isDeleting, titleVisibility: .visible) {
             deleteActions
         } message: {
-            Text("The file is deleted from Motif's Music folder. Your plays of it stay in your history.")
+            Text("The file is deleted from the Tracks Music folder. Your plays of it stay in your history.")
         }
         #else
         CollectionMacLayout {
@@ -225,7 +225,7 @@ struct LocalAlbumContent: View {
         .confirmationDialog(deleteTitle, isPresented: isDeleting, titleVisibility: .visible) {
             deleteActions
         } message: {
-            Text("The file is deleted from Motif's Music folder. Your plays of it stay in your history.")
+            Text("The file is deleted from the Tracks Music folder. Your plays of it stay in your history.")
         }
         #endif
     }

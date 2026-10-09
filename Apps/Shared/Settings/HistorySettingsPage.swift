@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// What Motif keeps, when a play counts, and mending covers. An iPhone page, and the Mac's
+/// What Tracks keeps, when a play counts, and mending covers. An iPhone page, and the Mac's
 /// History pane.
 struct HistorySettingsPage: View {
     @AppStorage(CaptureSettings.capturesOnDemandKey, store: CaptureSettings.sharedDefaults)
@@ -35,6 +35,9 @@ struct HistorySettingsPage: View {
             countingSection
             statisticsSection
             ArtworkRepairSection()
+            if MotifImport.isAvailable {
+                MotifImportSection()
+            }
         }
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: recoversRecentlyPlayed)
         .onChange(of: isPaused) { _, paused in
@@ -65,7 +68,7 @@ struct HistorySettingsPage: View {
             )
         } footer: {
             if isPaused {
-                Text("Songs you play now won’t be kept, counted toward your stats or scrobbled, and your music server isn’t told about them. When you resume, Motif won’t fill them in from Recently Played. Your history so far stays as it is.")
+                Text("Songs you play now won’t be kept, counted toward your stats or scrobbled, and your music server isn’t told about them. When you resume, Tracks won’t fill them in from Recently Played. Your history so far stays as it is.")
                     .contentTransition(.opacity)
             }
         }
@@ -85,8 +88,8 @@ struct HistorySettingsPage: View {
             SettingsSwitch(
                 "Recover from Recently Played",
                 detail: recoversRecentlyPlayed
-                    ? Text("When Motif starts, it fills in what you played while it was closed.")
-                    : Text("Songs played while Motif was closed aren’t kept."),
+                    ? Text("When Tracks starts, it fills in what you played while it was closed.")
+                    : Text("Songs played while Tracks was closed aren’t kept."),
                 isOn: $recoversRecentlyPlayed
             )
             #if os(iOS)
@@ -95,7 +98,7 @@ struct HistorySettingsPage: View {
             }
             #endif
         } header: {
-            Text("What Motif Keeps")
+            Text("What Tracks Keeps")
         } footer: {
             #if os(iOS)
             Text(keptFooter)
@@ -108,13 +111,13 @@ struct HistorySettingsPage: View {
     private var keptFooter: LocalizedStringKey {
         switch (keepsOnDemand, recoversRecentlyPlayed) {
         case (true, true):
-            "Motif keeps radio and the songs you choose. It only sees music while it’s open, so it fills in the rest from Apple Music’s Recently Played, which doesn’t say exactly when you played them."
+            "Tracks keeps radio and the songs you choose. It only sees music while it’s open, so it fills in the rest from Apple Music’s Recently Played, which doesn’t say exactly when you played them."
         case (false, true):
-            "Motif keeps radio only. It fills in radio it missed from Apple Music’s Recently Played, which doesn’t say exactly when you played them."
+            "Tracks keeps radio only. It fills in radio it missed from Apple Music’s Recently Played, which doesn’t say exactly when you played them."
         case (true, false):
-            "Motif keeps radio and the songs you choose, but only while it’s open."
+            "Tracks keeps radio and the songs you choose, but only while it’s open."
         case (false, false):
-            "Motif keeps radio only, and only while it’s open."
+            "Tracks keeps radio only, and only while it’s open."
         }
     }
     #endif

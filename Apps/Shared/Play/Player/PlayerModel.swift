@@ -2,12 +2,12 @@ import Foundation
 import Observation
 import SwiftUI
 import MusicKit
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
-/// Motif's player, as every screen sees it: what's on, what's next, and the controls.
+/// Tracks’ player, as every screen sees it: what's on, what's next, and the controls.
 ///
-/// The engine plays; this adds what Motif knows on top. It notices skips and remembers them
+/// The engine plays; this adds what Tracks knows on top. It notices skips and remembers them
 /// (see ``ListeningSignals``) so the mixes learn, runs the sleep timer, and turns failures
 /// into something the screens can explain.
 @MainActor
@@ -41,12 +41,12 @@ final class PlayerModel {
     private(set) var sleepTimer: SleepTimer?
     /// Skips and "suggest less", which steer the mixes.
     private(set) var signals: ListeningSignals
-    /// Motif Radio's finds that played and had their downloads removed after, newest first, to
+    /// Tracks Radio's finds that played and had their downloads removed after, newest first, to
     /// keep from Up Next if one was liked.
     private(set) var playedAndRemoved: [PlayerTrack] = []
 
-    /// The song left paused when Motif last closed, shown as the song on until it's played or
-    /// replaced. Nothing is handed to the engine until then, so opening Motif never takes the
+    /// The song left paused when Tracks last closed, shown as the song on until it's played or
+    /// replaced. Nothing is handed to the engine until then, so opening Tracks never takes the
     /// audio or the media keys from another app. See ``restoreLastSession()``.
     private(set) var waitingSession: LastSession?
 
@@ -283,7 +283,7 @@ final class PlayerModel {
         engine.setLevel(level)
     }
 
-    /// Whether Motif plays the audio itself and can set its level: your own music, or the
+    /// Whether Tracks plays the audio itself and can set its level: your own music, or the
     /// pretend player. Apple Music's level is the system's.
     var setsOwnLevel: Bool { !(engine is MusicKitPlayerEngine) }
 
@@ -391,7 +391,7 @@ final class PlayerModel {
         guard picksLive, let live else { return }
         for track in removed where isAutoplaying ? isAutoplayPick(track) : live.hasPicked(track.songIdentity) {
             self.live?.noteSkipped(track.songIdentity)
-            // On Motif Radio getting songs ready, it also stops downloading.
+            // On Tracks Radio getting songs ready, it also stops downloading.
             if liveGetsReady, let radioDownloads {
                 radioDownloads.decline(HistorySong(track))
                 waitingSince[track.songIdentity] = nil
@@ -489,7 +489,7 @@ final class PlayerModel {
 
     // MARK: - Favorites
 
-    /// Which songs are Apple Music favorites, as far as Motif knows: looked up for the songs
+    /// Which songs are Apple Music favorites, as far as Tracks knows: looked up for the songs
     /// on screen, and changed by the star. Missing means not looked up yet.
     private(set) var favorites: [MusicItemID: Bool] = [:]
     @ObservationIgnored private var favoritesToLookUp: Set<MusicItemID> = []
@@ -615,7 +615,7 @@ final class PlayerModel {
             live?.noteSkipped(songIdentity)
             followSteering()
         }
-        confirm(isOn ? String(localized: "Motif Will Suggest This Less") : String(localized: "Motif Will Suggest This Again"))
+        confirm(isOn ? String(localized: "Tracks Will Suggest This Less") : String(localized: "Tracks Will Suggest This Again"))
     }
 
     /// Forgets every skip and "suggest less". Blocked artists stay blocked: they're a list of
@@ -635,7 +635,7 @@ final class PlayerModel {
     }
 
     /// Never plays or suggests the artist again, on any of your devices: out of every mix,
-    /// Motif Radio, Autoplay and suggestion, out of Up Next now, and skipped if they're on.
+    /// Tracks Radio, Autoplay and suggestion, out of Up Next now, and skipped if they're on.
     func block(artist name: String) {
         var blocked = signals.blocked
         guard blocked.block(name) else { return }
@@ -745,7 +745,7 @@ final class PlayerModel {
 
     // MARK: - Where you left off
 
-    /// Opens on the song that was on when Motif last closed, paused where it was left, if
+    /// Opens on the song that was on when Tracks last closed, paused where it was left, if
     /// Settings keeps it and it hasn't waited longer than Settings says to.
     func restoreLastSession() {
         guard !isDemo, current == nil, var session = LastSessionStore.load(),
@@ -775,7 +775,7 @@ final class PlayerModel {
         let first = MixSong(tracks[index])
         Task {
             if context.kind == .endless {
-                // Picked up live, so it carries on picking as it did before Motif closed.
+                // Picked up live, so it carries on picking as it did before Tracks closed.
                 guard !(await resumeLive(context, startingWith: first)) else {
                     seekIfStill(on: first.songIdentity, to: time)
                     return
@@ -795,12 +795,12 @@ final class PlayerModel {
         seek(to: time)
     }
 
-    /// Starts Motif Radio or a mood again from the song it was on, for one left paused when
-    /// Motif last closed. False when it can't be made now: Motif Radio turned off, say.
+    /// Starts Tracks Radio or a mood again from the song it was on, for one left paused when
+    /// Tracks last closed. False when it can't be made now: Tracks Radio turned off, say.
     private func resumeLive(_ context: PlayContext, startingWith first: MixSong) async -> Bool {
-        if context == .motifRadio {
-            guard PlayPreferences.isMotifRadioOn, let mix = await makeMotifRadio?(), !mix.isEmpty else { return false }
-            await startLive(mix, from: .motifRadio, startingWith: first)
+        if context == .tracksRadio {
+            guard PlayPreferences.isTracksRadioOn, let mix = await makeTracksRadio?(), !mix.isEmpty else { return false }
+            await startLive(mix, from: .tracksRadio, startingWith: first)
         } else {
             guard let restartMood else { return false }
             await restartMood(context.title, first)
@@ -861,7 +861,7 @@ final class PlayerModel {
     @ObservationIgnored private var explicitSkipsInARow = 0
     /// The entry last skipped for being explicit, so it's skipped once.
     @ObservationIgnored private var explicitSkippedEntry: String?
-    /// Set while Motif skips a song itself, so the skip isn't taken for the person's.
+    /// Set while Tracks skips a song itself, so the skip isn't taken for the person's.
     @ObservationIgnored private var isAutoSkipping = false
 
     /// A station can't be filtered before it plays, so an explicit song it picks is skipped
@@ -891,7 +891,7 @@ final class PlayerModel {
     }
 
     /// Songs by blocked artists in a row skipped. After a few, or when there'd be nothing
-    /// after it, Motif stops and says why rather than skipping through for good.
+    /// after it, Tracks stops and says why rather than skipping through for good.
     @ObservationIgnored private var blockedSkipsInARow = 0
     /// The entry last skipped for its artist, so it's skipped once.
     @ObservationIgnored private var blockedSkippedEntry: String?
@@ -929,23 +929,23 @@ final class PlayerModel {
 
     // MARK: - Live mixes
 
-    /// What's picking the songs while Motif Radio or a mood plays. Nil for anything else.
+    /// What's picking the songs while Tracks Radio or a mood plays. Nil for anything else.
     @ObservationIgnored private var live: LiveMix?
     /// The pick being queued, which a skip waits for rather than running off the end.
     @ObservationIgnored private var livePick: Task<Void, Never>?
     /// Counts picks, so one cancelled by a new listen doesn't clear the newer one's.
     @ObservationIgnored private var livePickCount = 0
-    /// Builds Motif Radio from the history, with its tuning. Set by the app, which has both.
-    @ObservationIgnored var makeMotifRadio: (() async -> LiveMix)?
-    /// Starts a mood again by its name, from a song: for one left paused when Motif last
+    /// Builds Tracks Radio from the history, with its tuning. Set by the app, which has both.
+    @ObservationIgnored var makeTracksRadio: (() async -> LiveMix)?
+    /// Starts a mood again by its name, from a song: for one left paused when Tracks last
     /// closed. Set by the app, which knows how each mood is made.
     @ObservationIgnored var restartMood: ((_ title: String, _ first: MixSong) async -> Void)?
-    /// Notices driving, for Motif Radio's Drive mode.
+    /// Notices driving, for Tracks Radio's Drive mode.
     let drive = DriveDetector()
-    /// The moment the Motif Radio playing was made for: the hour it follows, and whether it
+    /// The moment the Tracks Radio playing was made for: the hour it follows, and whether it
     /// plays for the road.
     private(set) var radioMoment: RadioMoment = .anytime
-    /// The genres Motif Radio's tuner offers, the ones you play most first. Kept ready by the
+    /// The genres Tracks Radio's tuner offers, the ones you play most first. Kept ready by the
     /// app, so the tuner opens with them in place.
     var radioGenres: [String] = []
     /// What the live mix or Autoplay last changed course for, after a run of skips or a song
@@ -969,12 +969,12 @@ final class PlayerModel {
     @ObservationIgnored private var autoplayPicked: Set<String> = []
     /// The songs this queue has played, newest last, for Autoplay to follow on from.
     @ObservationIgnored private var queuePlayed: [PlayerTrack] = []
-    /// Your own music, for Motif Radio to start with songs on this iPhone and get its new
+    /// Your own music, for Tracks Radio to start with songs on this iPhone and get its new
     /// finds ready behind them. Set by the app.
     @ObservationIgnored weak var radioDownloads: (any RadioDownloads)? {
         didSet { radioDownloads?.onReady = { [weak self] in self?.songReady($0) } }
     }
-    /// Whether the live mix playing does that: Motif Radio, from your own music, with its
+    /// Whether the live mix playing does that: Tracks Radio, from your own music, with its
     /// setting on.
     @ObservationIgnored private var liveGetsReady = false
     /// When each song waiting in Up Next to be ready was queued: one that's taken too long is
@@ -984,41 +984,41 @@ final class PlayerModel {
     /// Whether the songs are being picked as they play, so Up Next only ever holds the next one.
     var isLive: Bool { context?.kind == .endless && hasQueue }
 
-    var isPlayingMotifRadio: Bool { isLive && context == .motifRadio }
+    var isPlayingTracksRadio: Bool { isLive && context == .tracksRadio }
 
-    /// Motif Radio is playing for the road: for its artwork and Now Playing to say so.
-    var isRadioDriving: Bool { isPlayingMotifRadio && radioMoment.isDriving }
+    /// Tracks Radio is playing for the road: for its artwork and Now Playing to say so.
+    var isRadioDriving: Bool { isPlayingTracksRadio && radioMoment.isDriving }
 
     /// An endless mix of everything you love, picked as it plays.
-    func playMotifRadio() {
-        Task { await startMotifRadio() }
+    func playTracksRadio() {
+        Task { await startTracksRadio() }
     }
 
-    /// ``playMotifRadio()``, returning once it has started or failed.
-    func startMotifRadio() async {
+    /// ``playTracksRadio()``, returning once it has started or failed.
+    func startTracksRadio() async {
         problem = nil
-        guard PlayPreferences.isMotifRadioOn else {
-            problem = .failed(String(localized: "Motif Radio is off. Turn it on in Settings, under Play."))
+        guard PlayPreferences.isTracksRadioOn else {
+            problem = .failed(String(localized: "Tracks Radio is off. Turn it on in Settings, under Play."))
             return
         }
-        guard let mix = await makeMotifRadio?(), !mix.isEmpty else {
-            problem = .failed(String(localized: "Play a few songs first, and Motif Radio will have something to draw from."))
+        guard let mix = await makeTracksRadio?(), !mix.isEmpty else {
+            problem = .failed(String(localized: "Play a few songs first, and Tracks Radio will have something to draw from."))
             return
         }
-        await startLive(mix, from: .motifRadio)
+        await startLive(mix, from: .tracksRadio)
     }
 
-    /// For a shake: a song Motif thinks you'd like and haven't heard, then Motif Radio on from
+    /// For a shake: a song Tracks thinks you'd like and haven't heard, then Tracks Radio on from
     /// it. From your own music, a find that plays at once if there is one, so the shake answers
-    /// straight away. Works with Motif Radio hidden too.
+    /// straight away. Works with Tracks Radio hidden too.
     ///
     /// Nothing is added to your library: the song just plays. Says nothing when it starts,
     /// since what's playing is its own answer (the iPhone opens Now Playing on it).
     /// - Returns: whether it started playing.
     @discardableResult
     func playSomethingNew() async -> Bool {
-        guard let mix = await makeMotifRadio?(), !mix.isEmpty else {
-            problem = .failed(String(localized: "Play a few songs first, and Motif will know what to find you."))
+        guard let mix = await makeTracksRadio?(), !mix.isEmpty else {
+            problem = .failed(String(localized: "Play a few songs first, and Tracks will know what to find you."))
             return false
         }
         var picking = mix
@@ -1033,24 +1033,24 @@ final class PlayerModel {
             ?? picking.next(newFinds: true, where: canPlay)
             ?? picking.next(playable: canPlay)
         else { return false }
-        await startLive(mix, from: .motifRadio, startingWith: first)
+        await startLive(mix, from: .tracksRadio, startingWith: first)
         return problem == nil && hasQueue
     }
 
-    /// Applies a new tuning to Motif Radio while it plays, keeping what it has already picked
+    /// Applies a new tuning to Tracks Radio while it plays, keeping what it has already picked
     /// and learned. The song queued next stays; the one after follows the new tuning.
-    func retuneMotifRadio() async {
+    func retuneTracksRadio() async {
         // Not while another music source waits to take over: the new mix would be made from
         // it, and the radio carries on from the one it started on until then.
-        guard isPlayingMotifRadio, nextEngine == nil, let makeMotifRadio else { return }
+        guard isPlayingTracksRadio, nextEngine == nil, let makeTracksRadio else { return }
         // The moment it's made for now, so following the moment doesn't make it again.
-        followedMoment = MotifRadioSource.moment(drive: drive)
+        followedMoment = TracksRadioSource.moment(drive: drive)
         retunes += 1
         let retune = retunes
-        var mix = await makeMotifRadio()
+        var mix = await makeTracksRadio()
         guard !mix.isEmpty,
               // Only the latest tuning lands, and only on the radio still playing.
-              retune == retunes, isPlayingMotifRadio, nextEngine == nil, let current = live
+              retune == retunes, isPlayingTracksRadio, nextEngine == nil, let current = live
         else { return }
         // What's been picked while the new mix was made, the song queued next included.
         mix.continueListen(from: current)
@@ -1078,7 +1078,7 @@ final class PlayerModel {
             songs.append(first)
         }
         let engine = self.engine
-        let getsReady = context == .motifRadio && MusicSource.current == .yourMusic && radioDownloads?.downloadsFirst == true
+        let getsReady = context == .tracksRadio && MusicSource.current == .yourMusic && radioDownloads?.downloadsFirst == true
         // Opens on one of your strongest songs for the moment, since the first song is the one
         // most often skipped when it doesn't land: one that plays at once, where that matters.
         if first == nil {
@@ -1105,7 +1105,7 @@ final class PlayerModel {
         live = mix
         steering = nil
         moreLikeThis = []
-        radioMoment = context == .motifRadio ? mix.moment : .anytime
+        radioMoment = context == .tracksRadio ? mix.moment : .anytime
         followedMoment = nil
         liveGetsReady = getsReady
         waitingSince = [:]
@@ -1177,23 +1177,23 @@ final class PlayerModel {
 
     /// A pick waiting to be tried again. See ``pickAgainSoon()``.
     @ObservationIgnored private var pickAgain: Task<Void, Never>?
-    /// The moment Motif Radio last set out to follow, so a moment it couldn't be made for isn't
+    /// The moment Tracks Radio last set out to follow, so a moment it couldn't be made for isn't
     /// tried again on every change, only once the moment changes.
     @ObservationIgnored private var followedMoment: RadioMoment?
 
-    /// Makes Motif Radio again once the moment it was made for has passed: the hour turned, or
+    /// Makes Tracks Radio again once the moment it was made for has passed: the hour turned, or
     /// a drive started or ended. The song queued next stays; the one after fits the new moment.
     private func followTheMoment() {
-        guard isPlayingMotifRadio, nextEngine == nil, let live else { return }
-        let moment = MotifRadioSource.moment(drive: drive)
+        guard isPlayingTracksRadio, nextEngine == nil, let live else { return }
+        let moment = TracksRadioSource.moment(drive: drive)
         // Once for each moment: a retune under way isn't started again, nor one that found
         // nothing to play for it.
         guard live.moment != moment, followedMoment != moment else { return }
         followedMoment = moment
-        Task { await retuneMotifRadio() }
+        Task { await retuneTracksRadio() }
     }
 
-    /// Up Next on Motif Radio getting songs ready: a song that plays at once comes next, and a
+    /// Up Next on Tracks Radio getting songs ready: a song that plays at once comes next, and a
     /// new find is got ready behind it, moving up once it's here. Each is picked as the one
     /// before starts, from what's been skipped and played through so far.
     private func topUpReadyFirst(_ radio: any RadioDownloads) {
@@ -1282,7 +1282,7 @@ final class PlayerModel {
         topUpLiveIfNeeded()
     }
 
-    /// With Delete After Playing on, a find Motif Radio downloaded to play has its download
+    /// With Delete After Playing on, a find Tracks Radio downloaded to play has its download
     /// removed once it's given way, and is kept a while in Up Next to keep after all.
     private func removeIfPlayedOnce(_ track: PlayerTrack) {
         guard context?.kind == .endless, let radioDownloads,
@@ -1293,7 +1293,7 @@ final class PlayerModel {
         if playedAndRemoved.count > 8 { playedAndRemoved.removeLast() }
     }
 
-    /// Keeps a song Motif Radio played and removed: downloaded again, and kept.
+    /// Keeps a song Tracks Radio played and removed: downloaded again, and kept.
     func keepPlayed(_ track: PlayerTrack) {
         radioDownloads?.keep(HistorySong(track))
         playedAndRemoved.removeAll { $0.songIdentity == track.songIdentity }
@@ -1326,7 +1326,7 @@ final class PlayerModel {
     /// The songs asked for more like this listen, so asking shows as done.
     private(set) var moreLikeThis: Set<String> = []
 
-    /// Whether the song on can steer what's picked next: a song of a live mix like Motif Radio,
+    /// Whether the song on can steer what's picked next: a song of a live mix like Tracks Radio,
     /// or one of Autoplay's own. Not a song of the queue Autoplay follows on from, which its
     /// mix doesn't know.
     var canAskForMoreLikeThis: Bool {
@@ -1459,7 +1459,7 @@ final class PlayerModel {
                     problem = .nothingToPlay
                     return
                 }
-                let description = String(localized: "Made by Motif from your listening.")
+                let description = String(localized: "Made by Tracks from your listening.")
                 #if os(iOS)
                 _ = try await MusicLibrary.shared.createPlaylist(name: name, description: description, items: found)
                 #else

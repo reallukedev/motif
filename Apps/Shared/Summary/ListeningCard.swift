@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The top card: how much you listened in the range, how that compares, and the bars.
 struct ListeningCard: View {

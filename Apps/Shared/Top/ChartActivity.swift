@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// A chart's period at a glance, and each chart's own story of it. Songs say when you
 /// listened, bar by bar, as Screen Time shows a week, and a bar opens its own chart. Artists

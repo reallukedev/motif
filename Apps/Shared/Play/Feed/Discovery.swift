@@ -1,9 +1,9 @@
 import Foundation
 import Observation
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Why Motif suggests a song, in a line under it.
+/// Why Tracks suggests a song, in a line under it.
 enum SuggestionReason: Hashable {
     /// A song by one of your artists you've never played.
     case moreFrom(String)
@@ -66,7 +66,7 @@ struct SuggestedArtist: Identifiable, Equatable {
     }
 }
 
-/// Songs and artists you've never played that Motif thinks you'll like. It starts from the
+/// Songs and artists you've never played that Tracks thinks you'll like. It starts from the
 /// artists you play most and walks out to the artists like them, and on from those, so it
 /// never runs out: every step out finds more.
 @MainActor
@@ -130,13 +130,13 @@ final class Discovery {
         self.hiddenArtists = Set(UserDefaults.standard.stringArray(forKey: Self.hiddenArtistsKey) ?? [])
     }
 
-    /// Songs for Motif Radio's new finds.
+    /// Songs for Tracks Radio's new finds.
     var newFinds: [Song] {
         var seen = Set<MusicItemID>()
         return (songs + fromYourArtists).map(\.song).filter { seen.insert($0.id).inserted }
     }
 
-    /// Why each of ``newFinds`` was suggested, as Motif Radio says it, by song identity: an
+    /// Why each of ``newFinds`` was suggested, as Tracks Radio says it, by song identity: an
     /// artist of yours, or one like yours. Suggestions for a mood or the charts are just new.
     var newFindReasons: [String: LiveMix.Reason] {
         var reasons: [String: LiveMix.Reason] = [:]
@@ -299,7 +299,7 @@ final class Discovery {
         artists.removeAll { $0.id == artist.id }
         songs.removeAll { StatsCalculator.folded($0.song.artistName) == key }
         frontier.removeAll { $0.artist.id == artist.id }
-        player.confirm(String(localized: "Motif Won't Suggest \(artist.artist.name)"))
+        player.confirm(String(localized: "Tracks Won't Suggest \(artist.artist.name)"))
     }
 
     /// Songs worth suggesting: the version the explicit setting allows, never played, not

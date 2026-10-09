@@ -1,7 +1,7 @@
 #if DEBUG
 import CloudKit
 import SwiftData
-import MotifCore
+import TracksCore
 
 /// Looks through the Core Data mirror in the private iCloud database for sample-data rows.
 ///
@@ -15,7 +15,7 @@ enum CloudCheck {
     @MainActor
     static func purgeLocal() -> Int32 {
         do {
-            let store = try MotifStore(sync: false)
+            let store = try TracksStore(sync: false)
             guard case .appGroup = store.backing else {
                 print("The real store isn't available (\(store.backing)); nothing done.")
                 return 1
@@ -102,7 +102,7 @@ enum CloudCheck {
         fake += fakeSessions
 
         // The local copy too, read-only and without sync, in case sample rows already came down.
-        if let local = try? MotifStore(readOnly: true, sync: false),
+        if let local = try? TracksStore(readOnly: true, sync: false),
            let rows = try? local.context.fetch(FetchDescriptor<Capture>()) {
             let sampleRows = rows.filter { demoArtists.contains($0.artistName) && demoAlbums.contains($0.albumTitle ?? "") }
             print("Local store: \(rows.count) captures, \(sampleRows.count) of them sample data (\(local.backing))")

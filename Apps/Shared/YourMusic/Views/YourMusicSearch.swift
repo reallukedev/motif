@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Searching your music, laid out as Apple Music's search is: before you type, what you
 /// searched lately and the moods; then the best match, your songs, artists and albums, and

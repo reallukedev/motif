@@ -3,8 +3,8 @@ import Combine
 import SwiftData
 import CoreData
 import Observation
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// The listening history as plain values, kept up to date as the store changes.
 ///
@@ -58,7 +58,7 @@ final class Library {
     ///
     /// - Parameter looksUpCatalog: false for sample data, whose made-up artists and songs
     ///   mustn't reach Apple Music or the caches.
-    func connect(to store: MotifStore, looksUpCatalog: Bool) {
+    func connect(to store: TracksStore, looksUpCatalog: Bool) {
         guard reader == nil else { return }
         self.looksUpCatalog = looksUpCatalog
         // The store's own reader, which the merge shares, so the history is read in full once.

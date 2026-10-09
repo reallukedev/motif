@@ -1,10 +1,10 @@
 #if DEBUG
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Pretend SharePlay sessions over sample data, since the simulator can't run real ones.
-/// `-MotifSharePlayDemo` names the scene:
+/// `-TracksSharePlayDemo` names the scene:
 ///
 ///     host              hosting, with two people joined and one of their songs in Up Next
 ///     host.nolocalnetwork   hosting, and the code can't work: Local Network is off
@@ -20,7 +20,7 @@ import MotifCore
 ///     guest.code.reconnecting     joined by code, and lost the host for now
 ///     guest.code.nolocalnetwork   scanned, but Local Network is off here
 ///
-/// `-MotifSharePlaySearch "sun"` types a search on the guest page, and marks one result added
+/// `-TracksSharePlaySearch "sun"` types a search on the guest page, and marks one result added
 /// and another not.
 @MainActor
 final class SharePlayDemo {

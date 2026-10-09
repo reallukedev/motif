@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Finding songs you've never played, through one lens at a time: everything suggested, your
 /// own artists' songs, artists like them, new releases, what's popular, or a mood. The lens is
@@ -43,7 +43,7 @@ struct SongFinder: View {
 
     /// What the page can show of the lens right now.
     enum Phase: Equatable {
-        /// Apple Music is where suggestions come from, and Motif can't reach it yet.
+        /// Apple Music is where suggestions come from, and Tracks can't reach it yet.
         case noAccess
         case loading
         case empty
@@ -257,7 +257,7 @@ struct SongFinder: View {
             }
         }
         if suggestions.count > 1 {
-            player.confirm(String(AttributedString(localized: "Motif Will Suggest ^[\(suggestions.count) Song](inflect: true) Less").characters))
+            player.confirm(String(AttributedString(localized: "Tracks Will Suggest ^[\(suggestions.count) Song](inflect: true) Less").characters))
         }
         undoManager?.registerUndo(withTarget: discovery) { [self] _ in
             MainActor.assumeIsolated { restore(places, in: lensID) }

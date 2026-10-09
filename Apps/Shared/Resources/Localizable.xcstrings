@@ -404,19 +404,13 @@
     "^[%@ time](inflect: true)" : {
 
     },
-    "0 sec" : {
-
-    },
     "1 min" : {
-
-    },
-    "2 min" : {
 
     },
     "60 min" : {
 
     },
-    "A couple of minutes after a station stops, Motif plays its songs again so Apple Music counts them." : {
+    "A couple of minutes after a station stops, Tracks plays its songs again so Apple Music counts them." : {
 
     },
     "A new find’s download goes once it’s played, unless you keep it." : {
@@ -443,7 +437,7 @@
     "Add Songs" : {
 
     },
-    "Add songs from Play, or put them in On My iPhone ▸ Motif ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers." : {
+    "Add songs from Play, or put them in On My iPhone ▸ Tracks ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers." : {
 
     },
     "Added by SharePlay" : {
@@ -497,13 +491,13 @@
     "Apple Music and Your Music are both in Listen Now’s title." : {
 
     },
-    "Apple Music couldn't be reached, and none of your songs suit it yet. As Motif learns the genres of what you play, they'll show up here." : {
+    "Apple Music couldn't be reached, and none of your songs suit it yet. As Tracks learns the genres of what you play, they'll show up here." : {
 
     },
     "Apple Music didn't have any playlists for this party just now." : {
 
     },
-    "Around Motif" : {
+    "Around Tracks" : {
 
     },
     "Artists to Meet" : {
@@ -537,6 +531,19 @@
 
     },
     "Blocked Artists" : {
+
+    },
+    "Brought over ^[%@ play](inflect: true) from Motif %@. Run it again to pick up anything Motif kept since." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Brought over ^[%1$@ play](inflect: true) from Motif %2$@. Run it again to pick up anything Motif kept since."
+          }
+        }
+      }
+    },
+    "Brought over ^[%@ play](inflect: true) from Motif. Motif itself isn't changed." : {
 
     },
     "Browse by Mood" : {
@@ -591,7 +598,7 @@
     "Connect Lidarr" : {
 
     },
-    "Connect Lidarr to add artists and ask for albums from anywhere in Motif. What Lidarr files, your server plays, and Motif can download." : {
+    "Connect Lidarr to add artists and ask for albums from anywhere in Tracks. What Lidarr files, your server plays, and Tracks can download." : {
 
     },
     "Connect…" : {
@@ -607,6 +614,12 @@
 
     },
     "Content" : {
+
+    },
+    "Copies everything Motif kept on this device into Tracks, with its stations, sessions and settings. Motif itself isn't changed." : {
+
+    },
+    "Copying your plays from Motif. Motif itself isn't changed." : {
 
     },
     "Couldn’t change Open at Login: %@" : {
@@ -678,10 +691,13 @@
     "Every song is kept and handled as radio, even ones you chose." : {
 
     },
-    "Every song Motif keeps goes to Last.fm, radio included." : {
+    "Every song Tracks keeps goes to Last.fm, radio included." : {
 
     },
     "Everyone Else" : {
+
+    },
+    "Everything from Motif is already here." : {
 
     },
     "Everything, as you play it. Pick genres to hear more of them." : {
@@ -723,7 +739,7 @@
     "For each different song, on average" : {
 
     },
-    "For when Motif misses a station. Stays on this Mac." : {
+    "For when Tracks misses a station. Stays on this Mac." : {
 
     },
     "Free Up Space removes the ^[%@ song](inflect: true) you haven't played in three months. They stay on your servers, to download again whenever you like." : {
@@ -735,7 +751,7 @@
     "Genres" : {
 
     },
-    "Genres show up here as Motif learns them from what you play." : {
+    "Genres show up here as Tracks learns them from what you play." : {
 
     },
     "Go to %@ (⌘T)" : {
@@ -747,10 +763,10 @@
     "History" : {
 
     },
-    "How calm or lively Motif Radio plays in each part of the day." : {
+    "How calm or lively Tracks Radio plays in each part of the day." : {
 
     },
-    "How Lidarr files the artists and albums you add from Motif." : {
+    "How Lidarr files the artists and albums you add from Tracks." : {
 
     },
     "iCloud" : {
@@ -792,7 +808,7 @@
     "Keep your playlists and Apple Music’s apart." : {
 
     },
-    "Keeps your server’s play counts right. If your server sends your plays on to Last.fm or ListenBrainz and Motif scrobbles to Last.fm too, turn one of them off so songs aren’t counted twice." : {
+    "Keeps your server’s play counts right. If your server sends your plays on to Last.fm or ListenBrainz and Tracks scrobbles to Last.fm too, turn one of them off so songs aren’t counted twice." : {
 
     },
     "Kept in your history" : {
@@ -810,7 +826,7 @@
     "Leaning Into" : {
 
     },
-    "Let Motif use Apple Music to search its catalog and your library." : {
+    "Let Tracks use Apple Music to search its catalog and your library." : {
 
     },
     "Level with %@" : {
@@ -825,7 +841,7 @@
     "Lidarr follows who you add, and files their albums as you've chosen in Settings." : {
 
     },
-    "Lidarr keeps everything it follows and has. Motif just stops asking it for more." : {
+    "Lidarr keeps everything it follows and has. Tracks just stops asking it for more." : {
 
     },
     "Lidarr's own folders and profiles. Choose Lossless in Quality to keep FLAC." : {
@@ -873,7 +889,7 @@
     "Merge with Apple Music" : {
 
     },
-    "Merged %@. Motif merges each time it opens." : {
+    "Merged %@. Tracks merges each time it opens." : {
 
     },
     "Merging…" : {
@@ -930,70 +946,16 @@
         }
       }
     },
-    "Motif asks Lidarr for albums and adds artists to it. The key stays in this Mac's Keychain, and goes only to your Lidarr." : {
+    "Motif" : {
 
     },
-    "Motif doesn’t look for your other devices." : {
-
-    },
-    "Motif has no servers and no analytics. Your history stays on your devices and in your iCloud account." : {
-
-    },
-    "Motif keeps this song once you've heard enough of it to count. Its story starts here." : {
-
-    },
-    "Motif keeps what you play either way. Apple Music asks before anything is shared." : {
-
-    },
-    "Motif lives in the menu bar only." : {
-
-    },
-    "Motif looks each time it opens. Look again after adding songs in Finder." : {
-
-    },
-    "Motif opens Last.fm so you can allow it. Your password is never shared with Motif." : {
-
-    },
-    "Motif quit unexpectedly around %@." : {
-
-    },
-    "Motif quit unexpectedly at %@." : {
-
-    },
-    "Motif Radio" : {
-
-    },
-    "Motif Radio Is Off" : {
-
-    },
-    "Motif Radio plays more of the genres you pick, and less of everything else. Nothing is left out." : {
-
-    },
-    "Motif Radio, %@" : {
-
-    },
-    "Motif sends a token made from your password, never the password itself, and keeps the password in this iPhone’s keychain." : {
-
-    },
-    "Motif sends a token made from your password, never the password itself, and keeps the password in this Mac’s keychain." : {
-
-    },
-    "Motif shows in the Dock and the app switcher." : {
-
-    },
-    "Motif starts in the background when you log in." : {
-
-    },
-    "Motif stops scrobbling. What’s already on Last.fm stays there." : {
-
-    },
-    "Motif syncs the list of songs on your server each day, so Motif Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them." : {
+    "Motif History" : {
 
     },
     "Music Folder" : {
 
     },
-    "Needed while Motif is hidden from the menu bar, so there’s a way back in." : {
+    "Needed while Tracks is hidden from the menu bar, so there’s a way back in." : {
 
     },
     "New" : {
@@ -1045,10 +1007,10 @@
     "None in the last year" : {
 
     },
-    "None of your music suits it yet, and none of your playlists look like party ones. Motif goes by each song's genre." : {
+    "None of your music suits it yet, and none of your playlists look like party ones. Tracks goes by each song's genre." : {
 
     },
-    "Not available while Motif shows sample data." : {
+    "Not available while Tracks shows sample data." : {
 
     },
     "Not connected" : {
@@ -1057,7 +1019,7 @@
     "Not in your music yet" : {
 
     },
-    "Not merged yet. Motif merges each time it opens." : {
+    "Not merged yet. Tracks merges each time it opens." : {
 
     },
     "Not out yet. Add them now, and they'll be in your library the day they are." : {
@@ -1166,10 +1128,10 @@
     "Open at Login" : {
 
     },
-    "Open Motif on your iPhone, iPad or Mac, on the same Wi-Fi and signed in to the same iCloud account, and it shows up here. Choose one to play there." : {
+    "Open Tracks on your iPhone, iPad or Mac, on the same Wi-Fi and signed in to the same iCloud account, and it shows up here. Choose one to play there." : {
 
     },
-    "Open Motif yourself. It fills in what it missed from Recently Played." : {
+    "Open Tracks yourself. It fills in what it missed from Recently Played." : {
 
     },
     "Opens a calendar to pick a date." : {
@@ -1211,10 +1173,10 @@
     "Play Back only starts when you’re at your Mac, and never over music you chose." : {
 
     },
-    "Play shows only songs downloaded to this iPhone, which play without a connection. It switches to them by itself when you’re offline. To download songs you add to your library from Motif, turn on Automatic Downloads in Settings ▸ Apps ▸ Music." : {
+    "Play shows only songs downloaded to this iPhone, which play without a connection. It switches to them by itself when you’re offline. To download songs you add to your library from Tracks, turn on Automatic Downloads in Settings ▸ Apps ▸ Music." : {
 
     },
-    "Play something in Apple Music. Motif keeps what you listen to, including radio, and turns it into charts and highlights." : {
+    "Play something in Apple Music. Tracks keeps what you listen to, including radio, and turns it into charts and highlights." : {
 
     },
     "Play something, and it shows here." : {
@@ -1238,10 +1200,13 @@
     "Playlists" : {
 
     },
-    "Playlists with the same name in Motif and Apple Music are one." : {
+    "Playlists with the same name in Tracks and Apple Music are one." : {
 
     },
-    "Playlists with the same name in Motif and Apple Music become one, and each gets the other’s songs. Songs added in Apple Music are found on your server and downloaded; songs added in Motif are added in Apple Music." : {
+    "Playlists with the same name in Tracks and Apple Music become one, and each gets the other’s songs. Songs added in Apple Music are found on your server and downloaded; songs added in Tracks are added in Apple Music." : {
+
+    },
+    "Playlists you make or add in Apple Music show up here." : {
 
     },
     "Playlists you make or add show up here." : {
@@ -1253,7 +1218,7 @@
     "Radio songs don’t reach your play counts, Replay or recommendations until you play them back." : {
 
     },
-    "Radio songs stay in your Motif history only." : {
+    "Radio songs stay in your Tracks history only." : {
 
     },
     "Recently Added" : {
@@ -1271,10 +1236,10 @@
     "Removes the songs you haven't played in three months. They stay on your servers, to download again whenever you like." : {
 
     },
-    "Removing the whole song also stops Motif recovering it from Recently Played." : {
+    "Removing the whole song also stops Tracks recovering it from Recently Played." : {
 
     },
-    "Removing the whole song also stops Motif recovering it from Recently Played. Scrobbles already sent stay on Last.fm." : {
+    "Removing the whole song also stops Tracks recovering it from Recently Played. Scrobbles already sent stay on Last.fm." : {
 
     },
     "Repair Artwork" : {
@@ -1329,7 +1294,7 @@
     "Select a song to see its plays." : {
 
     },
-    "Sent with the time Motif found them, since Recently Played doesn’t say when you played them." : {
+    "Sent with the time Tracks found them, since Recently Played doesn’t say when you played them." : {
 
     },
     "Servers" : {
@@ -1338,16 +1303,16 @@
     "Show in Menu Bar" : {
 
     },
-    "Show Motif in the Dock first, so there’s a way back in." : {
-
-    },
     "Show the %@ after" : {
 
     },
     "Show the %@ before" : {
 
     },
-    "Shows what Motif on your iPhone or iPad is playing, nearby." : {
+    "Show Tracks in the Dock first, so there’s a way back in." : {
+
+    },
+    "Shows what Tracks on your iPhone or iPad is playing, nearby." : {
 
     },
     "Since your first song" : {
@@ -1359,7 +1324,7 @@
     "Songs" : {
 
     },
-    "Songs appear here as Motif keeps them." : {
+    "Songs appear here as Tracks keeps them." : {
 
     },
     "Songs download only when you ask." : {
@@ -1368,13 +1333,13 @@
     "Songs played until it reopened at %@ may be missing." : {
 
     },
-    "Songs played while Motif was closed aren’t kept." : {
+    "Songs played while Tracks was closed aren’t kept." : {
 
     },
     "Songs recovered from Recently Played stay off Last.fm, so nothing arrives with a guessed time." : {
 
     },
-    "Songs stay in the playlist until you remove them in Apple Music. Motif can add songs but can’t take them out." : {
+    "Songs stay in the playlist until you remove them in Apple Music. Tracks can add songs but can’t take them out." : {
 
     },
     "Songs you added stay in their Up Next." : {
@@ -1401,7 +1366,7 @@
     "Songs you play in Music will collect here." : {
 
     },
-    "Songs you play now won’t be kept, counted toward your stats or scrobbled, and your music server isn’t told about them. When you resume, Motif won’t fill them in from Recently Played. Your history so far stays as it is." : {
+    "Songs you play now won’t be kept, counted toward your stats or scrobbled, and your music server isn’t told about them. When you resume, Tracks won’t fill them in from Recently Played. Your history so far stays as it is." : {
 
     },
     "Songs you play or add from your servers download as they do." : {
@@ -1476,10 +1441,10 @@
     "The API key was refused" : {
 
     },
-    "The file is deleted from Motif's Music folder. Your plays of it stay in your history." : {
+    "The file is deleted from the Tracks Music folder. Your plays of it stay in your history." : {
 
     },
-    "The files are removed from Motif's music folder. Your plays of them stay in your history." : {
+    "The files are removed from the Tracks music folder. Your plays of them stay in your history." : {
 
     },
     "the month before" : {
@@ -1530,6 +1495,69 @@
     "Top Songs" : {
 
     },
+    "Tracks asks Lidarr for albums and adds artists to it. The key stays in this Mac's Keychain, and goes only to your Lidarr." : {
+
+    },
+    "Tracks connects straight to the iPhone that's playing. Turn on Local Network for Tracks in Settings to join." : {
+
+    },
+    "Tracks doesn’t look for your other devices." : {
+
+    },
+    "Tracks has no servers and no analytics. Your history stays on your devices and in your iCloud account." : {
+
+    },
+    "Tracks keeps this song once you've heard enough of it to count. Its story starts here." : {
+
+    },
+    "Tracks keeps what you play either way. Apple Music asks before anything is shared." : {
+
+    },
+    "Tracks lives in the menu bar only." : {
+
+    },
+    "Tracks looks each time it opens. Look again after adding songs in Finder." : {
+
+    },
+    "Tracks opens Last.fm so you can allow it. Your password is never shared with Tracks." : {
+
+    },
+    "Tracks quit unexpectedly around %@." : {
+
+    },
+    "Tracks quit unexpectedly at %@." : {
+
+    },
+    "Tracks Radio" : {
+
+    },
+    "Tracks Radio Is Off" : {
+
+    },
+    "Tracks Radio plays more of the genres you pick, and less of everything else. Nothing is left out." : {
+
+    },
+    "Tracks Radio, %@" : {
+
+    },
+    "Tracks sends a token made from your password, never the password itself, and keeps the password in this iPhone’s keychain." : {
+
+    },
+    "Tracks sends a token made from your password, never the password itself, and keeps the password in this Mac’s keychain." : {
+
+    },
+    "Tracks shows in the Dock and the app switcher." : {
+
+    },
+    "Tracks starts in the background when you log in." : {
+
+    },
+    "Tracks stops scrobbling. What’s already on Last.fm stays there." : {
+
+    },
+    "Tracks syncs the list of songs on your server each day, so Tracks Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them." : {
+
+    },
     "Transitions" : {
 
     },
@@ -1539,7 +1567,7 @@
     "Try another %@, or a longer range." : {
 
     },
-    "Tune Motif Radio" : {
+    "Tune Tracks Radio" : {
 
     },
     "Tuning" : {
@@ -1575,19 +1603,19 @@
     "What iCloud Said" : {
 
     },
-    "What Motif Keeps" : {
-
-    },
     "What Syncs" : {
 
     },
-    "When Motif starts, it fills in what you played while it was closed." : {
+    "What Tracks Keeps" : {
+
+    },
+    "When Tracks starts, it fills in what you played while it was closed." : {
 
     },
     "When You Come Back" : {
 
     },
-    "Where your own files live. Put songs in, and Motif finds them." : {
+    "Where your own files live. Put songs in, and Tracks finds them." : {
 
     },
     "While Music Plays" : {
@@ -1605,7 +1633,7 @@
     "Works with Navidrome, Gonic, Airsonic, Ampache, LMS and other servers that speak the Subsonic API." : {
 
     },
-    "You can also drop music into On My iPhone › Motif › Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play." : {
+    "You can also drop music into On My iPhone › Tracks › Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play." : {
 
     },
     "You discovered ^[%@ new artist](inflect: true)." : {
@@ -1707,10 +1735,13 @@
         }
       }
     },
+    "Your Motif history came over on %@ and reaches this device through iCloud. Bring it over here too if anything's missing." : {
+
+    },
     "Your music comes up on the highway and down at the lights, following the car." : {
 
     },
-    "Your own music moves it as it plays. Apple Music doesn't let Motif hear the song, so for it the visualizer keeps to the song's beat." : {
+    "Your own music moves it as it plays. Apple Music doesn't let Tracks hear the song, so for it the visualizer keeps to the song's beat." : {
 
     },
     "Your own station plays everything you love and new finds like it, picked as it plays." : {

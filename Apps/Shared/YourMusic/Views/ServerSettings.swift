@@ -1,17 +1,17 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Your servers, in Settings: each with whether it's reachable and how much is on it. On
 /// iPhone each row pushes its page; a Mac Settings pane has nowhere to push, so each row
 /// carries its actions in a menu and a context menu instead.
 struct ServersSection: View {
     @Environment(YourMusic.self) private var music
-    /// `-MotifConnectServer YES` opens the form at once, for screenshots.
+    /// `-TracksConnectServer YES` opens the form at once, for screenshots.
     @State private var addsServer = Self.opensForm
 
     private static var opensForm: Bool {
         #if DEBUG
-        UserDefaults.standard.bool(forKey: "MotifConnectServer")
+        UserDefaults.standard.bool(forKey: "TracksConnectServer")
         #else
         false
         #endif
@@ -124,8 +124,8 @@ private struct ServerRemoval {
         let songWords = String(AttributedString(localized: "^[\(songs) song](inflect: true)").characters)
         let downloadWords = String(AttributedString(localized: "^[\(downloadIDs.count) download](inflect: true)").characters)
         message = downloadIDs.isEmpty
-            ? String(localized: "Its \(songWords) leave Motif. Your plays of them stay in your history.")
-            : String(localized: "Its \(songWords) and \(downloadWords) leave Motif. Your plays of them stay in your history.")
+            ? String(localized: "Its \(songWords) leave Tracks. Your plays of them stay in your history.")
+            : String(localized: "Its \(songWords) and \(downloadWords) leave Tracks. Your plays of them stay in your history.")
     }
 
     @MainActor
@@ -229,7 +229,7 @@ struct ServerDetailPage: View {
                     .disabled(isSyncing)
                     Button("Change Password or Address…", systemImage: "key") { editsServer = true }
                 } footer: {
-                    Text("Motif syncs the list of songs on your server each day, so Motif Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them.")
+                    Text("Tracks syncs the list of songs on your server each day, so Tracks Radio, your mixes and search reach all of it. The songs themselves stream as you play them, unless you download them.")
                 }
                 Section {
                     Toggle("Tell Server About Plays", isOn: Binding(
@@ -237,7 +237,7 @@ struct ServerDetailPage: View {
                         set: { music.servers.setReportsPlays($0, to: serverID) }
                     ))
                 } footer: {
-                    Text("Keeps your server’s play counts right. If your server sends your plays on to Last.fm or ListenBrainz and Motif scrobbles to Last.fm too, turn one of them off so songs aren’t counted twice.")
+                    Text("Keeps your server’s play counts right. If your server sends your plays on to Last.fm or ListenBrainz and Tracks scrobbles to Last.fm too, turn one of them off so songs aren’t counted twice.")
                 }
                 Section {
                     Button("Remove Server…", role: .destructive) { confirmsRemove = true }
@@ -285,7 +285,7 @@ struct ServerForm: View {
                     .font(.title2.bold())
                 Text(editing == nil
                     ? "Navidrome, Gonic, Airsonic, Ampache, LMS or any other server that speaks the Subsonic API."
-                    : "Motif checks the server answers before it keeps the change.")
+                    : "Tracks checks the server answers before it keeps the change.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -383,9 +383,9 @@ struct ServerForm: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     #if os(macOS)
-                    Text("Motif sends a token made from your password, never the password itself, and keeps the password in this Mac’s keychain.")
+                    Text("Tracks sends a token made from your password, never the password itself, and keeps the password in this Mac’s keychain.")
                     #else
-                    Text("Motif sends a token made from your password, never the password itself, and keeps the password in this iPhone’s keychain.")
+                    Text("Tracks sends a token made from your password, never the password itself, and keeps the password in this iPhone’s keychain.")
                     #endif
                 }
                 .animation(SettingsMotion.fade, value: problem)

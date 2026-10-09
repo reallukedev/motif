@@ -1,8 +1,8 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 // Your devices as one player, as Spotify Connect makes them: what each is playing, a remote for
-// any of them, and a tap to move the music from one to another, over Motif's own connection
+// any of them, and a tap to move the music from one to another, over Tracks’ own connection
 // between your devices on the same network and iCloud account.
 
 /// The button for your devices: the Mac's window toolbar, and Play's on iPhone. While another
@@ -126,11 +126,11 @@ struct DevicesPanel: View {
     @ViewBuilder
     private var footer: some View {
         if model.nearby.needsLocalNetwork {
-            Label("Motif can't see your other devices until Local Network is on for it in Settings, under Privacy & Security.", systemImage: "exclamationmark.triangle.fill")
+            Label("Tracks can't see your other devices until Local Network is on for it in Settings, under Privacy & Security.", systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else if model.nearby.devices.isEmpty {
-            Text("Open Motif on your iPhone, iPad or Mac, on the same Wi-Fi and signed in to the same iCloud account, and it shows up here. Choose one to play there.")
+            Text("Open Tracks on your iPhone, iPad or Mac, on the same Wi-Fi and signed in to the same iCloud account, and it shows up here. Choose one to play there.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

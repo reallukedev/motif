@@ -1,17 +1,17 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 #if os(iOS)
 import AVFoundation
 import CoreMotion
 import UIKit
 #endif
 
-/// Notices when you're driving, for Motif Radio's Drive mode and Louder at Speed: from how
+/// Notices when you're driving, for Tracks Radio's Drive mode and Louder at Speed: from how
 /// iPhone moves (Motion & Fitness), or CarPlay.
 ///
-/// Nothing is asked until Motif Radio starts with Notice When You're Driving on, or Louder at
-/// Speed is turned on. Once Motion & Fitness is allowed it listens whenever Motif runs, and
+/// Nothing is asked until Tracks Radio starts with Notice When You're Driving on, or Louder at
+/// Speed is turned on. Once Motion & Fitness is allowed it listens whenever Tracks runs, and
 /// remembers each drive on this iPhone, so the radio knows the songs you play on the road. The
 /// Mac never drives, and there it stays off.
 @MainActor
@@ -21,7 +21,7 @@ final class DriveDetector {
         /// Motion & Fitness hasn't been asked for yet.
         case notAsked
         case allowed
-        /// Turned off for Motif in Settings, or by restrictions: only CarPlay counts.
+        /// Turned off for Tracks in Settings, or by restrictions: only CarPlay counts.
         case denied
         /// No motion to sense, as on a Mac.
         case unavailable
@@ -34,7 +34,7 @@ final class DriveDetector {
     /// The drives noticed on this iPhone.
     @ObservationIgnored private(set) var log: DriveLog
 
-    private static let logKey = "motifRadioDrives"
+    private static let logKey = "tracksRadioDrives"
 
     #if os(iOS)
     @ObservationIgnored private let motion = CMMotionActivityManager()
@@ -56,17 +56,17 @@ final class DriveDetector {
         isDriving = Self.isDemoDriving
     }
 
-    /// `-MotifDemoDriving YES` drives from launch, for screenshots of Motif Radio on the road.
+    /// `-TracksDemoDriving YES` drives from launch, for screenshots of Tracks Radio on the road.
     /// Debug builds only.
     private static var isDemoDriving: Bool {
         #if DEBUG
-        UserDefaults.standard.bool(forKey: "MotifDemoDriving")
+        UserDefaults.standard.bool(forKey: "TracksDemoDriving")
         #else
         false
         #endif
     }
 
-    /// Starts listening, asking for Motion & Fitness the first time: for Motif Radio starting
+    /// Starts listening, asking for Motion & Fitness the first time: for Tracks Radio starting
     /// with the setting on, or Louder at Speed turned on.
     func start() {
         #if os(iOS)
@@ -130,7 +130,7 @@ final class DriveDetector {
         update()
     }
 
-    /// CarPlay, by the audio going to the car or Motif's own CarPlay screen being up.
+    /// CarPlay, by the audio going to the car or Tracks’ own CarPlay screen being up.
     private func checkCarPlay() {
         let isConnected = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .carAudio }
             || UIApplication.shared.connectedScenes.contains { $0.session.role == .carTemplateApplication }
@@ -170,7 +170,7 @@ final class DriveDetector {
         checkCarPlay()
     }
 
-    /// Reads the last week of motion once a launch, for drives Motif wasn't running for.
+    /// Reads the last week of motion once a launch, for drives Tracks wasn't running for.
     private func lookBack() {
         guard !hasLookedBack, access == .allowed else { return }
         hasLookedBack = true

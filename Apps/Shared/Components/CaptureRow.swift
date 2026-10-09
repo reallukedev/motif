@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One play in the history. Shared by the iPhone History list and the Mac menu bar.
 struct CaptureRow: View {
@@ -72,7 +72,7 @@ struct CaptureRow: View {
                         .monospacedDigit()
                     HStack(spacing: 4) {
                         if showsScrobbleState, capture.scrobbledAt == nil {
-                            let gaveUp = capture.scrobbleAttempts >= MotifStore.maxScrobbleAttempts
+                            let gaveUp = capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts
                             Image(systemName: gaveUp ? "exclamationmark.circle" : "clock")
                                 .foregroundStyle(gaveUp ? .orange : .secondary)
                         }

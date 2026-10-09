@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Your own Apple Music on someone else's SharePlay page, as Music's Library has it: what you
 /// played lately, your playlists, and what you added lately, each song ready to add to their

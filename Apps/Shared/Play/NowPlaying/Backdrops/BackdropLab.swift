@@ -1,19 +1,19 @@
 #if DEBUG
 import SwiftUI
 
-/// `-MotifBackdropLab living` (or any background's stored name), in a Debug build: that
+/// `-TracksBackdropLab living` (or any background's stored name), in a Debug build: that
 /// background for many covers at once, each under a cover and a song's name in white, to judge
-/// the colours and whether the words read. The covers are `-MotifDemoCovers`, then a stand-in
+/// the colours and whether the words read. The covers are `-TracksDemoCovers`, then a stand-in
 /// cover, then a song with none.
 struct BackdropLab: View {
     let style: NowPlayingBackground
 
     static var requested: NowPlayingBackground? {
-        UserDefaults.standard.string(forKey: "MotifBackdropLab").flatMap(NowPlayingBackground.init)
+        UserDefaults.standard.string(forKey: "TracksBackdropLab").flatMap(NowPlayingBackground.init)
     }
 
     private var covers: [CoverArt] {
-        let urls = UserDefaults.standard.string(forKey: "MotifDemoCovers")?.split(separator: "|").map(String.init) ?? []
+        let urls = UserDefaults.standard.string(forKey: "TracksDemoCovers")?.split(separator: "|").map(String.init) ?? []
         return urls.map { .url($0, seed: $0) } + [.url(nil, seed: NowPlayingBackdropPicker.sample), .url(nil, seed: "Northbound")]
     }
 

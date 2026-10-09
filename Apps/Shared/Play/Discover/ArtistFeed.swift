@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Find Artists as the App Store's Today tab tells stories: a feed of cards, each a different
 /// way in. One artist, full bleed, and why they're here. A handful to try if you like one of

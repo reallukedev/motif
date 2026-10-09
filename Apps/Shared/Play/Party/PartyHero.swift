@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The top of Party: the party's field running up under the bar, its symbol, the page's name,
 /// a line on the party, and the chips to choose another. Choosing one recolours the field and

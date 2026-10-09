@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Places a navigation stack can push.
 nonisolated enum Route: Hashable, Sendable {
@@ -48,7 +48,7 @@ nonisolated enum ChartKind: String, CaseIterable, Identifiable, Hashable, Sendab
 
 extension View {
     /// The destinations every stack in the app understands.
-    func motifDestinations() -> some View {
+    func tracksDestinations() -> some View {
         navigationDestination(for: Route.self) { route in
             Group {
                 switch route {

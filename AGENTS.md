@@ -1,7 +1,11 @@
 <!-- BEGIN BACKSTAGE -->
-<!-- Managed by Backstage. Edit these instructions in Backstage; changes made here are replaced. -->
+<!-- Managed by Tandem. Edit these instructions in Tandem; changes made here are replaced. -->
 ## About This Project
+
 - Type: SwiftUI, Xcode.
-- About: A native macOS and iOS app that records music played on Apple Music including on demand and radio stations and tracks songs from Recently Played for when the app is not running.
-- Xcode: Motif.xcodeproj. Build and run it with Backstage's MCP tools (mac_launch, sim_launch) to check your work without windows appearing.
+- About: A music app for iPhone and Mac that keeps a record of every song you play, including radio, and turns it into insights, mixes and stations. Optional Last.fm scrobbling; history syncs through your private iCloud.
+
+## Build and Run
+
+- Xcode: Tracks.xcodeproj. Build and run it with Tandem's MCP tools (mac_launch, sim_launch) to check your work without windows appearing.
 <!-- END BACKSTAGE -->

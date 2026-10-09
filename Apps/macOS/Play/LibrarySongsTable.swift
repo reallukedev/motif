@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Songs as Music lists them on the Mac: a table whose columns sort, where a click selects,
 /// a double-click or Return plays from that song in the table's order, and a right-click
@@ -346,7 +346,7 @@ struct LibraryYourSongsTablePage: View {
                 deleting = []
             }
         } message: {
-            Text("The files are removed from Motif's music folder. Your plays of them stay in your history.")
+            Text("The files are removed from the Tracks music folder. Your plays of them stay in your history.")
         }
     }
 

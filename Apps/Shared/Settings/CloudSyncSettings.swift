@@ -1,13 +1,13 @@
 import SwiftUI
 import CloudKit
 import Observation
-import MotifCore
+import TracksCore
 
 /// What Settings knows about iCloud sync: the switch, the account, and what the mirror
 /// reported. One per Settings screen, so the root row and the page never disagree.
 @Observable
 final class CloudSyncSettings {
-    private let store: MotifStore
+    private let store: TracksStore
     private let monitor: CloudSyncMonitor?
 
     /// The switch. Read once when the store opens, so a change applies next launch.
@@ -18,7 +18,7 @@ final class CloudSyncSettings {
     private var account: CloudSyncStatus.Account?
     private var accountError: String?
 
-    init(store: MotifStore, monitor: CloudSyncMonitor?) {
+    init(store: TracksStore, monitor: CloudSyncMonitor?) {
         self.store = store
         self.monitor = monitor
     }
@@ -142,12 +142,12 @@ struct CloudSyncPage: View {
         switch status {
         case .notSignedIn:
             #if os(iOS)
-            "Sign in at the top of the Settings app, then come back to Motif."
+            "Sign in at the top of the Settings app, then come back to Tracks."
             #else
-            "Sign in under System Settings ▸ Apple Account, then come back to Motif."
+            "Sign in under System Settings ▸ Apple Account, then come back to Tracks."
             #endif
         case .restricted:
-            "Screen Time or a device profile doesn’t allow iCloud for Motif."
+            "Screen Time or a device profile doesn’t allow iCloud for Tracks."
         default:
             nil
         }

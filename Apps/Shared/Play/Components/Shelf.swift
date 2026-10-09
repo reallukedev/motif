@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The page's leading edge, shared by the large title, section headers and the first tile of
 /// every shelf. Roomier on the Mac, where a window is wider than a phone and read from further.

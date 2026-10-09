@@ -1,9 +1,9 @@
 import AppKit
-import MotifCore
+import TracksCore
 
 /// Reopens the Mac app when it stops without being quit.
 ///
-/// macOS can end Motif with no warning: when the disk is nearly full it quits apps to purge
+/// macOS can end Tracks with no warning: when the disk is nearly full it quits apps to purge
 /// their caches, and nothing is written to say so. A menu bar app that's gone looks the same
 /// as one that's idle, so listening goes unrecorded until someone notices. The app starts
 /// this helper at launch with its process ID. When that process ends, ``RunLog`` says whether

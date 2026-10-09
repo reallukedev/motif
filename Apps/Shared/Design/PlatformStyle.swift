@@ -45,9 +45,9 @@ extension SearchFieldPlacement {
     }
 }
 
-/// Where Motif's access to Apple Music is switched on.
+/// Where Tracks’ access to Apple Music is switched on.
 enum SystemSettingsLink {
-    /// Settings › Motif on iPhone; Privacy & Security › Media & Apple Music on the Mac.
+    /// Settings › Tracks on iPhone; Privacy & Security › Media & Apple Music on the Mac.
     static var musicAccess: URL? {
         #if os(iOS)
         URL(string: UIApplication.openSettingsURLString)

@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A song in a library's table: the same columns for Apple Music and your own music.
 nonisolated struct LibrarySongRow: Identifiable, Sendable {
@@ -10,7 +10,7 @@ nonisolated struct LibrarySongRow: Identifiable, Sendable {
     let album: String
     /// Seconds; zero when it isn't known.
     let duration: TimeInterval
-    /// Your plays, from Motif's history.
+    /// Your plays, from Tracks’ history.
     let plays: Int
     let added: Date
     let cover: CoverArt

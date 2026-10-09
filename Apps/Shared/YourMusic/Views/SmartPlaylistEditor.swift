@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Makes a smart playlist, or changes one's rules: where its songs come from, what they have to
 /// be, in what order, and how many. Shows how many songs fit as the rules are written.

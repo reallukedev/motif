@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 extension MusicGenre {
     /// The genre's name in the person's language.

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Top songs, artists or albums for any day, week, month or year, or all time.
 ///

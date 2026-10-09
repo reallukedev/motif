@@ -1,9 +1,9 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
 /// Your own music, as one library: the files on this iPhone and the songs on your servers,
-/// downloaded or not. What the Play tab, Motif Radio and the player use when Your Music is
+/// downloaded or not. What the Play tab, Tracks Radio and the player use when Your Music is
 /// the source.
 @MainActor
 @Observable
@@ -98,7 +98,7 @@ final class YourMusic {
     var playableTracks: [LocalTrack] { index.tracks.filter(isPlayable) }
 
     /// Whether a mix's song can play right now, as ``track(for:)`` would find it. Quick enough
-    /// to ask of every song Motif Radio could pick: it goes by the id and name the mix has.
+    /// to ask of every song Tracks Radio could pick: it goes by the id and name the mix has.
     func canPlay(_ song: MixSong) -> Bool {
         let exact = index.track(id: song.songID)
         if let exact, isPlayable(exact) { return true }
@@ -493,7 +493,7 @@ final class YourMusic {
     }
 
     /// Songs asked for that a sync brought in: the player hears, in case it's waiting on one,
-    /// and with Automatic Downloads on, or for Motif Radio, they come down.
+    /// and with Automatic Downloads on, or for Tracks Radio, they come down.
     private func keptArrived(_ tracks: [LocalTrack]) {
         onSongsArrived?(tracks)
         let missing = tracks.filter { !downloads.isDownloaded($0.id) && !downloads.isDownloading($0.id) }
@@ -504,7 +504,7 @@ final class YourMusic {
         downloads.download(wanted)
     }
 
-    /// Downloads songs Motif Radio is getting ready, which stay the radio's: with Delete After
+    /// Downloads songs Tracks Radio is getting ready, which stay the radio's: with Delete After
     /// Playing on, they go once they've played.
     private func downloadForRadio(_ tracks: [LocalTrack]) {
         guard !tracks.isEmpty else { return }
@@ -515,7 +515,7 @@ final class YourMusic {
 
     @ObservationIgnored private var isDownloadingForRadio = false
 
-    /// A download asked for by anything but Motif Radio is one you want: it stays, even once
+    /// A download asked for by anything but Tracks Radio is one you want: it stays, even once
     /// the radio has played the song.
     private func downloadsAsked(_ tracks: [LocalTrack]) {
         guard !isDownloadingForRadio else { return }
@@ -525,15 +525,15 @@ final class YourMusic {
         saveRadioOnly()
     }
 
-    /// Songs being got ready, for Motif Radio or a playlist merged with Apple Music: downloaded
+    /// Songs being got ready, for Tracks Radio or a playlist merged with Apple Music: downloaded
     /// when they arrive, whatever the setting.
     @ObservationIgnored private var readyingForRadio: Set<String> = []
-    /// Songs, by identity, downloaded only for Motif Radio to play: with Delete After Playing
+    /// Songs, by identity, downloaded only for Tracks Radio to play: with Delete After Playing
     /// on, their downloads go once they've played. Kept between launches.
     private(set) var radioOnly: Set<String> = Set(UserDefaults.standard.stringArray(forKey: YourMusic.radioOnlyKey) ?? [])
     static let radioOnlyKey = "radioOnlyDownloads"
 
-    /// Songs a server found for you, so the player can play them by name, as Motif Radio does
+    /// Songs a server found for you, so the player can play them by name, as Tracks Radio does
     /// with Picked for You's.
     func remember(found tracks: [LocalTrack]) {
         for track in tracks where index.track(id: track.id) == nil {
@@ -542,14 +542,14 @@ final class YourMusic {
     }
 
     /// Picked for You's songs from every server that aren't in your music yet: new finds for
-    /// Motif Radio.
+    /// Tracks Radio.
     var serverFinds: [LocalTrack] {
         discover.forYou.values.flatMap { $0.songs + $0.suggested + $0.further }.filter { $0.isFromServer && !isInYourMusic($0) }
     }
 
     /// Called with songs asked for that a sync has brought in. Set by the player.
     @ObservationIgnored var onSongsArrived: (([LocalTrack]) -> Void)?
-    /// Called with a song's identity once it's downloaded. Set by the player, for Motif Radio.
+    /// Called with a song's identity once it's downloaded. Set by the player, for Tracks Radio.
     @ObservationIgnored var onReady: ((String) -> Void)?
 
     /// Asks a song's server to keep it, for a song found by searching. Returns what to tell
@@ -687,7 +687,7 @@ final class YourMusic {
     #endif
 }
 
-// MARK: - Motif Radio
+// MARK: - Tracks Radio
 
 extension YourMusic: RadioDownloads {
     var downloadsFirst: Bool { PlayPreferences.radioDownloadsFirst }
@@ -747,7 +747,7 @@ extension YourMusic: RadioDownloads {
         }
     }
 
-    /// Whether a song was downloaded only to play on Motif Radio, and goes after it plays.
+    /// Whether a song was downloaded only to play on Tracks Radio, and goes after it plays.
     func isRadioOnly(_ track: LocalTrack) -> Bool {
         PlayPreferences.radioDeletesAfterPlaying && radioOnly.contains(track.identity)
     }

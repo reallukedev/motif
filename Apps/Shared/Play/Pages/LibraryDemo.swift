@@ -1,15 +1,15 @@
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// An invented Apple Music library for screenshots of the library's pages, which sample data
-/// otherwise can't reach: `-MotifDemoLibrary YES` beside `-MotifDemoData YES`. Its albums and
+/// otherwise can't reach: `-TracksDemoLibrary YES` beside `-TracksDemoData YES`. Its albums and
 /// songs are the sample history's, so your plays show beside them, plus a few playlists and an
 /// album with a long name that you've never played. Debug builds only; nothing in a release.
 nonisolated enum LibraryDemo {
     static var isOn: Bool {
         #if DEBUG
-        UserDefaults.standard.bool(forKey: "MotifDemoLibrary")
+        UserDefaults.standard.bool(forKey: "TracksDemoLibrary")
         #else
         false
         #endif
@@ -67,7 +67,7 @@ nonisolated extension LibraryDemo {
 
     private static let playlistNames = [
         "Kitchen Dancing", "Sunday Morning", "Deep Focus", "Late Nights", "Road Trip",
-        "Songs for the Long Drive Home With the Windows Down", "Rainy Day", "Found on Motif Radio",
+        "Songs for the Long Drive Home With the Windows Down", "Rainy Day", "Found on Tracks Radio",
         "Running", "Wedding Maybe",
     ]
 

@@ -14,7 +14,7 @@ struct CoverImage: View {
         case .artwork(let artwork):
             let shape = isBare ? AnyShape(Rectangle()) : isCircle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: Self.radius(for: size), style: .continuous))
             Group {
-                // Catalog covers have an ordinary address, drawn from Motif's own cache: MusicKit's
+                // Catalog covers have an ordinary address, drawn from Tracks’ own cache: MusicKit's
                 // ArtworkImage can drop its picture when its size or place changes (the mini
                 // player collapsing as you scroll) and not bring it back. Library covers, and
                 // the player's own songs, only MusicKit can load, so those keep ArtworkImage.

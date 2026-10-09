@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// An artist in your music, laid out as Apple Music's artist pages are: their top songs,
 /// newest release, albums, singles and EPs, the albums they appear on, and artists like them

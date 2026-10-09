@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// An artist on one of your servers, looked up there: one found by searching that isn't in your
 /// music, from the server's library or, on a server like Octo, found elsewhere. Their top songs

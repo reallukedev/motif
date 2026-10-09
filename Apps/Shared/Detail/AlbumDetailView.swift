@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One album's listening: how often you played it, which of its songs, and when.
 ///

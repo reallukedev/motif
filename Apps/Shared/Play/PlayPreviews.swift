@@ -1,7 +1,7 @@
 #if DEBUG
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Apple Music items made from API JSON, so pages that need them can be previewed without an
 /// account or a network. Every name here is invented.

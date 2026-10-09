@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// An Apple Music playlist, yours or Apple's: its cover on a field of its colour, your history
 /// with it, and its songs. Long ones load as you scroll.
@@ -308,7 +308,7 @@ struct PlaylistPage: View {
         }
     }
 
-    /// Motif's own shuffle when every song is loaded: no artist twice in a row. Apple's
+    /// Tracks’ own shuffle when every song is loaded: no artist twice in a row. Apple's
     /// shuffle otherwise, which can reach songs not loaded yet.
     private func shuffle(_ playlist: Playlist, context: PlayContext) {
         if loaded != nil, nextBatch == nil, !songs.isEmpty {

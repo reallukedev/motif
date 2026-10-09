@@ -1,8 +1,8 @@
 {
   "fill": {
     "linear-gradient": [
-      "display-p3:0.98000,0.37000,0.47000,1.00000",
-      "display-p3:0.91000,0.13000,0.25000,1.00000"
+      "display-p3:1.00000,0.40000,0.50000,1.00000",
+      "display-p3:0.80000,0.10000,0.38000,1.00000"
     ],
     "orientation": {
       "start": {
@@ -17,20 +17,23 @@
   },
   "groups": [
     {
-      "name": "Played",
+      "name": "Sleeve",
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.5
+        "opacity": 0.55
       },
       "translucency": {
-        "enabled": true,
-        "value": 0.15
+        "enabled": false,
+        "value": 0
       },
       "layers": [
         {
-          "image-name": "played.svg",
-          "name": "played",
-          "glass": true
+          "image-name": "sleeve.svg",
+          "name": "sleeve",
+          "glass": true,
+          "fill": {
+            "solid": "display-p3:1.00000,1.00000,1.00000,1.00000"
+          }
         }
       ]
     },
@@ -42,51 +45,49 @@
       },
       "translucency": {
         "enabled": true,
-        "value": 0.25
+        "value": 0.1
       },
-      "lighting": "combined",
       "layers": [
         {
           "image-name": "label.svg",
           "name": "label",
-          "glass": false,
+          "glass": true,
           "fill": {
-            "solid": "display-p3:0.99000,0.30000,0.40000,1.00000"
+            "linear-gradient": [
+              "display-p3:1.00000,0.90000,0.56000,1.00000",
+              "display-p3:1.00000,0.74000,0.30000,1.00000"
+            ],
+            "orientation": {
+              "start": {
+                "x": 0.5,
+                "y": 0.0
+              },
+              "stop": {
+                "x": 0.5,
+                "y": 1.0
+              }
+            }
           }
         },
         {
-          "image-name": "track.svg",
-          "name": "track",
+          "image-name": "rim.svg",
+          "name": "rim",
           "glass": false,
-          "opacity": 0.12
+          "opacity": 0.78
         },
         {
           "image-name": "grooves.svg",
           "name": "grooves",
           "glass": false,
-          "opacity": 0.22
+          "opacity": 0.55
         },
         {
-          "image-name": "sheen.svg",
-          "name": "sheen",
-          "glass": false,
-          "opacity": 0.09
-        },
-        {
-          "image-name": "vinyl.svg",
-          "name": "vinyl",
+          "image-name": "disc.svg",
+          "name": "disc",
           "glass": true,
           "fill": {
-            "solid": "display-p3:0.10000,0.09000,0.11000,1.00000"
-          },
-          "fill-specializations": [
-            {
-              "appearance": "dark",
-              "value": {
-                "solid": "display-p3:0.22000,0.21000,0.23000,1.00000"
-              }
-            }
-          ]
+            "solid": "display-p3:0.10000,0.10000,0.12000,1.00000"
+          }
         }
       ]
     }

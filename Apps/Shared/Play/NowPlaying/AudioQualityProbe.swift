@@ -1,8 +1,8 @@
 import AVFoundation
-import MotifCore
+import TracksCore
 
 /// Reads what a piece of audio really is, from its first audio track: the codec, the sample
-/// rate, a lossless file's bit depth and a compressed one's bit rate. It's how Motif knows
+/// rate, a lossless file's bit depth and a compressed one's bit rate. It's how Tracks knows
 /// whether a server made the smaller copy it was asked for or sent the original, so the
 /// quality badge never claims a copy that didn't arrive.
 nonisolated enum AudioQualityProbe {

@@ -2,16 +2,16 @@ import Foundation
 import MusicKit
 import Observation
 import SwiftUI
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
-/// Plays through MusicKit's application player: Apple Music, inside Motif.
+/// Plays through MusicKit's application player: Apple Music, inside Tracks.
 ///
 /// It keeps playing in the background (the app declares background audio), which is what lets
-/// Motif keep every song it plays. The lock screen, Control Center and AirPlay come with it.
+/// Tracks keep every song it plays. The lock screen, Control Center and AirPlay come with it.
 ///
-/// On the Mac the player isn't touched until Motif first plays something (see
-/// `MotifPlayerContext.isInUse`), so someone who only plays music in Music keeps their media
+/// On the Mac the player isn't touched until Tracks first plays something (see
+/// `TracksPlayerContext.isInUse`), so someone who only plays music in Music keeps their media
 /// keys there.
 @MainActor
 final class MusicKitPlayerEngine: PlayerEngine {
@@ -34,13 +34,13 @@ final class MusicKitPlayerEngine: PlayerEngine {
     /// Covers with an ordinary web address for the songs queued, by song id. The player's own
     /// entries often carry a `musicKit://` cover only MusicKit's ArtworkImage can draw, which
     /// can lose its picture as the mini player opens into Now Playing (see ``CoverImage``);
-    /// these are drawn from Motif's own cache instead.
+    /// these are drawn from Tracks’ own cache instead.
     private var queuedCovers: [String: Artwork] = [:]
     private var player: ApplicationMusicPlayer { ApplicationMusicPlayer.shared }
     private var watch: Task<Void, Never>?
 
     init() {
-        MotifPlayerContext.whenInUse { [weak self] in self?.follow() }
+        TracksPlayerContext.whenInUse { [weak self] in self?.follow() }
     }
 
     /// Follows the player's queue and state, once it's in use.
@@ -79,7 +79,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
 
     var status: PlayerStatus {
         if starting > 0 { return .loading }
-        guard MotifPlayerContext.isInUse else { return .stopped }
+        guard TracksPlayerContext.isInUse else { return .stopped }
         switch player.state.playbackStatus {
         case .playing, .seekingForward, .seekingBackward: return .playing
         case .paused, .interrupted: return current == nil ? .stopped : .paused
@@ -89,15 +89,15 @@ final class MusicKitPlayerEngine: PlayerEngine {
     }
 
     var playbackTime: TimeInterval {
-        guard MotifPlayerContext.isInUse else { return 0 }
+        guard TracksPlayerContext.isInUse else { return 0 }
         let time = player.playbackTime
         return time.isFinite ? max(0, time) : 0
     }
 
-    var isShuffled: Bool { MotifPlayerContext.isInUse && player.state.shuffleMode == .songs }
+    var isShuffled: Bool { TracksPlayerContext.isInUse && player.state.shuffleMode == .songs }
 
     var repeatMode: PlayerRepeat {
-        guard MotifPlayerContext.isInUse else { return .off }
+        guard TracksPlayerContext.isInUse else { return .off }
         return switch player.state.repeatMode {
         case .one: .one
         case .all: .all
@@ -113,7 +113,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
         let entries = Array(player.queue.entries)
         let currentEntry = player.queue.currentEntry
         current = currentEntry.map(track(from:))
-        if MotifPlayerContext.isStation {
+        if TracksPlayerContext.isStation {
             upNext = []
         } else if let currentEntry, let index = entries.firstIndex(where: { $0.id == currentEntry.id }) {
             upNext = entries[(index + 1)...].map(track(from:))
@@ -138,7 +138,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
             albumTitle: song?.albumTitle,
             cover: artwork.map(CoverArt.artwork) ?? .url(nil, seed: title),
             // A station's songs report a length, but it can't be scrubbed or counted down.
-            duration: MotifPlayerContext.isStation ? nil : song?.duration,
+            duration: TracksPlayerContext.isStation ? nil : song?.duration,
             isExplicit: song?.contentRating == .explicit,
             song: song
         )
@@ -227,9 +227,9 @@ final class MusicKitPlayerEngine: PlayerEngine {
         // (the capture source, its recheck) can see the new queue under the old flag, or the
         // old song under the new one.
         if context.isStation {
-            MotifPlayerContext.playingStation(named: context.title)
+            TracksPlayerContext.playingStation(named: context.title)
         } else {
-            MotifPlayerContext.playingOnDemand()
+            TracksPlayerContext.playingOnDemand()
         }
         try await start(playID, on: startSong)
     }
@@ -332,7 +332,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
 
     func pause() {
         // Switching the music source pauses the old player, which may never have played.
-        guard MotifPlayerContext.isInUse else { return }
+        guard TracksPlayerContext.isInUse else { return }
         player.pause()
     }
 
@@ -351,7 +351,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
     /// Back to the start of the song after the first few seconds, as every player does, and
     /// to the song before otherwise.
     func skipToPrevious() async throws {
-        if playbackTime > 3 || upNext.isEmpty && MotifPlayerContext.isStation {
+        if playbackTime > 3 || upNext.isEmpty && TracksPlayerContext.isStation {
             player.restartCurrentEntry()
         } else {
             try await ApplicationPlayerCommands.skipToPrevious()
@@ -507,10 +507,10 @@ final class MusicKitPlayerEngine: PlayerEngine {
 extension MusicKitPlayerEngine {
     /// What Apple Music is playing at, as the player reports it: Lossless, Dolby Atmos and the
     /// like. The player's state is observable, so a view reading this follows it. Nil when the
-    /// player doesn't say, and on the Mac until Motif has played something, since reaching the
+    /// player doesn't say, and on the Mac until Tracks has played something, since reaching the
     /// player at all can take the media keys from Music.
     static var playingVariant: AppleMusicVariant? {
-        guard MotifPlayerContext.isInUse, let variant = ApplicationMusicPlayer.shared.state.audioVariant else { return nil }
+        guard TracksPlayerContext.isInUse, let variant = ApplicationMusicPlayer.shared.state.audioVariant else { return nil }
         return AppleMusicVariant(variant)
     }
 }

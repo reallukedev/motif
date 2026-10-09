@@ -1,10 +1,10 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// An Apple Music artist: their top songs, newest release, albums, singles, the albums they
 /// appear on, artists like them and what Apple Music says about them, under their picture
-/// and what Motif knows of you and them.
+/// and what Tracks knows of you and them.
 struct ArtistPage: View {
     let artist: Artist
     @Environment(AppModel.self) private var model

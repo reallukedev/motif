@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// One of the artists you play most: their picture in a circle, their name, and how often.
 struct FavoriteArtistTile: View {
@@ -55,7 +55,7 @@ struct FavoriteArtistTile: View {
 }
 
 /// A favourite artist's page, found in Apple Music by name as it opens. Without Apple Music
-/// (sample data, offline, no match) it shows Motif's own page for them instead.
+/// (sample data, offline, no match) it shows Tracks’ own page for them instead.
 struct FavoriteArtistPage: View {
     let name: String
     let identity: String

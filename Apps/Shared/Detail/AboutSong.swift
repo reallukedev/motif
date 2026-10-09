@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// What's known about a song beyond your listening, for the foot of its page, as Music's
 /// footer tells you about a record: when it came out, its genre, who wrote it, how long it
@@ -90,7 +90,7 @@ extension SongAbout {
 }
 
 /// Finds what there is to say about a song: from your own music when it's yours, from Apple
-/// Music when it's in the catalog and Motif may ask, and from the history's own lookup of
+/// Music when it's in the catalog and Tracks may ask, and from the history's own lookup of
 /// its genre and year otherwise. Offline or without access, it says what it already knows.
 enum SongAboutLookup {
     @MainActor
@@ -121,7 +121,7 @@ enum SongAboutLookup {
     }
 
     /// The song in Apple Music's catalog, with how it's mastered. Nil for a song that isn't
-    /// there, or when Motif can't ask.
+    /// there, or when Tracks can't ask.
     @MainActor
     private static func catalogSong(id: String, isDemo: Bool, tally: SongTally) async -> Song? {
         #if DEBUG

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The artists Picked for You starts from, chosen by searching your servers: what it needs
 /// when there's no listening history or library to go on, and leads with when there is.

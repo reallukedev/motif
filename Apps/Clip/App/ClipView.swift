@@ -1,10 +1,10 @@
 import SwiftUI
 import StoreKit
 import CoreImage
-import MotifCore
+import TracksCore
 
 /// The App Clip's one screen: what's playing on the host's iPhone, what's coming up, and a
-/// search to add songs, laid out as Motif's own SharePlay page is for a passenger with Motif.
+/// search to add songs, laid out as Tracks’ own SharePlay page is for a passenger with Tracks.
 struct ClipView: View {
     @Bindable var model: ClipModel
 
@@ -15,12 +15,12 @@ struct ClipView: View {
                 .navigationBarTitleDisplayMode(.inline)
         }
         .sensoryFeedback(.impact(weight: .light), trigger: addedCount)
-        // Once it's over, a natural pause: Motif itself, offered once, at the bottom.
-        .appStoreOverlay(isPresented: $model.offersMotif) {
+        // Once it's over, a natural pause: Tracks itself, offered once, at the bottom.
+        .appStoreOverlay(isPresented: $model.offersTracks) {
             SKOverlay.AppClipConfiguration(position: .bottom)
         }
         .onChange(of: model.session?.guest.phase) { _, phase in
-            if phase == .ended { model.offersMotif = true }
+            if phase == .ended { model.offersTracks = true }
         }
     }
 
@@ -44,7 +44,7 @@ struct ClipView: View {
                 } description: {
                     Text("Songs you added stay in their Up Next.")
                 } actions: {
-                    Button("Get Motif") { model.offersMotif = true }
+                    Button("Get Tracks") { model.offersTracks = true }
                         .buttonStyle(.borderedProminent)
                 }
             case .joined:
@@ -89,13 +89,13 @@ private struct ClipJoinedView: View {
                             ClipNotice(text: notice.text, systemImage: notice.symbol)
                         }
                         upNext
-                        ClipLibraryCard { model.offersMotif = true }
+                        ClipLibraryCard { model.offersTracks = true }
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .padding(.bottom, 28)
                 }
-                // The host's song glows at the top in its cover's colour, as Motif's page has
+                // The host's song glows at the top in its cover's colour, as Tracks’ page has
                 // it, so it's plain whose music this is before anything is read.
                 .background(alignment: .top) { ClipGlow(color: glow) }
                 .task(id: snapshot?.nowPlaying?.artworkURL) {
@@ -392,21 +392,21 @@ private struct ClipCover: View {
     }
 }
 
-/// Where Motif's Your Library would be: what the App Clip can't do, since Apple keeps Apple
-/// Music accounts from App Clips, and Motif, which can. Quiet, and at the end, as the HIG
+/// Where Tracks’ Your Library would be: what the App Clip can't do, since Apple keeps Apple
+/// Music accounts from App Clips, and Tracks, which can. Quiet, and at the end, as the HIG
 /// asks of an App Clip suggesting its app.
 private struct ClipLibraryCard: View {
-    let getMotif: () -> Void
+    let getTracks: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Add From Your Library", systemImage: "music.note.list")
                 .font(.headline)
-            Text("With Motif, you can also pick songs from your Apple Music library and playlists.")
+            Text("With Tracks, you can also pick songs from your Apple Music library and playlists.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Get Motif", action: getMotif)
+            Button("Get Tracks", action: getTracks)
                 .buttonStyle(.bordered)
                 .padding(.top, 4)
         }

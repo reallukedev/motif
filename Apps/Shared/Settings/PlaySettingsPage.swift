@@ -1,19 +1,19 @@
 #if os(iOS)
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Settings ▸ Play on iPhone: where Play's music comes from, Motif Radio, where Motif opens,
+/// Settings ▸ Play on iPhone: where Play's music comes from, Tracks Radio, where Tracks opens,
 /// explicit songs, how one song leads into the next, the Play tab's layout, and the memory
 /// behind its mixes. The Mac has its own pane, `PlaySettingsPane`.
 struct PlaySettingsPage: View {
-    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .summary
+    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
     @AppStorage(PlayPreferences.transitionKey) private var transition: SongTransition = .off
     @AppStorage(PlayPreferences.crossfadeSecondsKey) private var crossfadeSeconds = PlayPreferences.defaultCrossfadeSeconds
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(PlayPreferences.radioTuningKey) private var storedTuning = ""
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
-    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
+    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.tracks
     @AppStorage(StreamQuality.wiFiKey) private var wiFiQuality = StreamQuality.original
     @AppStorage(StreamQuality.cellularKey) private var cellularQuality = StreamQuality.original
     @AppStorage(StreamQuality.downloadKey) private var downloadQuality = StreamQuality.original
@@ -64,9 +64,9 @@ struct PlaySettingsPage: View {
                     .id(DebugScroll.mixes)
             }
             #if DEBUG
-            // -MotifSettingsScroll radio (or mixes) opens the page scrolled there, for screenshots.
+            // -TracksSettingsScroll radio (or mixes) opens the page scrolled there, for screenshots.
             .task {
-                guard let target = UserDefaults.standard.string(forKey: "MotifSettingsScroll").flatMap(DebugScroll.init) else { return }
+                guard let target = UserDefaults.standard.string(forKey: "TracksSettingsScroll").flatMap(DebugScroll.init) else { return }
                 try? await Task.sleep(for: .seconds(1))
                 proxy.scrollTo(target, anchor: .top)
             }
@@ -82,7 +82,7 @@ struct PlaySettingsPage: View {
         .settingsPage("Play")
     }
 
-    /// Places `-MotifSettingsScroll` can open the page at.
+    /// Places `-TracksSettingsScroll` can open the page at.
     private enum DebugScroll: String {
         case radio, mixes, driving
     }
@@ -128,7 +128,7 @@ struct PlaySettingsPage: View {
         } header: {
             Text("Offline")
         } footer: {
-            Text("Play shows only songs downloaded to this iPhone, which play without a connection. It switches to them by itself when you’re offline. To download songs you add to your library from Motif, turn on Automatic Downloads in Settings ▸ Apps ▸ Music.")
+            Text("Play shows only songs downloaded to this iPhone, which play without a connection. It switches to them by itself when you’re offline. To download songs you add to your library from Tracks, turn on Automatic Downloads in Settings ▸ Apps ▸ Music.")
         }
         .task { await downloads.loadIfNeeded() }
     }
@@ -159,7 +159,7 @@ struct PlaySettingsPage: View {
         } header: {
             Text("On This iPhone")
         } footer: {
-            Text("Add songs from Play, or put them in On My iPhone ▸ Motif ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers.")
+            Text("Add songs from Play, or put them in On My iPhone ▸ Tracks ▸ Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play, with their tags and covers.")
         }
 
         ServersSection()
@@ -197,17 +197,17 @@ struct PlaySettingsPage: View {
         }
     }
 
-    // MARK: - Motif Radio
+    // MARK: - Tracks Radio
 
     private var radioSection: some View {
         Section {
-            Toggle("Show Motif Radio", isOn: $isRadioOn)
+            Toggle("Show Tracks Radio", isOn: $isRadioOn)
             if isRadioOn {
                 // Pushed, as Settings rows are: the same tuner its artwork opens as a sheet.
                 NavigationLink {
                     RadioTuner()
                 } label: {
-                    LabeledContent("Tune Motif Radio", value: RadioTuning(stored: storedTuning).shortSummary)
+                    LabeledContent("Tune Tracks Radio", value: RadioTuning(stored: storedTuning).shortSummary)
                 }
                 if isYourMusic {
                     Toggle("Downloaded Songs First", isOn: $radioDownloadsFirst)
@@ -217,7 +217,7 @@ struct PlaySettingsPage: View {
                 }
             }
         } header: {
-            Text("Motif Radio")
+            Text("Tracks Radio")
         } footer: {
             Text(radioFooter)
                 .contentTransition(.opacity)
@@ -256,7 +256,7 @@ struct PlaySettingsPage: View {
         }
     }
 
-    // MARK: - Around Motif
+    // MARK: - Around Tracks
 
     private var aroundSection: some View {
         Section {
@@ -271,7 +271,7 @@ struct PlaySettingsPage: View {
                 }
             }
         } header: {
-            Text("Around Motif")
+            Text("Around Tracks")
         } footer: {
             Text("\(PlaySettingsWords.openingFooter(openingTab)) \(PlaySettingsWords.destinationFooter(songDestination))")
                 .contentTransition(.opacity)

@@ -1,12 +1,12 @@
 #if DEBUG
 import Foundation
-import MotifCore
+import TracksCore
 
 /// Pretend sessions for screenshots, since a simulator can't join a real one without a host.
-/// `-MotifClipDemo` names the scene: `joined`, `joining`, `reconnecting`, `ended`, `nocode`.
+/// `-TracksClipDemo` names the scene: `joined`, `joining`, `reconnecting`, `ended`, `nocode`.
 @MainActor
 enum ClipDemo {
-    static var isOn: Bool { UserDefaults.standard.string(forKey: "MotifClipDemo") != nil }
+    static var isOn: Bool { UserDefaults.standard.string(forKey: "TracksClipDemo") != nil }
 
     private static let songs: [SharePlaySong] = [
         SharePlaySong(catalogID: "1", title: "Espresso", artistName: "Sabrina Carpenter", albumTitle: "Short n' Sweet"),
@@ -20,7 +20,7 @@ enum ClipDemo {
 
     static func start(_ scene: String, in model: ClipModel) {
         guard scene != "nocode" else {
-            model.open(URL(string: "https://appclip.apple.com/id?p=com.luke.motif.Clip"))
+            model.open(URL(string: "https://appclip.apple.com/id?p=com.luke.tracks.Clip"))
             return
         }
         model.open(SharePlayInvite().url)
@@ -38,7 +38,7 @@ enum ClipDemo {
             if scene != "joining" { guest.receive(snapshot) }
             if scene == "ended" { guest.end() }
         }, isSlow: scene == "joining", isReconnecting: scene == "reconnecting")
-        if let search = UserDefaults.standard.string(forKey: "MotifClipSearch") { model.query = search }
+        if let search = UserDefaults.standard.string(forKey: "TracksClipSearch") { model.query = search }
     }
 
     static func search(_ term: String) -> [SharePlaySong] {

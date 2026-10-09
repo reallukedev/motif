@@ -1,9 +1,9 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 // MARK: - Settings
 
-/// Lidarr, in Play's settings: connect it, and choose how what Motif adds is filed.
+/// Lidarr, in Play's settings: connect it, and choose how what Tracks adds is filed.
 struct LidarrSettingsLink: View {
     @Environment(Lidarr.self) private var lidarr
 
@@ -21,7 +21,7 @@ struct LidarrSettingsLink: View {
         } header: {
             Text("Requests")
         } footer: {
-            Text("Connect Lidarr to add artists and ask for albums from anywhere in Motif. What Lidarr files, your server plays, and Motif can download.")
+            Text("Connect Lidarr to add artists and ask for albums from anywhere in Tracks. What Lidarr files, your server plays, and Tracks can download.")
         }
     }
 
@@ -71,8 +71,8 @@ struct LidarrSettingsPage: View {
                     Text("Adding Artists")
                 } footer: {
                     Text(lidarr.monitor == .none
-                        ? "Artists are added without their albums. Ask for albums one at a time from Motif."
-                        : "What Lidarr follows when you add an artist from Motif. Asking for one album always gets just that album.")
+                        ? "Artists are added without their albums. Ask for albums one at a time from Tracks."
+                        : "What Lidarr follows when you add an artist from Tracks. Asking for one album always gets just that album.")
                 }
 
                 if !lidarr.rootFolders.isEmpty || !lidarr.qualityProfiles.isEmpty {
@@ -120,7 +120,7 @@ struct LidarrSettingsPage: View {
         .confirmationDialog("Disconnect Lidarr?", isPresented: $confirmsDisconnect, titleVisibility: .visible) {
             Button("Disconnect", role: .destructive) { lidarr.disconnect() }
         } message: {
-            Text("Lidarr keeps everything it follows and has. Motif just stops asking it for more.")
+            Text("Lidarr keeps everything it follows and has. Tracks just stops asking it for more.")
         }
         .task { await lidarr.check() }
     }
@@ -152,7 +152,7 @@ struct LidarrConnectForm: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Connect Lidarr")
                     .font(.title2.bold())
-                Text("Motif asks Lidarr for albums and adds artists to it. The key stays in this Mac's Keychain, and goes only to your Lidarr.")
+                Text("Tracks asks Lidarr for albums and adds artists to it. The key stays in this Mac's Keychain, and goes only to your Lidarr.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -448,7 +448,7 @@ struct LidarrPage: View {
         case .downloading: "Albums Lidarr is fetching show here, until they're filed."
         case .wanted: "Albums Lidarr follows but doesn't have yet show here."
         case .upcoming: "New albums from the artists Lidarr follows show here before they're out."
-        case .artists: "Add artists here, or from any artist in Motif."
+        case .artists: "Add artists here, or from any artist in Tracks."
         }
     }
 }

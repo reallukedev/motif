@@ -3,7 +3,7 @@ import Security
 
 /// Server passwords, kept in the Keychain on this device only, never in defaults or iCloud.
 enum ServerKeychain {
-    private static let service = "com.luke.motif.music-server"
+    private static let service = "com.luke.tracks.music-server"
 
     /// The item every query names. On the Mac, the data protection keychain, which is the one
     /// that honours "this device only"; the older file keychain would ignore it.

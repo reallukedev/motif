@@ -1,5 +1,5 @@
 import Foundation
-import MotifCore
+import TracksCore
 
 /// What actually makes sound. ``PlayerModel`` is the same for both; the engine is Apple Music
 /// through MusicKit, or a pretend one for sample data, which mustn't reach Apple Music.

@@ -8,7 +8,7 @@ import os
 /// Your own music plays through AVFoundation, so each song gets a tap that hands its audio
 /// here on its way out. Only while someone's watching (``startListening()``) does it do any
 /// work: a Fourier transform of the latest moment of sound, grouped into bands a visualizer
-/// can draw. Apple Music plays in a process Motif can't hear, so for it there are no levels,
+/// can draw. Apple Music plays in a process Tracks can't hear, so for it there are no levels,
 /// and the visualizer keeps time by the song's feel instead.
 nonisolated final class AudioLevelMeter: @unchecked Sendable {
     static let shared = AudioLevelMeter()
@@ -54,7 +54,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     private var isListening: Bool { levels.withLock { $0.listeners > 0 } }
 
     /// The bands, 0 to 1, low to high, if something has been heard in the last moment. Nil
-    /// when nothing Motif can hear is playing.
+    /// when nothing Tracks can hear is playing.
     func current(at now: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()) -> [Float]? {
         levels.withLock { state in
             now - state.measuredAt < 0.3 ? state.bands : nil

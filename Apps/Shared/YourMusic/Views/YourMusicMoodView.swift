@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A mood with your own music: go with its flow, a live mix of your songs that suit it and new
 /// ones your server finds like them, or look through them, yours and new woven together. Asks
@@ -48,8 +48,8 @@ struct YourMusicMoodView: View {
 
     private var emptyNote: LocalizedStringKey {
         music.servers.onlineServers.isEmpty
-            ? "None of your music suits it yet. Motif goes by each song's genre."
-            : "None of your music suits it yet, and your server found nothing like it. Motif goes by each song's genre, and your server by songs like the ones you play."
+            ? "None of your music suits it yet. Tracks goes by each song's genre."
+            : "None of your music suits it yet, and your server found nothing like it. Tracks goes by each song's genre, and your server by songs like the ones you play."
     }
 
     // MARK: Hero

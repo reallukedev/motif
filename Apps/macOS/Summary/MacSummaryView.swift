@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Summary on the Mac: the same cards as the iPhone, laid out as a dashboard.
 struct MacSummaryView: View {
@@ -67,7 +67,7 @@ struct MacSummaryView: View {
                     Task { await model.capture?.catchUp() }
                 }
                 .disabled(model.isShowingSampleData)
-                .help("Fill in anything you played while Motif wasn't running")
+                .help("Fill in anything you played while Tracks wasn't running")
             }
         }
         .task(id: "\(range.rawValue)|\(periodOffset)|\(sources.scope.rawValue)|\(model.library.revision)") {

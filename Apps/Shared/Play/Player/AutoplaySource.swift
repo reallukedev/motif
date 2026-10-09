@@ -1,6 +1,6 @@
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Autoplay's songs: from the history, songs like the last few the queue played, and from Apple
 /// Music, as new finds, the top songs of the artists Apple lists as similar to theirs. From your

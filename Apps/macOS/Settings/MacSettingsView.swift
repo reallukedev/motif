@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A pane of the Mac's Settings window, stored so Settings reopens where it was left.
 enum MacSettingsPane: String {

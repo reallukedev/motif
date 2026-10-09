@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Finds covers that no longer load and fetches them again.
 ///
@@ -56,7 +56,7 @@ struct ArtworkRepairSection: View {
     /// What the button does, then what it found once it has run.
     private var detail: Text {
         if model.isShowingSampleData {
-            return Text("Not available while Motif shows sample data.")
+            return Text("Not available while Tracks shows sample data.")
         }
         guard let report else {
             return Text("Checks every cover in your history and asks Apple Music again for the ones that no longer load. It can take a minute over a long history.")

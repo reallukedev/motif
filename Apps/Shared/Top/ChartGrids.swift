@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Top Artists as a wall of portraits: who they are first, then where they stand, how much
 /// of them you played, and the song of theirs that did it. An artist heard for the first

@@ -1,6 +1,6 @@
 import AppKit
 import Observation
-import MotifCore
+import TracksCore
 
 /// Keeps the run log, starts the watchdog, and holds the notice about the last run.
 ///
@@ -67,7 +67,7 @@ final class UnexpectedQuitMonitor {
 
     private func startWatchdog() {
         let helper = Bundle.main.bundleURL
-            .appending(path: "Contents/Library/LoginItems/MotifWatchdog.app", directoryHint: .isDirectory)
+            .appending(path: "Contents/Library/LoginItems/TracksWatchdog.app", directoryHint: .isDirectory)
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = ["--watch", String(ProcessInfo.processInfo.processIdentifier)]
         configuration.activates = false
@@ -78,7 +78,7 @@ final class UnexpectedQuitMonitor {
         NSWorkspace.shared.openApplication(at: helper, configuration: configuration) { _, error in
             if let error {
                 // Nothing to show: the app works without it, it just won't come back on its own.
-                print("Motif watchdog didn't start: \(error.localizedDescription)")
+                print("Tracks watchdog didn't start: \(error.localizedDescription)")
             }
         }
     }

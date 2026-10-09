@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Listening added up across the range, over last period's line for the same days, so
 /// being ahead or behind is something you can see. Drag or hover to read a day.

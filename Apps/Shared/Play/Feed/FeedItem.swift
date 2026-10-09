@@ -1,6 +1,6 @@
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A station, album or playlist on the Play page, whatever it came from.
 struct FeedItem: Identifiable, Hashable {

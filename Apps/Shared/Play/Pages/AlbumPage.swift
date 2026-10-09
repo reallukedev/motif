@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// An Apple Music album: its cover on a field of its colour, your history with it in a line
 /// under the title, its songs, and what Apple Music says about it.
@@ -346,7 +346,7 @@ struct AlbumPage: View {
     #if DEBUG
     @MainActor private static var hasOpenedSampleArtist = false
 
-    /// `-MotifSampleArtist YES`: from the sample album, its artist's page, for screenshots of
+    /// `-TracksSampleArtist YES`: from the sample album, its artist's page, for screenshots of
     /// About with sample data. Once per launch.
     private func openSampleArtist() {
         guard player.isDemo, AboutSamples.opensArtist, !Self.hasOpenedSampleArtist else { return }

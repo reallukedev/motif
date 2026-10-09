@@ -1,6 +1,6 @@
 import SwiftUI
 import CoreGraphics
-import MotifCore
+import TracksCore
 
 /// A colour taken from a cover, deep enough that white type on it always reads.
 ///

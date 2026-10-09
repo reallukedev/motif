@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A shelf's title with an action at its trailing edge, as Music's are.
 struct ShelfHeader<Trailing: View>: View {
@@ -340,17 +340,17 @@ struct SuggestionColumn<Item: Identifiable>: Identifiable {
     var id: Item.ID { items[0].id }
 }
 
-/// Suggested Songs, at the top of Play: Motif Radio first, then songs you've never played in
+/// Suggested Songs, at the top of Play: Tracks Radio first, then songs you've never played in
 /// columns of four. It never ends: as its last column comes into view it opens up another
 /// page, and walks further out for more when those run out.
 struct SuggestedSongsSection: View {
-    /// Off where Motif Radio has a card of its own above.
+    /// Off where Tracks Radio has a card of its own above.
     var includesRadio = true
     @Environment(Discovery.self) private var discovery
     @Environment(PlayerModel.self) private var player
     @Environment(AppModel.self) private var model
     @Environment(YourMusic.self) private var music
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(SuggestionMode.storageKey) private var mode = SuggestionMode.everything
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = SuggestionRow.rowHeight
     /// The columns on screen. Only while the last is among them does the shelf open up more, so
@@ -385,7 +385,7 @@ struct SuggestedSongsSection: View {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: PlayMetrics.shelfSpacing) {
                         if showsRadio {
-                            MotifRadioTile(side: rowHeight * CGFloat(SuggestionShelfPaging.rowsPerColumn))
+                            TracksRadioTile(side: rowHeight * CGFloat(SuggestionShelfPaging.rowsPerColumn))
                         }
                         ForEach(columns) { column in
                             VStack(spacing: 0) {

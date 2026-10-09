@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Says the last run ended without being quit, when, and offers the details for a bug report.
 ///
@@ -41,7 +41,7 @@ struct UnexpectedQuitNotice: View {
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                     }
                     .controlSize(.small)
-                    .help("Copies details about Motif and this Mac, without song titles or account details, to paste into a bug report.")
+                    .help("Copies details about Tracks and this Mac, without song titles or account details, to paste into a bug report.")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -63,9 +63,9 @@ struct UnexpectedQuitNotice: View {
     private func title(for notice: UnexpectedQuit) -> Text {
         let time = Self.moment(notice.stoppedAt)
         return notice.stopTimeIsExact
-            ? Text("Motif quit unexpectedly at \(time).")
+            ? Text("Tracks quit unexpectedly at \(time).")
             // Without the watchdog the time is the last one the app was seen running.
-            : Text("Motif quit unexpectedly around \(time).")
+            : Text("Tracks quit unexpectedly around \(time).")
     }
 
     private func detail(for notice: UnexpectedQuit) -> Text {

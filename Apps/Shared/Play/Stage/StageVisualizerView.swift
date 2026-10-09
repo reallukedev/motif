@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// The sound, drawn: bars that rise with each band of it, a wave, or an orb that breathes
-/// around the cover. It hears your own music; for Apple Music, which Motif can't hear, it
+/// around the cover. It hears your own music; for Apple Music, which Tracks can't hear, it
 /// keeps time by the song's feel, as the Halo background does.
 struct StageVisualizerView: View {
     let style: StageVisualizer
     /// The cover's colours, deep to light.
     let palette: [Color]
-    /// How lively the song is, 0 to 1, for keeping time when Motif can't hear it.
+    /// How lively the song is, 0 to 1, for keeping time when Tracks can't hear it.
     let energy: Double
     let isPlaying: Bool
     /// Shared with Stage's background, so both move to the same moment of sound.
@@ -150,7 +150,7 @@ final class SmoothedLevels {
         return values
     }
 
-    /// Bands for a song Motif can't hear: a kick on each beat in the low end, a lighter tick
+    /// Bands for a song Tracks can't hear: a kick on each beat in the low end, a lighter tick
     /// between beats up high, and a slow shimmer through the rest. The tempo follows the
     /// song's energy, calm songs slower.
     static func felt(at time: Double, energy: Double, count: Int) -> [Float] {

@@ -22,7 +22,7 @@ final class NetworkStatus {
                 self?.isExpensive = expensive
             }
         }
-        monitor.start(queue: DispatchQueue(label: "com.luke.motif.network"))
+        monitor.start(queue: DispatchQueue(label: "com.luke.tracks.network"))
     }
 
     deinit {

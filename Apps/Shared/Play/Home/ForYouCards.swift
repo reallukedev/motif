@@ -1,8 +1,8 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// One of the records in the crate at the top of Play: the mix for this hour, Motif Radio,
+/// One of the records in the crate at the top of Play: the mix for this hour, Tracks Radio,
 /// Discover, and the mixes for the rest of the day, with suggested songs going on past them
 /// either way. See ``Crate``.
 enum ForYouCard: Identifiable {

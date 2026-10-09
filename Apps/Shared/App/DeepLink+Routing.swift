@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Following a ``DeepLink`` inside the app.
 ///
@@ -40,8 +40,8 @@ extension DeepLink {
 }
 
 extension View {
-    /// Follows `motif://` links from the widgets, and on iPhone takes in songs opened in
-    /// Motif from Files or the share sheet, into Your Music, and joins the SharePlay whose
+    /// Follows `tracks://` links from the widgets, and on iPhone takes in songs opened in
+    /// Tracks from Files or the share sheet, into Your Music, and joins the SharePlay whose
     /// code was scanned with the Camera.
     func opensDeepLinks(in model: AppModel) -> some View {
         onOpenURL { url in
@@ -58,8 +58,8 @@ extension View {
             DeepLink(url: url)?.open(in: model)
         }
         #if os(iOS)
-        // A SharePlay code holding the App Clip's link, scanned with Motif installed: iOS
-        // opens Motif rather than the App Clip, with the link.
+        // A SharePlay code holding the App Clip's link, scanned with Tracks installed: iOS
+        // opens Tracks rather than the App Clip, with the link.
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL, let invite = SharePlayInvite(url: url) else { return }
             SharePlayController.shared.join(invite)

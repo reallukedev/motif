@@ -1,14 +1,14 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 struct RootView: View {
     @Bindable var model: AppModel
-    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
+    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.tracks
     @State private var summaryPath = LaunchScene.route.map { NavigationPath([$0]) } ?? NavigationPath()
-    /// Where the app opens also decides where Play sits: first when it's where Motif opens,
+    /// Where the app opens also decides where Play sits: first when it's where Tracks opens,
     /// last otherwise, so the opening tab is always far left.
-    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .summary
+    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
     @State private var showsNowPlaying = false
     @Namespace private var nowPlayingTransition
     @Environment(\.scenePhase) private var scenePhase
@@ -67,7 +67,7 @@ struct RootView: View {
                 model.pendingRoute = nil
             }
             // The history and the mixes follow the store in AppModel, for the whole process:
-            // Motif also plays with no window, for CarPlay and Siri.
+            // Tracks also plays with no window, for CarPlay and Siri.
             .onChange(of: model.playFeed.builtRevision) {
                 // Sample data's own music is made from the sample history, now it's read.
                 if model.musicSource == .yourMusic { model.prepareYourMusic() }
@@ -94,7 +94,7 @@ struct RootView: View {
             .environment(model.playNavigator)
             // A song's Play button plays here, where the play is kept, unless Settings sends
             // songs to Apple Music.
-            .environment(\.playSongs, songDestination == .motif ? PlaySongsAction { items, title in
+            .environment(\.playSongs, songDestination == .tracks ? PlaySongsAction { items, title in
                 player.play(.history(items.map(HistorySong.init)), from: .songs(title))
             } : nil)
             .task { await model.startCapture() }
@@ -118,7 +118,7 @@ struct RootView: View {
                 if source == .yourMusic { model.prepareYourMusic() }
             }
             .onChange(of: scenePhase) { _, phase in
-                // iOS only sees music while Motif is open, so pick up what was missed each
+                // iOS only sees music while Tracks is open, so pick up what was missed each
                 // time it comes back. Launch is covered by `startCapture`.
                 if phase == .background {
                     wasInBackground = true
@@ -127,20 +127,20 @@ struct RootView: View {
                     Task { await capture.catchUp() }
                     Task { await model.yourMusic.playlistMerge.mergeIfOn() }
                     model.nearby.resume()
-                    // Songs dropped into Files while Motif was away.
+                    // Songs dropped into Files while Tracks was away.
                     if model.musicSource == .yourMusic { Task { await model.yourMusic.scan() } }
                 }
             }
         } else {
             ContentUnavailableView {
-                Label("Motif Can't Open Your History", systemImage: "exclamationmark.triangle")
+                Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(model.startupError ?? "The database couldn't be opened.")
             }
         }
     }
 
-    /// The tab Motif opens to is far left: Play first when it opens to Play, last otherwise.
+    /// The tab Tracks opens to is far left: Play first when it opens to Play, last otherwise.
     private var tabOrder: [AppTab] {
         openingTab == .play ? [.play, .summary, .history, .charts] : [.summary, .history, .charts, .play]
     }
@@ -151,7 +151,7 @@ struct RootView: View {
         case .summary:
             NavigationStack(path: $summaryPath) {
                 SummaryScreen()
-                    .motifDestinations()
+                    .tracksDestinations()
                     .playDestinations()
             }
             .environment(\.openPlayRoute, OpenPlayRouteAction(stack: "summary") { summaryPath.append($0) })
@@ -167,13 +167,13 @@ struct RootView: View {
                 }
                 .quickSourceSwitch()
                 .playDestinations()
-                .motifDestinations()
+                .tracksDestinations()
             }
             .environment(\.openPlayRoute, OpenPlayRouteAction(stack: "play") { navigator.show($0) })
         case .history:
-            NavigationStack { HistoryScreen().motifDestinations() }
+            NavigationStack { HistoryScreen().tracksDestinations() }
         case .charts:
-            NavigationStack { ChartsScreen().motifDestinations() }
+            NavigationStack { ChartsScreen().tracksDestinations() }
         }
     }
 

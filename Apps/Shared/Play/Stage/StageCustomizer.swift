@@ -29,7 +29,7 @@ struct StageCustomizer: View {
                 } header: {
                     Text("Visualizer")
                 } footer: {
-                    Text("Your own music moves it as it plays. Apple Music doesn't let Motif hear the song, so for it the visualizer keeps to the song's beat.")
+                    Text("Your own music moves it as it plays. Apple Music doesn't let Tracks hear the song, so for it the visualizer keeps to the song's beat.")
                 }
                 Section {
                     Picker("Background", selection: $background) {

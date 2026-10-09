@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Music's full-screen player, over the whole window: the cover large on a field of its own
 /// colour, the song and your count beside it, and the transport under them. Click the cover,

@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Plays over the range split into songs heard for the first time and songs heard before.
 /// The new ones sit on the baseline in the full accent, so days of discovery stand out and

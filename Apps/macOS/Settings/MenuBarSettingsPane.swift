@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Whether Motif sits in the menu bar, and what it shows there. `@AppStorage` throughout, so
+/// Whether Tracks sits in the menu bar, and what it shows there. `@AppStorage` throughout, so
 /// the status item redraws the moment anything here changes.
 struct MenuBarSettingsPane: View {
     @Environment(MacAppBehaviour.self) private var behaviour
@@ -30,10 +30,10 @@ struct MenuBarSettingsPane: View {
                 Toggle("Show in Menu Bar", isOn: $showsMenuBarExtra)
                     .toggleStyle(.switch)
                     .labelsHidden()
-                    // With the Dock icon hidden too there'd be no way back into Motif.
+                    // With the Dock icon hidden too there'd be no way back into Tracks.
                     .disabled(showsMenuBarExtra && !behaviour.showsDockIcon)
                     .help(showsMenuBarExtra && !behaviour.showsDockIcon
-                        ? Text("Show Motif in the Dock first, so there’s a way back in.")
+                        ? Text("Show Tracks in the Dock first, so there’s a way back in.")
                         : Text("Show in Menu Bar"))
             }
 
@@ -78,7 +78,7 @@ struct MenuBarSettingsPane: View {
 
     private var statusLine: String {
         guard showsMenuBarExtra else {
-            return String(localized: "Hidden. Open Motif from the Dock.")
+            return String(localized: "Hidden. Open Tracks from the Dock.")
         }
         return String(localized: "Shows \(style.phrase) while music plays")
     }

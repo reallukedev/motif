@@ -2,8 +2,8 @@ import Foundation
 
 /// Where your music lives on this device.
 nonisolated enum LibraryFolders {
-    /// Your files: Documents/Music, which the Files app shows as On My iPhone › Motif › Music.
-    /// On the Mac it's in Motif's container, and Show Music Folder opens it in Finder.
+    /// Your files: Documents/Music, which the Files app shows as On My iPhone › Tracks › Music.
+    /// On the Mac it's in Tracks’ container, and Show Music Folder opens it in Finder.
     static var music: URL {
         URL.documentsDirectory.appending(path: "Music", directoryHint: .isDirectory)
     }
@@ -19,7 +19,7 @@ nonisolated enum LibraryFolders {
         URL.applicationSupportDirectory.appending(path: "Your Music/Artwork", directoryHint: .isDirectory)
     }
 
-    /// What Motif knows about each file and server, so it doesn't read them all again.
+    /// What Tracks knows about each file and server, so it doesn't read them all again.
     static var index: URL {
         URL.applicationSupportDirectory.appending(path: "Your Music/Index", directoryHint: .isDirectory)
     }

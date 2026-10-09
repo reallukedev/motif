@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Your Party Mix from the history, for Apple Music: the songs you play most that suit the
 /// party, to play, shuffle or keep as a playlist in your library.

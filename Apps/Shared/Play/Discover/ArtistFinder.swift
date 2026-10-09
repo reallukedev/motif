@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Finding artists you've never played, as For You introduces them: the best match first,
 /// in the spotlight with their best songs ready to play, then shelves of the rest, each under

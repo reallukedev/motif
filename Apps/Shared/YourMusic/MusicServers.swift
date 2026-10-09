@@ -1,9 +1,9 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
 /// Your music servers: the ones you've connected, whether each can be reached, and the songs
-/// on each, synced so Motif Radio, the mixes and search can reach every one of them.
+/// on each, synced so Tracks Radio, the mixes and search can reach every one of them.
 @MainActor
 @Observable
 final class MusicServers {
@@ -75,10 +75,10 @@ final class MusicServers {
     }
 
     #if DEBUG
-    /// `-MotifTestServer "http://127.0.0.1:4533|user|password|Name"`: connects a test server at
+    /// `-TracksTestServer "http://127.0.0.1:4533|user|password|Name"`: connects a test server at
     /// launch, for UI checks against a local server without typing into the form.
     private func addTestServer() -> (server: SubsonicServer, password: String)? {
-        guard let value = UserDefaults.standard.string(forKey: "MotifTestServer") else { return nil }
+        guard let value = UserDefaults.standard.string(forKey: "TracksTestServer") else { return nil }
         let parts = value.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         guard parts.count >= 3, let url = URL(string: parts[0]) else { return nil }
         let id = "test-server"
@@ -376,7 +376,7 @@ final class MusicServers {
     static func describe(_ error: SubsonicError) -> String {
         switch error {
         case .wrongCredentials: String(localized: "The username or password is wrong.")
-        case .incompatible: String(localized: "This server is too old for Motif.")
+        case .incompatible: String(localized: "This server is too old for Tracks.")
         case .notFound: String(localized: "The server couldn't find that.")
         case .server(_, let message): message.isEmpty ? String(localized: "The server couldn't answer.") : message
         case .notSubsonic: String(localized: "That address doesn't look like a music server. Check it's the address you use in your browser.")

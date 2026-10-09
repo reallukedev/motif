@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 import SwiftData
-import MotifCore
+import TracksCore
 
 /// Every play, newest first, grouped by day.
 ///

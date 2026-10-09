@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// One part of the Apple Music library: playlists, albums, artists or songs, each filtered as
 /// you type and in the order chosen in the toolbar. On the Mac albums and playlists are grids

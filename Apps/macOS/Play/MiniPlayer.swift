@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Music's Mini Player: the cover alone in a small window that stays above the others, with
 /// the song and its controls over it while the pointer is there.
@@ -160,7 +160,7 @@ private struct MiniPlayer: View {
                 .accessibilityHidden(true)
             Text("Nothing Playing")
                 .font(.headline)
-            Button("Play Motif Radio", systemImage: "dot.radiowaves.left.and.right") { player.playMotifRadio() }
+            Button("Play Tracks Radio", systemImage: "dot.radiowaves.left.and.right") { player.playTracksRadio() }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
         }

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 extension PartyVibe {
     /// Where the page keeps the party last chosen.

@@ -1,7 +1,7 @@
 import Foundation
 import ImageIO
 import CryptoKit
-import MotifCore
+import TracksCore
 
 /// Album covers, fetched once, decoded off the main actor at the size they're drawn, and
 /// kept in memory.
@@ -156,7 +156,7 @@ nonisolated final class ArtworkImages: Sendable {
         /// which it may send unbranded; a plain server's own "no cover" picture, if it has one.
         private static func ask(like url: URL) async -> Set<String> {
             var pictures = Set<String>()
-            for id in ["ext-album-motif-no-such-cover", "motif-no-such-cover"] {
+            for id in ["ext-album-tracks-no-such-cover", "tracks-no-such-cover"] {
                 guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { continue }
                 components.queryItems = (components.queryItems ?? []).map { $0.name == "id" ? URLQueryItem(name: "id", value: id) : $0 }
                 guard let probe = components.url, let data = await download(probe, with: privateSession) else { continue }

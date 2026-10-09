@@ -1,8 +1,8 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
-/// Your Lidarr: where it is, whether it answers, how it files what Motif asks for, and what
+/// Your Lidarr: where it is, whether it answers, how it files what Tracks asks for, and what
 /// it follows, has and is fetching.
 @MainActor
 @Observable
@@ -26,7 +26,7 @@ final class Lidarr {
     private(set) var missing: [LidarrAlbum] = []
     private(set) var upcoming: [LidarrAlbum] = []
 
-    // How it files what Motif adds, kept on this iPhone.
+    // How it files what Tracks adds, kept on this iPhone.
     var qualityProfileID: Int? { didSet { save(qualityProfileID, Self.qualityKey) } }
     var metadataProfileID: Int? { didSet { save(metadataProfileID, Self.metadataKey) } }
     var rootFolderPath: String? { didSet { UserDefaults.standard.set(rootFolderPath, forKey: Self.rootKey) } }
@@ -78,7 +78,7 @@ final class Lidarr {
     /// Whether Lidarr is set up at all, reachable or not.
     var isSetUp: Bool { client != nil }
 
-    /// What Motif sends with an artist it adds. Nil until Lidarr's folders and profiles are known.
+    /// What Tracks sends with an artist it adds. Nil until Lidarr's folders and profiles are known.
     var addOptions: LidarrAddOptions? {
         guard let quality = qualityProfileID ?? qualityProfiles.first?.id,
               let metadata = metadataProfileID ?? metadataProfiles.first?.id,

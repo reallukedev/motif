@@ -1,4 +1,4 @@
-import MotifCore
+import TracksCore
 import SwiftUI
 import UIKit
 
@@ -41,9 +41,9 @@ struct SpeedVolumePage: View {
             }
         }
         #if DEBUG
-        // -MotifSettingsScroll access opens the page at Access, for screenshots.
+        // -TracksSettingsScroll access opens the page at Access, for screenshots.
         .task {
-            guard UserDefaults.standard.string(forKey: "MotifSettingsScroll") == "access" else { return }
+            guard UserDefaults.standard.string(forKey: "TracksSettingsScroll") == "access" else { return }
             try? await Task.sleep(for: .seconds(1))
             proxy.scrollTo(Self.accessID, anchor: .top)
         }

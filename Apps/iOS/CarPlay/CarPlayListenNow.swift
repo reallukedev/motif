@@ -1,7 +1,7 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Listen Now: a few cards to start from, then a handful of shelves, so the tab is a short scan
 /// of pictures rather than of words, as Music's is. Yours come first (what you played, your
@@ -13,11 +13,11 @@ extension CarPlaySceneDelegate {
         let player = model.player
         let model = self.model
         listenNow.emptyViewTitleVariants = [String(localized: "Nothing Played Yet")]
-        listenNow.emptyViewSubtitleVariants = [String(localized: "Pick a mood in Radio to start. Motif makes mixes from what you play.")]
+        listenNow.emptyViewSubtitleVariants = [String(localized: "Pick a mood in Radio to start. Tracks makes mixes from what you play.")]
         let isAppleMusic = model.musicSource == .appleMusic
         var sections: [CPListSection] = []
 
-        // For You: where you left off, the mix for right now, Motif Radio (or Driving, until
+        // For You: where you left off, the mix for right now, Tracks Radio (or Driving, until
         // there's enough listening for it) and Discover. Square covers on cards of their own
         // colour, as Music's, since a square cover can't fill a tall card without being
         // squashed. Each card has only its name, one line, so they all line up; the For You
@@ -25,8 +25,8 @@ extension CarPlaySceneDelegate {
         var cards: [(element: CPListImageRowItemCardElement, row: CarRow)] = []
         var carded: Set<String> = []
         let side = CPListImageRowItemCardElement.maximumImageSize.height
-        // What was playing when Motif last closed, first: getting in the car is picking up.
-        // The car's own Play button can't reach it, since Motif doesn't hand it to the player
+        // What was playing when Tracks last closed, first: getting in the car is picking up.
+        // The car's own Play button can't reach it, since Tracks doesn't hand it to the player
         // until asked, so it doesn't take the audio from another app.
         if let waiting = player.waitingSession?.tracks.first {
             let image = await cover(for: waiting, side: side)
@@ -41,9 +41,9 @@ extension CarPlaySceneDelegate {
             cards.append(await card(for: lead, side: side))
             carded.insert(lead.id)
         }
-        if hasMotifRadio {
-            let image = await CarPlayImages.motifRadio(side: side, scale: scale)
-            let title = String(localized: "Motif Radio")
+        if hasTracksRadio {
+            let image = await CarPlayImages.tracksRadio(side: side, scale: scale)
+            let title = String(localized: "Tracks Radio")
             let card = CPListImageRowItemCardElement(
                 image: image,
                 showsImageFullHeight: false,
@@ -53,10 +53,10 @@ extension CarPlaySceneDelegate {
                 tintColor: CarPlayImages.tint(of: image)
             )
             cards.append((card, CarRow(image: image, title: title, detail: String(localized: "Your station, picked as you drive")) { [weak self] in
-                await self?.startOrResumeMotifRadio()
+                await self?.startOrResumeTracksRadio()
             }))
         } else {
-            // Before Motif Radio: the mood made for the car.
+            // Before Tracks Radio: the mood made for the car.
             let image = await CarPlayImages.mood(.drive, side: side, scale: scale)
             let title = Mood.drive.title
             let card = CPListImageRowItemCardElement(image: image, showsImageFullHeight: false, title: title, subtitle: nil, tintColor: CarPlayImages.tint(of: image))

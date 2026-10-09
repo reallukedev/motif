@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Apple Music access: what it's for, and asking for it or turning it back on; and the audio
 /// quality it's playing at, with where that's chosen. An iPhone page; on the Mac, the same
@@ -92,9 +92,9 @@ struct AppleMusicAccessSection: View {
         case .restricted:
             Text("Screen Time or a device profile doesn’t allow Apple Music access.")
         case .notAsked where model.isShowingSampleData:
-            Text("Not available while Motif shows sample data.")
+            Text("Not available while Tracks shows sample data.")
         case .notAsked:
-            Text("Motif keeps what you play either way. Apple Music asks before anything is shared.")
+            Text("Tracks keeps what you play either way. Apple Music asks before anything is shared.")
         case .allowed:
             Text(turnOffPath)
         }
@@ -103,8 +103,8 @@ struct AppleMusicAccessSection: View {
     #if os(iOS)
     private var openSettingsTitle: LocalizedStringKey { "Open Settings…" }
     private var settingsURL: URL? { URL(string: UIApplication.openSettingsURLString) }
-    private var turnOnPath: LocalizedStringKey { "To turn it on, go to Settings ▸ Apps ▸ Motif and turn on Media & Apple Music." }
-    private var turnOffPath: LocalizedStringKey { "You can turn access off in Settings ▸ Apps ▸ Motif." }
+    private var turnOnPath: LocalizedStringKey { "To turn it on, go to Settings ▸ Apps ▸ Tracks and turn on Media & Apple Music." }
+    private var turnOffPath: LocalizedStringKey { "You can turn access off in Settings ▸ Apps ▸ Tracks." }
     #else
     private var openSettingsTitle: LocalizedStringKey { "Open System Settings…" }
     /// Privacy & Security ▸ Media & Apple Music.

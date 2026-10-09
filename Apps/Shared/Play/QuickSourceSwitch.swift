@@ -1,7 +1,7 @@
 import SwiftUI
 import AppIntents
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Quick Switch: moving between Apple Music and your own music from the Play tab, for someone
 /// who uses both, each for its own times. Off by default, and only offered with both there.

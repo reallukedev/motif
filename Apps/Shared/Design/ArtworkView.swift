@@ -115,7 +115,7 @@ struct GeneratedCover: View {
         let hash = Self.hash(seed)
         let hue = Double(hash % 360) / 360
         let shift = 0.06 + Double((hash >> 9) % 18) / 100
-        let motif = (hash >> 17) % 4
+        let tracks = (hash >> 17) % 4
 
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size)
@@ -129,7 +129,7 @@ struct GeneratedCover: View {
 
             let light = GraphicsContext.Shading.color(.white.opacity(0.22))
             let w = size.width
-            switch motif {
+            switch tracks {
             case 0:
                 context.fill(Path(ellipseIn: CGRect(x: w * 0.38, y: w * 0.32, width: w * 0.8, height: w * 0.8)), with: light)
             case 1:

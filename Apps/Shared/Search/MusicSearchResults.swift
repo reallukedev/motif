@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Apple Music results for a search, from the catalog or the library, in Music's order:
 /// artists, songs, albums, playlists, stations. With no query, recent searches.
@@ -233,7 +233,7 @@ struct MusicSearchResults: View {
             ContentUnavailableView {
                 Label("Search Apple Music", systemImage: "magnifyingglass")
             } description: {
-                Text("Let Motif use Apple Music to search its catalog and your library.")
+                Text("Let Tracks use Apple Music to search its catalog and your library.")
             } actions: {
                 if model.musicAuthorization == .notDetermined {
                     Button("Allow Apple Music Access") { Task { await model.requestMusicAccess() } }

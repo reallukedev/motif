@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 extension Mood {
     var title: String {
@@ -317,7 +317,7 @@ struct MoodView: View {
                     ContentUnavailableView(
                         "Nothing for \(mood.title) Yet",
                         systemImage: mood.symbol,
-                        description: Text("Apple Music couldn't be reached, and none of your songs suit it yet. As Motif learns the genres of what you play, they'll show up here.")
+                        description: Text("Apple Music couldn't be reached, and none of your songs suit it yet. As Tracks learns the genres of what you play, they'll show up here.")
                     )
                 }
             }
@@ -437,7 +437,7 @@ struct MoodView: View {
         switch flow {
         case _ where model.musicSource == .yourMusic:
             yours.isEmpty
-                ? String(localized: "None of your music suits \(mood.title) yet. Motif goes by each song's genre.")
+                ? String(localized: "None of your music suits \(mood.title) yet. Tracks goes by each song's genre.")
                 : String(localized: "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
         case .yours:
             yours.isEmpty
@@ -750,7 +750,7 @@ enum MoodPlayback {
                 LiveMix.mood(mood, from: tracks, history: history, signals: signals, seed: .random(in: 0...UInt64.max))
             }
             guard !mix.isEmpty else {
-                player.problem = .failed(String(localized: "None of your music suits \(mood.title) yet. Motif goes by each song's genre."))
+                player.problem = .failed(String(localized: "None of your music suits \(mood.title) yet. Tracks goes by each song's genre."))
                 return
             }
             await player.startLive(mix, from: PlayContext(kind: .endless, title: mood.title), startingWith: first)

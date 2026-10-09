@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Adding songs to Handpicked, as Music adds songs to a playlist: search at the top, then
 /// your playlists, what you've played lately and what you play most. Each song's ⊕ picks it
@@ -235,19 +235,19 @@ private struct PickRow: View {
 /// A playlist to pick songs from: Apple Music's, or one of yours in your own music.
 enum PickerPlaylist: Hashable, Identifiable {
     case appleMusic(Playlist)
-    case motif(MotifPlaylist)
+    case tracks(TracksPlaylist)
 
     var id: String {
         switch self {
         case .appleMusic(let playlist): "am.\(playlist.id.rawValue)"
-        case .motif(let playlist): "motif.\(playlist.id.uuidString)"
+        case .tracks(let playlist): "tracks.\(playlist.id.uuidString)"
         }
     }
 
     var name: String {
         switch self {
         case .appleMusic(let playlist): playlist.name
-        case .motif(let playlist): playlist.name
+        case .tracks(let playlist): playlist.name
         }
     }
 
@@ -295,7 +295,7 @@ private struct PickerPlaylists: View {
     private func load() async {
         guard playlists == nil else { return }
         if model.musicSource == .yourMusic {
-            playlists = music.playlists.recent.map(PickerPlaylist.motif)
+            playlists = music.playlists.recent.map(PickerPlaylist.tracks)
             return
         }
         var request = MusicLibraryRequest<Playlist>()
@@ -315,7 +315,7 @@ private struct PickerPlaylistRow: View {
             switch playlist {
             case .appleMusic(let playlist):
                 CoverImage(cover: playlist.artwork.map(CoverArt.artwork) ?? .url(nil, seed: playlist.name), size: 44)
-            case .motif(let playlist):
+            case .tracks(let playlist):
                 CoverImage(cover: .url(nil, seed: playlist.name), size: 44)
             }
             Text(playlist.name)
@@ -359,7 +359,7 @@ private struct PickerPlaylistSongs: View {
     private func load() async {
         guard songs == nil else { return }
         switch playlist {
-        case .motif(let playlist):
+        case .tracks(let playlist):
             var seen = Set<String>()
             songs = music.songs(in: playlist, facts: feed.facts)
                 .filter { music.isPlayable($0) && seen.insert($0.identity).inserted }

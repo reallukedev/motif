@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The song's position, as Music draws it: a thin track that thickens under the finger, the
 /// time gone on the left and the time left on the right.

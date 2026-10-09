@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// The artists Motif never plays or suggests, to look over and unblock. Artists are blocked
+/// The artists Tracks never plays or suggests, to look over and unblock. Artists are blocked
 /// from their page or a song's menu, where you meet them, not typed in here.
 ///
 /// Reads the player's copy of the list, which follows other devices, so a block made on the
@@ -25,8 +25,8 @@ struct BlockedArtistsSection: View {
             Text("Blocked Artists")
         } footer: {
             Text(names.isEmpty
-                ? "Block an artist from their page or a song’s menu, and Motif won’t play or suggest them on any of your devices."
-                : "Motif won’t play or suggest these artists on any of your devices, and skips their songs on stations. Songs you’ve already played stay in your history.")
+                ? "Block an artist from their page or a song’s menu, and Tracks won’t play or suggest them on any of your devices."
+                : "Tracks won’t play or suggest these artists on any of your devices, and skips their songs on stations. Songs you’ve already played stay in your history.")
         }
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: names)
     }

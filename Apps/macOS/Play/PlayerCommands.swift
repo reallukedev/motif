@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Opens the full player over the window.
 struct OpenFullPlayerAction {
@@ -77,7 +77,7 @@ struct ControlsCommands: Commands {
     let player: PlayerModel
     @FocusedValue(\.playerWindow) private var window
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
 
     var body: some Commands {
@@ -136,7 +136,7 @@ struct ControlsCommands: Commands {
 
             Divider()
 
-            Button("Play Motif Radio", systemImage: "dot.radiowaves.left.and.right") { player.playMotifRadio() }
+            Button("Play Tracks Radio", systemImage: "dot.radiowaves.left.and.right") { player.playTracksRadio() }
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(!isRadioOn)
 

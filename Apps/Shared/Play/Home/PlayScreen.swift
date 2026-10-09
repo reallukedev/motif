@@ -1,8 +1,8 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// The Play tab: start something in one tap, and have Motif keep every song of it.
+/// The Play tab: start something in one tap, and have Tracks keep every song of it.
 ///
 /// Music's Home, rebuilt around the history. The top is what you usually play at this hour;
 /// below it, Apple Music's Recently Played, mixes made from your own listening, radio, your
@@ -12,7 +12,7 @@ struct PlayScreen: View {
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
     @State private var showsSubscriptionOffer = false
     @State private var showsSettings = LaunchScene.opensPlaySettings
@@ -61,7 +61,7 @@ struct PlayScreen: View {
             }
         }
         #if os(iOS)
-        .motifSearch(isPresented: $isSearching, scopeKey: "playSearchScope", defaultScope: .appleMusic)
+        .tracksSearch(isPresented: $isSearching, scopeKey: "playSearchScope", defaultScope: .appleMusic)
         #endif
         #if os(macOS)
         .navigationTitle("Listen Now")
@@ -119,7 +119,7 @@ struct PlayScreen: View {
         switch section {
         case .suggestedSongs:
             if blocker == nil {
-                // Motif Radio leads the crate; with the crate hidden, it leads these instead.
+                // Tracks Radio leads the crate; with the crate hidden, it leads these instead.
                 SuggestedSongsSection(includesRadio: !layout.isVisible(.forYou) || crateCards.isEmpty)
             }
         case .suggestedArtists:
@@ -207,7 +207,7 @@ struct PlayScreen: View {
             PlayStateCard(
                 symbol: "music.note",
                 title: String(localized: "Playing Needs Apple Music"),
-                message: String(localized: "Motif plays songs from Apple Music and keeps every one you hear. Your history and stats work without it.")
+                message: String(localized: "Tracks plays songs from Apple Music and keeps every one you hear. Your history and stats work without it.")
             ) {
                 if feed.subscription?.canBecomeSubscriber == true {
                     Button("Try Apple Music") { showsSubscriptionOffer = true }
@@ -223,7 +223,7 @@ struct PlayScreen: View {
         if blocker != nil {
             // Nothing to offer until it can play.
         } else if !cards.isEmpty {
-            // Motif Radio in front when there's enough history for it, this hour's mix beside it.
+            // Tracks Radio in front when there's enough history for it, this hour's mix beside it.
             ForYouCrate(cards: cards, leadID: cards.contains { $0.id == "station" } ? "station" : leadMix?.id)
         } else if let station = feed.liveStations.first {
             StationHero(item: station)
@@ -232,7 +232,7 @@ struct PlayScreen: View {
             PlayStateCard(
                 symbol: "play.circle",
                 title: String(localized: "Play Something"),
-                message: String(localized: "Search for a song, or open your library. Motif keeps every song you play here, and makes mixes from them as you listen.")
+                message: String(localized: "Search for a song, or open your library. Tracks keeps every song you play here, and makes mixes from them as you listen.")
             ) {
                 Button("Search Apple Music") {
                     #if os(macOS)
@@ -249,7 +249,7 @@ struct PlayScreen: View {
         }
     }
 
-    /// The crate: Motif Radio in the middle, starting in front, with this hour's mix, Discover
+    /// The crate: Tracks Radio in the middle, starting in front, with this hour's mix, Discover
     /// and the rest of the day's mixes either side of it.
     private var crateCards: [ForYouCard] {
         var cards: [ForYouCard] = []
@@ -265,7 +265,7 @@ struct PlayScreen: View {
         feed.mixes.rightNow ?? feed.mixes.mixes.first
     }
 
-    /// Whether there's enough history for Motif Radio to be worth playing.
+    /// Whether there's enough history for Tracks Radio to be worth playing.
     private var hasHistoryForRadio: Bool {
         !feed.mixes.all.isEmpty && model.library.history.captures.count >= 20
     }
@@ -372,11 +372,11 @@ struct PlayAccessCard: View {
         PlayStateCard(
             symbol: model.musicAuthorization == .notDetermined ? "play.circle" : "exclamationmark.triangle.fill",
             title: model.musicAuthorization == .notDetermined
-                ? String(localized: "Play Apple Music in Motif")
+                ? String(localized: "Play Apple Music in Tracks")
                 : String(localized: "Apple Music Access Is Off"),
             message: model.musicAuthorization == .notDetermined
-                ? String(localized: "Play your library, radio and mixes made from your listening. Motif keeps every song you hear, even in the background.")
-                : String(localized: "Turn on Media & Apple Music for Motif in Settings to play music here.")
+                ? String(localized: "Play your library, radio and mixes made from your listening. Tracks keeps every song you hear, even in the background.")
+                : String(localized: "Turn on Media & Apple Music for Tracks in Settings to play music here.")
         ) {
             if model.musicAuthorization == .notDetermined {
                 Button("Allow Apple Music Access") {

@@ -1,20 +1,20 @@
 import SwiftUI
 import AppKit
-import MotifCore
+import TracksCore
 
-/// The Mac's Play pane: where Listen Now's music comes from, Motif Radio, where Motif opens,
+/// The Mac's Play pane: where Listen Now's music comes from, Tracks Radio, where Tracks opens,
 /// explicit songs, Listen Now's sections and the memory behind the mixes. Only what applies on
 /// a Mac: no Shake to Play or Offline Mode, no cellular streaming, and no song transitions,
 /// since neither MusicKit's player nor Your Music's crossfades on the Mac.
 struct PlaySettingsPane: View {
-    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .summary
+    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(PlayPreferences.radioTuningKey) private var storedTuning = ""
     @AppStorage(PlayPreferences.radioFollowsTimeKey) private var radioFollowsTime = true
     @AppStorage(PlayPreferences.radioDayKey) private var storedRadioDay = ""
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
-    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
+    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.tracks
     @AppStorage(AutomaticDownloads.storageKey) private var automaticDownloads = true
     /// The Mac's one streaming setting, for every network.
     @AppStorage(StreamQuality.wiFiKey) private var streamingQuality = StreamQuality.original
@@ -36,7 +36,7 @@ struct PlaySettingsPane: View {
 
     #if DEBUG
     private static var debugAnchor: UnitPoint {
-        switch UserDefaults.standard.string(forKey: "MotifSettingsAnchor") {
+        switch UserDefaults.standard.string(forKey: "TracksSettingsAnchor") {
         case "center": .center
         case "bottom": .bottom
         default: .top
@@ -71,7 +71,7 @@ struct PlaySettingsPane: View {
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: radioDownloadsFirst)
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: radioFollowsTime)
         #if DEBUG
-        // -MotifSettingsAnchor center (or bottom) opens the pane scrolled there, for screenshots.
+        // -TracksSettingsAnchor center (or bottom) opens the pane scrolled there, for screenshots.
         .defaultScrollAnchor(Self.debugAnchor)
         #endif
         .settingsPane()
@@ -126,7 +126,7 @@ struct PlaySettingsPane: View {
             }
             SettingsDetailRow(
                 title: Text("Music Folder"),
-                detail: Text("Where your own files live. Put songs in, and Motif finds them.")
+                detail: Text("Where your own files live. Put songs in, and Tracks finds them.")
             ) {
                 Button("Show in Finder", action: showMusicFolder)
                     .help(LibraryFolders.music.path(percentEncoded: false))
@@ -135,7 +135,7 @@ struct PlaySettingsPane: View {
                 title: Text("Look for New Songs"),
                 detail: music.isScanning
                     ? Text("Looking in the Music folder…")
-                    : Text("Motif looks each time it opens. Look again after adding songs in Finder.")
+                    : Text("Tracks looks each time it opens. Look again after adding songs in Finder.")
             ) {
                 if music.isScanning {
                     ProgressView()
@@ -212,12 +212,12 @@ struct PlaySettingsPane: View {
         openWindow(id: "main")
     }
 
-    // MARK: - Motif Radio
+    // MARK: - Tracks Radio
 
     private var radioSection: some View {
         Section {
             SettingsSwitch(
-                "Show Motif Radio",
+                "Show Tracks Radio",
                 detail: isRadioOn
                     ? Text("Your own station, from everything you love and new finds like it.")
                     : Text("Hidden from Listen Now and Radio."),
@@ -233,7 +233,7 @@ struct PlaySettingsPane: View {
                     isOn: $radioFollowsTime
                 )
                 .onChange(of: radioFollowsTime) {
-                    Task { await model.player.retuneMotifRadio() }
+                    Task { await model.player.retuneTracksRadio() }
                 }
                 if radioFollowsTime {
                     SettingsDetailRow(title: Text("Through the Day"), detail: Text(RadioDayWords.summary(RadioDay(stored: storedRadioDay)))) {
@@ -260,7 +260,7 @@ struct PlaySettingsPane: View {
                 }
             }
         } header: {
-            Text("Motif Radio")
+            Text("Tracks Radio")
         } footer: {
             Text(radioFooter)
                 .contentTransition(.opacity)
@@ -281,7 +281,7 @@ struct PlaySettingsPane: View {
         )
     }
 
-    // MARK: - Around Motif
+    // MARK: - Around Tracks
 
     private var aroundSection: some View {
         Section {
@@ -298,15 +298,15 @@ struct PlaySettingsPane: View {
             SettingsSwitch(
                 "Your Other Devices",
                 detail: showsNearby
-                    ? Text("Shows what Motif on your iPhone or iPad is playing, nearby.")
-                    : Text("Motif doesn’t look for your other devices."),
+                    ? Text("Shows what Tracks on your iPhone or iPad is playing, nearby.")
+                    : Text("Tracks doesn’t look for your other devices."),
                 isOn: $showsNearby
             )
             .onChange(of: showsNearby) { _, on in
                 if on { model.nearby.start() } else { model.nearby.stop() }
             }
         } header: {
-            Text("Around Motif")
+            Text("Around Tracks")
         } footer: {
             Text(aroundFooter)
                 .contentTransition(.opacity)
@@ -346,15 +346,15 @@ struct PlaySettingsPane: View {
 }
 
 /// Lidarr in the Mac pane: where it stands, and a sheet to connect it or change how it files
-/// what Motif adds. A pane has nowhere to push its page.
+/// what Tracks adds. A pane has nowhere to push its page.
 private struct PlaySettingsLidarrRow: View {
     @Environment(Lidarr.self) private var lidarr
-    /// `-MotifLidarrSheet YES` opens the sheet at once, for screenshots.
+    /// `-TracksLidarrSheet YES` opens the sheet at once, for screenshots.
     @State private var showsLidarr = Self.opensSheet
 
     private static var opensSheet: Bool {
         #if DEBUG
-        UserDefaults.standard.bool(forKey: "MotifLidarrSheet")
+        UserDefaults.standard.bool(forKey: "TracksLidarrSheet")
         #else
         false
         #endif
@@ -368,7 +368,7 @@ private struct PlaySettingsLidarrRow: View {
         } header: {
             Text("Requests")
         } footer: {
-            Text("Connect Lidarr to add artists and ask for albums from anywhere in Motif. What Lidarr files, your server plays, and Motif can download.")
+            Text("Connect Lidarr to add artists and ask for albums from anywhere in Tracks. What Lidarr files, your server plays, and Tracks can download.")
         }
         .sheet(isPresented: $showsLidarr) {
             if isConnected {
@@ -405,7 +405,7 @@ private struct PlaySettingsLidarrSheet: View {
             VStack(alignment: .leading, spacing: SettingsSpacing.tight) {
                 Text("Lidarr")
                     .font(.title2.bold())
-                Text("How Lidarr files the artists and albums you add from Motif.")
+                Text("How Lidarr files the artists and albums you add from Tracks.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -431,11 +431,11 @@ private struct PlaySettingsLidarrSheet: View {
 }
 
 #if DEBUG
-/// `-MotifAppearance dark` draws the app dark whatever the system's set to, for screenshots
+/// `-TracksAppearance dark` draws the app dark whatever the system's set to, for screenshots
 /// of the pane and the sheets it opens. Debug builds only.
 enum PlaySettingsScreenshot {
     static func applyAppearance() {
-        if UserDefaults.standard.string(forKey: "MotifAppearance") == "dark" {
+        if UserDefaults.standard.string(forKey: "TracksAppearance") == "dark" {
             NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
@@ -445,7 +445,7 @@ enum PlaySettingsScreenshot {
 /// app's defaults, and a preview never opens the real store.
 @MainActor
 private let previewModel: AppModel = {
-    UserDefaults.standard.setVolatileDomain(["MotifDemoData": true], forName: UserDefaults.argumentDomain)
+    UserDefaults.standard.setVolatileDomain(["TracksDemoData": true], forName: UserDefaults.argumentDomain)
     return AppModel()
 }()
 

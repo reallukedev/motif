@@ -21,7 +21,7 @@ extension View {
 }
 
 #if os(iOS)
-/// An iPhone playing music keeps Motif running once it's left, and what ticks would go on
+/// An iPhone playing music keeps Tracks running once it's left, and what ticks would go on
 /// updating a screen nobody sees. iOS then waits on those updates to snapshot the app, and a
 /// hot, busy phone gives up on them after ten seconds and ends it.
 private struct ScenePhaseTracker: ViewModifier {

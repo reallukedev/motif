@@ -1,10 +1,10 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Places the Play tab, and Apple Music results in Search, can push.
 enum PlayRoute: Hashable {
-    /// A mix, by ``MotifCore/Mix/id``, so it follows the history as it's rebuilt.
+    /// A mix, by ``TracksCore/Mix/id``, so it follows the history as it's rebuilt.
     case mix(String)
     case album(Album)
     case playlist(Playlist)
@@ -33,15 +33,15 @@ enum PlayRoute: Hashable {
     case serverArtist(ServerArtist)
     /// All your songs, albums or artists, or what's downloaded.
     case yourMusic(YourMusicList)
-    /// A playlist you made in Motif, by its id.
-    case motifPlaylist(UUID)
+    /// A playlist you made in Tracks, by its id.
+    case tracksPlaylist(UUID)
     /// Lidarr: what it's fetching, wants, has coming and follows.
     case lidarr
     /// An artist Lidarr follows, by its id there.
     case lidarrArtist(Int)
     /// An artist from the history, known by name: found in Apple Music when the page opens.
     case artistNamed(String, identity: String)
-    /// One of Motif's own pages, for a menu that can only push through ``OpenPlayRouteAction``.
+    /// One of Tracks’ own pages, for a menu that can only push through ``OpenPlayRouteAction``.
     case stats(Route)
 }
 
@@ -74,7 +74,7 @@ enum LibrarySection: String, CaseIterable, Identifiable, Hashable {
 @MainActor
 @Observable
 final class PlayNavigator {
-    /// Not typed: the tab pushes Motif's own pages too (a song's stats, an artist's).
+    /// Not typed: the tab pushes Tracks’ own pages too (a song's stats, an artist's).
     var path = NavigationPath()
 
     func show(_ route: PlayRoute) {
@@ -121,7 +121,7 @@ private struct PlayDestination: View {
         case .serverAlbum(let serverID, let albumID): ServerAlbumPage(serverID: serverID, albumID: albumID)
         case .serverArtist(let artist): ServerArtistPage(artist: artist)
         case .yourMusic(let list): list.page
-        case .motifPlaylist(let id): MotifPlaylistPage(playlistID: id)
+        case .tracksPlaylist(let id): TracksPlaylistPage(playlistID: id)
         case .lidarr: LidarrPage()
         case .lidarrArtist(let id): LidarrArtistPage(artistID: id)
         case .artistNamed(let name, let identity): FavoriteArtistPage(name: name, identity: identity)

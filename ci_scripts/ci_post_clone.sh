@@ -17,10 +17,10 @@ xcodegen generate
 # Last.fm credentials come from the workflow's secret environment variables. The committed
 # xcconfig leaves them empty and includes Config/Secrets.xcconfig if it exists, the same
 # file a local release build uses. ci_pre_xcodebuild.sh stops an archive without them.
-if [ -n "$MOTIF_LASTFM_API_KEY" ] && [ -n "$MOTIF_LASTFM_SECRET" ]; then
-  printf 'MOTIF_LASTFM_API_KEY = %s\nMOTIF_LASTFM_SECRET = %s\n' \
-    "$MOTIF_LASTFM_API_KEY" "$MOTIF_LASTFM_SECRET" > Config/Secrets.xcconfig
+if [ -n "$TRACKS_LASTFM_API_KEY" ] && [ -n "$TRACKS_LASTFM_SECRET" ]; then
+  printf 'TRACKS_LASTFM_API_KEY = %s\nTRACKS_LASTFM_SECRET = %s\n' \
+    "$TRACKS_LASTFM_API_KEY" "$TRACKS_LASTFM_SECRET" > Config/Secrets.xcconfig
   echo "Wrote Config/Secrets.xcconfig"
 else
-  echo "MOTIF_LASTFM_API_KEY or MOTIF_LASTFM_SECRET not set; Last.fm will report it isn't set up."
+  echo "TRACKS_LASTFM_API_KEY or TRACKS_LASTFM_SECRET not set; Last.fm will report it isn't set up."
 fi

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Up Next, in place of the cover: the song playing, then what's queued, which can be
 /// reordered and trimmed. Shuffle and repeat live here, as in Music.
@@ -108,14 +108,14 @@ struct QueueView: View {
                 }
             }
 
-            if player.isPlayingMotifRadio, let openRadioTuner {
+            if player.isPlayingTracksRadio, let openRadioTuner {
                 tuneButton(openRadioTuner)
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    /// What Motif Radio is tuned to, and the way to change it, under what it's doing: tuning
+    /// What Tracks Radio is tuned to, and the way to change it, under what it's doing: tuning
     /// opens from the station it changes.
     private func tuneButton(_ open: OpenRadioTunerAction) -> some View {
         Button { open() } label: {
@@ -123,7 +123,7 @@ struct QueueView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.subheadline.weight(.semibold))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Tune Motif Radio")
+                    Text("Tune Tracks Radio")
                         .font(.subheadline.weight(.semibold))
                     Text(RadioTuning(stored: storedTuning).shortSummary)
                         .font(.caption)
@@ -219,7 +219,7 @@ struct QueueView: View {
         .animation(.easeOut(duration: 0.2), value: steering)
     }
 
-    /// Finds Motif Radio played and removed after, to keep one you liked.
+    /// Finds Tracks Radio played and removed after, to keep one you liked.
     private var playedAndRemoved: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Played and Removed")
@@ -261,7 +261,7 @@ struct QueueView: View {
     /// The row's insets, top and bottom. See ``row(_:at:isLast:)``.
     private static let rowInsets: CGFloat = 12
 
-    /// A new find Motif Radio is getting ready: downloading, or waiting for its server.
+    /// A new find Tracks Radio is getting ready: downloading, or waiting for its server.
     private func isGettingReady(_ track: PlayerTrack) -> Bool {
         guard let local = track.local, local.isFromServer else { return false }
         let copy = music.resolved(local)

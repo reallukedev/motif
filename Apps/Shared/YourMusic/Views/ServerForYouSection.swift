@@ -1,9 +1,9 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One of the shelves a server fills for you, in columns of four as Music lays out songs:
 /// Picked for You, songs by the artists you play and ones like them, yours and new together;
-/// or Suggested Songs, songs by artists new to you, led by Motif Radio. Both go on for as long
+/// or Suggested Songs, songs by artists new to you, led by Tracks Radio. Both go on for as long
 /// as they're scrolled: the last column coming into view asks for more, as fast as the
 /// server's budget allows. With Octo in front of the server most are songs it finds: they play straight away,
 /// and Add to Your Music has Octo fetch the file. Needs no Apple Music, no listening history and
@@ -11,13 +11,13 @@ import MotifCore
 struct ServerForYouSection: View {
     let server: SubsonicServer
     var shelf: ServerDiscovery.Shelf = .picks
-    /// Off where Motif Radio leads the crate above instead.
+    /// Off where Tracks Radio leads the crate above instead.
     var includesRadio = true
 
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
     @Environment(PlayerModel.self) private var player
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @State private var picksArtists = false
     /// The columns on screen: while the last is among them, more are found.
     @State private var columnsInView: [LocalTrack.ID] = []
@@ -157,7 +157,7 @@ struct ServerForYouSection: View {
         .background(Color.cardFill, in: .rect(cornerRadius: Metrics.cardRadius, style: .continuous))
     }
 
-    /// The songs in columns, Motif Radio first on Suggested Songs.
+    /// The songs in columns, Tracks Radio first on Suggested Songs.
     /// - Parameters:
     ///   - columns: whole columns only while more are coming, so the end is never a column of
     ///     gaps; more are asked for as the last comes into view.
@@ -167,7 +167,7 @@ struct ServerForYouSection: View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: PlayMetrics.shelfSpacing) {
                 if shelf == .suggested, isRadioOn, includesRadio {
-                    MotifRadioTile(side: rowHeight * CGFloat(SuggestionShelfPaging.rowsPerColumn))
+                    TracksRadioTile(side: rowHeight * CGFloat(SuggestionShelfPaging.rowsPerColumn))
                 }
                 ForEach(columns) { column in
                     VStack(spacing: 0) {

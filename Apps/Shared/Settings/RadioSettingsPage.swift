@@ -1,6 +1,6 @@
 import SwiftUI
 import WidgetKit
-import MotifCore
+import TracksCore
 
 /// Where radio songs go, which stations count, and Play Back. An iPhone page, and the Mac's
 /// Radio pane.
@@ -20,7 +20,7 @@ struct RadioSettingsPage: View {
     #endif
 
     /// Typed here and saved on Return or on leaving, so a half-typed name never names the
-    /// playlist Motif writes to.
+    /// playlist Tracks writes to.
     @State private var playlistName = ""
     /// A diagnostic override for the machine it's switched on, so it doesn't mirror.
     @State private var treatsEverythingAsRadio = CaptureSettings().forceCapture
@@ -66,7 +66,7 @@ struct RadioSettingsPage: View {
                 "Add Songs to a Playlist",
                 detail: addsSongs
                     ? Text("Songs you hear on Apple Music radio go into a playlist in your library.")
-                    : Text("Radio songs stay in your Motif history only."),
+                    : Text("Radio songs stay in your Tracks history only."),
                 isOn: $addsSongs
             )
             if addsSongs {
@@ -95,7 +95,7 @@ struct RadioSettingsPage: View {
     private var playlistFooter: some View {
         // Said once, where the choice is made: nothing can take a song back out.
         if addsSongs {
-            Text("Songs stay in the playlist until you remove them in Apple Music. Motif can add songs but can’t take them out.")
+            Text("Songs stay in the playlist until you remove them in Apple Music. Tracks can add songs but can’t take them out.")
         } else {
             #if os(iOS)
             Text("Turn this on to collect what you hear on radio in a playlist in your library.")
@@ -112,7 +112,7 @@ struct RadioSettingsPage: View {
             SettingsSwitch(
                 "Play Back Automatically",
                 detail: playsBack
-                    ? Text("A couple of minutes after a station stops, Motif plays its songs again so Apple Music counts them.")
+                    ? Text("A couple of minutes after a station stops, Tracks plays its songs again so Apple Music counts them.")
                     : Text("Radio songs don’t reach your play counts, Replay or recommendations until you play them back."),
                 isOn: $playsBack
             )
@@ -159,7 +159,7 @@ struct RadioSettingsPage: View {
                 "Treat Everything as Radio",
                 detail: treatsEverythingAsRadio
                     ? Text("Every song is kept and handled as radio, even ones you chose.")
-                    : Text("For when Motif misses a station. Stays on this Mac."),
+                    : Text("For when Tracks misses a station. Stays on this Mac."),
                 isOn: $treatsEverythingAsRadio
             )
         } header: {
@@ -168,7 +168,7 @@ struct RadioSettingsPage: View {
             #if os(iOS)
             Text(treatsEverythingAsRadio
                 ? "Every song is kept and handled as radio, even ones you chose. This stays on this iPhone."
-                : "Turn this on if Motif ever misses a station. It stays on this iPhone.")
+                : "Turn this on if Tracks ever misses a station. It stays on this iPhone.")
                 .contentTransition(.opacity)
             #endif
         }

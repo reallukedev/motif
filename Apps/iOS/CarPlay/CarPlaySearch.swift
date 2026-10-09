@@ -1,7 +1,7 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Search, as Music has it in the car: Siri at the top, since CarPlay gives music apps a voice
 /// rather than a keyboard, then what you searched for lately on the phone, each a tap from its
@@ -34,22 +34,22 @@ extension CarPlaySceneDelegate {
         return [CPListSection(items: rows, header: String(localized: "Try Asking Siri"), sectionIndexTitle: nil)]
     }
 
-    /// Things Siri understands in Motif, drawn from your own listening where it can be, so each
+    /// Things Siri understands in Tracks, drawn from your own listening where it can be, so each
     /// reads as something you'd really ask for.
     private func suggestions() -> [(phrase: String, action: () async -> Void)] {
         let model = self.model
         var suggestions: [(phrase: String, action: () async -> Void)] = []
-        if hasMotifRadio {
-            suggestions.append((String(localized: "“Play Motif Radio”"), { [weak self] in await self?.startOrResumeMotifRadio() }))
+        if hasTracksRadio {
+            suggestions.append((String(localized: "“Play Tracks Radio”"), { [weak self] in await self?.startOrResumeTracksRadio() }))
         }
-        suggestions.append((String(localized: "“Play driving music”"), { await MotifPlayback.start(.drive, model: model) }))
+        suggestions.append((String(localized: "“Play driving music”"), { await TracksPlayback.start(.drive, model: model) }))
         if let last = model.library.history.captures.last, model.player.canPlay(songID: last.songID) {
             let song = HistorySong(songID: last.songID, title: last.title, artistName: last.artistName, albumTitle: last.albumTitle, artworkURL: last.artworkURL)
             suggestions.append((String(localized: "“Play \(last.title) by \(last.artistName)”"), {
                 await model.player.start(.history([song]), from: .songs(song.title))
             }))
         }
-        suggestions.append((String(localized: "“Play something chill”"), { await MotifPlayback.start(.chill, model: model) }))
+        suggestions.append((String(localized: "“Play something chill”"), { await TracksPlayback.start(.chill, model: model) }))
         return suggestions
     }
 

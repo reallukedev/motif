@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// Plays songs from a chart where the app plays songs: in Motif's own player, or handed to
+/// Plays songs from a chart where the app plays songs: in Tracks’ own player, or handed to
 /// Apple Music when Settings sends them there.
 struct ChartPlayback: DynamicProperty {
     @Environment(\.playSongs) private var playSongs
@@ -9,7 +9,7 @@ struct ChartPlayback: DynamicProperty {
     @Environment(PlayerModel.self) private var player
     @Environment(AppModel.self) private var model
 
-    /// The songs that can be played: Motif's player knows sample songs by name, Apple Music
+    /// The songs that can be played: Tracks’ player knows sample songs by name, Apple Music
     /// needs a song the catalog identified.
     func playable(_ songs: [MixSong]) -> [MixSong] {
         if playSongs != nil {
@@ -31,7 +31,7 @@ struct ChartPlayback: DynamicProperty {
         }
     }
 
-    /// Play Next and Play Last, which only Motif's player has.
+    /// Play Next and Play Last, which only Tracks’ player has.
     var canQueue: Bool { playSongs != nil }
 
     func enqueue(_ song: MixSong, next: Bool) {

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Whether the statistics count Apple Music and Your Music apart, and which one is on show.
 ///

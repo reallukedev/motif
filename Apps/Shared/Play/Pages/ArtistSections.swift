@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A titled list of an artist's songs. Five rows on iPhone, a line between each as in Music;
 /// on the Mac two columns of compact rows, Music's Top Songs there. "See All" opens the rest.

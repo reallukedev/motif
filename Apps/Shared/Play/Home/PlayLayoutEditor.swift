@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 extension PlaySection {
     var title: LocalizedStringKey {
@@ -20,16 +20,16 @@ extension PlaySection {
         }
     }
 
-    /// What's in it, for the row under its name. Motif Radio leads the crate, and leads
+    /// What's in it, for the row under its name. Tracks Radio leads the crate, and leads
     /// Suggested Songs only while the crate is hidden, so that row says so only then.
     func detail(in layout: PlayLayout) -> LocalizedStringKey {
         switch self {
         case .suggestedSongs:
             layout.isVisible(.forYou)
                 ? "Songs you’ve never played, picked for you"
-                : "Motif Radio, and songs you’ve never played"
+                : "Tracks Radio, and songs you’ve never played"
         case .suggestedArtists: "Like your favorites, but new to you"
-        case .forYou: "This hour’s mix, Motif Radio and more, to flip through"
+        case .forYou: "This hour’s mix, Tracks Radio and more, to flip through"
         case .recentlyPlayed: "Albums, playlists and stations"
         case .yourArtists: "The artists you play most lately"
         case .moods: "Handpicked, Feel Good, Chill and more"
@@ -91,7 +91,7 @@ extension PlaySection {
         case .suggestedSongs:
             return layout.isVisible(.forYou)
                 ? "Songs your server finds that you’ve never played"
-                : "Motif Radio, and songs your server finds"
+                : "Tracks Radio, and songs your server finds"
         case .recentlyPlayed: return "Albums of yours you’ve played lately"
         case .genres: return "The genres in your music, the most played first"
         case .newReleases: return "Songs of yours you’ve never played"
@@ -128,7 +128,7 @@ extension PlayLayout {
     func offered(for source: MusicSource) -> [PlaySection] { order.filter { $0.isOffered(for: source) } }
 }
 
-/// Editing Play's sections, as a sheet: over the Play tab when launched with `-MotifEditPlay`,
+/// Editing Play's sections, as a sheet: over the Play tab when launched with `-TracksEditPlay`,
 /// and from the Mac's Play settings as "Edit Listen Now…". On iPhone it's also a page in
 /// Settings ▸ Play.
 struct PlayLayoutEditor: View {

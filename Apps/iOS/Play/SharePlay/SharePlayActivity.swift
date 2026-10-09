@@ -2,18 +2,18 @@ import SwiftUI
 import GroupActivities
 import CoreTransferable
 
-/// Motif's SharePlay: one iPhone keeps playing, and everyone who joins picks songs for its
-/// queue from their own Motif.
+/// Tracks’ SharePlay: one iPhone keeps playing, and everyone who joins picks songs for its
+/// queue from their own Tracks.
 ///
 /// Apple Music's own "SharePlay in the car" belongs to the Music app, and MusicKit's player
-/// has no group session of its own, so this is Motif's, and passengers need Motif too. It
+/// has no group session of its own, so this is Tracks’, and passengers need Tracks too. It
 /// starts from the share sheet: sent in Messages, or offered to iPhones held close by over
 /// AirDrop, which starts a Messages conversation for the group. No FaceTime call is needed.
 ///
 /// The activity carries nothing: the session knows which iPhone started it, and that one is
 /// the host.
 nonisolated struct SharePlayActivity: GroupActivity, Transferable {
-    static let activityIdentifier = "dev.luke.motif.add-songs"
+    static let activityIdentifier = "dev.luke.tracks.add-songs"
 
     var metadata: GroupActivityMetadata {
         var metadata = GroupActivityMetadata()

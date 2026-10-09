@@ -1,5 +1,5 @@
 import Foundation
-import MotifCore
+import TracksCore
 
 /// The words for Settings ▸ Play on iPhone and the Mac's Play pane, worked out from plain
 /// values so both read the same in every state and the views only lay them out.
@@ -11,7 +11,7 @@ enum PlaySettingsWords {
     struct Standing: Equatable {
         var source: MusicSource
         var opening: OpeningTab
-        /// Whether Motif may play Apple Music.
+        /// Whether Tracks may play Apple Music.
         var allowsAppleMusic: Bool
         /// iPhone's Offline Mode, with how many songs are downloaded. Nil when it's off.
         var offlineSongs: Int?
@@ -82,7 +82,7 @@ enum PlaySettingsWords {
             #if os(macOS)
             return what + " " + String(localized: "Click Listen Now’s title to switch. What’s playing carries on until you play something from the other.")
             #else
-            return what + " " + String(localized: "Tap Play’s title to switch. What’s playing carries on until you play something from the other, and Play suggests your downloads when you’re offline. To switch with a Focus, add Motif’s filter in Settings ▸ Focus.")
+            return what + " " + String(localized: "Tap Play’s title to switch. What’s playing carries on until you play something from the other, and Play suggests your downloads when you’re offline. To switch with a Focus, add the Tracks filter in Settings ▸ Focus.")
             #endif
         }
     }
@@ -94,9 +94,9 @@ enum PlaySettingsWords {
         case on
     }
 
-    // MARK: - Around Motif
+    // MARK: - Around Tracks
 
-    /// Where Motif opens: "Play" on iPhone, "Listen Now" on the Mac, where Play is the
+    /// Where Tracks opens: "Play" on iPhone, "Listen Now" on the Mac, where Play is the
     /// sidebar's Listen Now.
     static func openingName(_ tab: OpeningTab) -> String {
         switch tab {
@@ -112,19 +112,19 @@ enum PlaySettingsWords {
     static func openingFooter(_ tab: OpeningTab) -> String {
         #if os(macOS)
         tab == .play
-            ? String(localized: "Motif opens to Listen Now, and Listen Now and Radio come first in the sidebar, as ⌘1 and ⌘2.")
-            : String(localized: "Motif opens to Summary, and your listening comes first in the sidebar, as ⌘1 onwards.")
+            ? String(localized: "Tracks opens to Listen Now, and Listen Now and Radio come first in the sidebar, as ⌘1 and ⌘2.")
+            : String(localized: "Tracks opens to Summary, and your listening comes first in the sidebar, as ⌘1 onwards.")
         #else
         tab == .play
-            ? String(localized: "Motif opens to Play, and Play comes first in the tab bar.")
-            : String(localized: "Motif opens to Summary, and Play comes last in the tab bar.")
+            ? String(localized: "Tracks opens to Play, and Play comes first in the tab bar.")
+            : String(localized: "Tracks opens to Summary, and Play comes last in the tab bar.")
         #endif
     }
 
-    /// "Motif" or "Apple Music"; on the Mac, "Music" is the Music app.
+    /// "Tracks" or "Apple Music"; on the Mac, "Music" is the Music app.
     static func destinationName(_ destination: SongDestination) -> String {
         switch destination {
-        case .motif: String(localized: "Motif")
+        case .tracks: String(localized: "Tracks")
         #if os(macOS)
         case .appleMusic: String(localized: "Music")
         #else
@@ -135,30 +135,30 @@ enum PlaySettingsWords {
 
     static func destinationFooter(_ destination: SongDestination) -> String {
         #if os(macOS)
-        destination == .motif
-            ? String(localized: "Play on a song or album in Your Listening plays it here, in Motif.")
+        destination == .tracks
+            ? String(localized: "Play on a song or album in Your Listening plays it here, in Tracks.")
             : String(localized: "Play on a song or album in Your Listening opens it in the Music app.")
         #else
-        destination == .motif
+        destination == .tracks
             ? String(localized: "Play on a song or album in Summary, History and Charts plays it here.")
             : String(localized: "Play on a song or album in Summary, History and Charts opens it in Apple Music.")
         #endif
     }
 
     /// Your other devices, and on iPhone, shaking it.
-    /// - Parameter needsLocalNetwork: Local Network is off for Motif, so it can't find them.
+    /// - Parameter needsLocalNetwork: Local Network is off for Tracks, so it can't find them.
     static func devicesFooter(showsNearby: Bool, shakeToPlay: Bool, needsLocalNetwork: Bool = false) -> String {
         var lines: [String] = []
         #if os(iOS)
         if shakeToPlay {
-            lines.append(String(localized: "Shake iPhone to play a song you haven’t heard that Motif thinks you’ll like, with Motif Radio after it."))
+            lines.append(String(localized: "Shake iPhone to play a song you haven’t heard that Tracks thinks you’ll like, with Tracks Radio after it."))
         }
         #endif
         if showsNearby {
             #if os(macOS)
-            lines.append(String(localized: "Listen Now shows what Motif on your iPhone or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
+            lines.append(String(localized: "Listen Now shows what Tracks on your iPhone or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
             #else
-            lines.append(String(localized: "Play shows what Motif on your Mac or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
+            lines.append(String(localized: "Play shows what Tracks on your Mac or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
             #endif
             if needsLocalNetwork { lines.append(localNetworkOff) }
         }
@@ -168,9 +168,9 @@ enum PlaySettingsWords {
     /// Why your devices can't be found, and where to fix it.
     static var localNetworkOff: String {
         #if os(macOS)
-        String(localized: "Motif can’t look for them: turn on Motif in System Settings › Privacy & Security › Local Network.")
+        String(localized: "Tracks can’t look for them: turn on Tracks in System Settings › Privacy & Security › Local Network.")
         #else
-        String(localized: "Motif can’t look for them: turn on Local Network in Settings › Apps › Motif.")
+        String(localized: "Tracks can’t look for them: turn on Local Network in Settings › Apps › Tracks.")
         #endif
     }
 
@@ -182,9 +182,9 @@ enum PlaySettingsWords {
             String(localized: "Your servers find songs by the artists you play and artists like them, mixed with songs you have and haven’t played yet. No Apple Music needed.")
         case .onlyYours:
             #if os(macOS)
-            String(localized: "Motif suggests only songs you have, on this Mac or your servers. Nothing new is found for you.")
+            String(localized: "Tracks suggests only songs you have, on this Mac or your servers. Nothing new is found for you.")
             #else
-            String(localized: "Motif suggests only songs you have, on this iPhone or your servers. Nothing new is found for you.")
+            String(localized: "Tracks suggests only songs you have, on this iPhone or your servers. Nothing new is found for you.")
             #endif
         case .off:
             #if os(macOS)
@@ -205,9 +205,9 @@ enum PlaySettingsWords {
         AudioQualityWords.showsAudioQuality(isShown)
     }
 
-    // MARK: - Motif Radio
+    // MARK: - Tracks Radio
 
-    /// Where Motif Radio shows, which depends on the source and on what the layout shows.
+    /// Where Tracks Radio shows, which depends on the source and on what the layout shows.
     struct RadioPlace: Equatable {
         var source: MusicSource
         var showsForYou: Bool
@@ -221,20 +221,20 @@ enum PlaySettingsWords {
     static func radioFooter(isOn: Bool, place: RadioPlace, downloadsFirst: Bool, deletesAfterPlaying: Bool) -> String {
         #if os(macOS)
         guard isOn else {
-            return String(localized: "Siri plays your mix for this time of day when you say “Play music in Motif.”")
+            return String(localized: "Siri plays your mix for this time of day when you say “Play music in Tracks.”")
         }
-        return [radioWhere(place), String(localized: "Siri plays it when you say “Play music in Motif.”")]
+        return [radioWhere(place), String(localized: "Siri plays it when you say “Play music in Tracks.”")]
             .compactMap(\.self)
             .joined(separator: " ")
         #else
         guard isOn else {
-            return String(localized: "Motif Radio is hidden. Siri plays your mix for this time of day when you say “Play music in Motif.”")
+            return String(localized: "Tracks Radio is hidden. Siri plays your mix for this time of day when you say “Play music in Tracks.”")
         }
         var lines = [String(localized: "Your own station, from everything you love and new finds like it, picked as it plays.")]
         if let whereItIs = radioWhere(place) {
             lines.append(whereItIs)
         }
-        lines.append(String(localized: "Siri plays it when you say “Play music in Motif.”"))
+        lines.append(String(localized: "Siri plays it when you say “Play music in Tracks.”"))
         guard place.source == .yourMusic, downloadsFirst else { return lines.joined(separator: " ") }
         lines.append(String(localized: "It starts with songs on this iPhone, so it plays at once, and downloads its new finds in the background. They wait in Up Next until they’re here, and you can swipe away any you don’t want."))
         if deletesAfterPlaying {
@@ -273,8 +273,8 @@ enum PlaySettingsWords {
 
     static func explicitFooter(_ allows: Bool) -> String {
         allows
-            ? String(localized: "When a song comes in both versions, Motif plays the explicit one.")
-            : String(localized: "Motif plays clean versions and leaves out songs that only come explicit. On stations, it skips them.")
+            ? String(localized: "When a song comes in both versions, Tracks plays the explicit one.")
+            : String(localized: "Tracks plays clean versions and leaves out songs that only come explicit. On stations, it skips them.")
     }
 
     static func transitionFooter(_ transition: SongTransition) -> String {
@@ -348,10 +348,10 @@ enum PlaySettingsWords {
 
     static func resetMessage(_ memory: MixMemory) -> String {
         guard memory.leftOut > 0 else {
-            return String(localized: "Motif forgets the songs you’ve skipped once. Nothing is left out of your mixes yet.")
+            return String(localized: "Tracks forgets the songs you’ve skipped once. Nothing is left out of your mixes yet.")
         }
         let songs = plain(AttributedString(localized: "^[\(memory.leftOut) song](inflect: true)"))
-        return String(localized: "The \(songs) your mixes leave out come back into them, and Motif forgets every skip.")
+        return String(localized: "The \(songs) your mixes leave out come back into them, and Tracks forgets every skip.")
     }
 
     /// The confirmation's button, with the count when songs come back.

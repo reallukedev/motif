@@ -1,5 +1,5 @@
 import Foundation
-import MotifCore
+import TracksCore
 
 /// How close the song on is to being kept in your history: the ring beside its play count on
 /// the phone, and the same ring in the car.
@@ -9,7 +9,7 @@ enum KeepStatus: Equatable {
     case kept
 
     /// Where the song on stands, or nil when this playing won't be kept at all: capture is
-    /// off for it, or Motif has already passed it over as a repeat of a play it just heard.
+    /// off for it, or Tracks has already passed it over as a repeat of a play it just heard.
     @MainActor
     static func of(_ track: PlayerTrack, player: PlayerModel, capture: CaptureService, at date: Date = .now) -> KeepStatus? {
         guard willBeKept(player: player, capture: capture) else { return nil }
@@ -20,14 +20,14 @@ enum KeepStatus: Equatable {
         return player.isDemo && fill >= 1 ? .kept : .counting(fill)
     }
 
-    /// Whether Motif will keep this song at all: on-demand plays can be switched off in
+    /// Whether Tracks will keep this song at all: on-demand plays can be switched off in
     /// Settings, which leaves stations only.
     @MainActor
     static func willBeKept(player: PlayerModel, capture: CaptureService) -> Bool {
         !capture.isPaused && (player.context?.isStation == true || CaptureSettings().capturesOnDemand)
     }
 
-    /// Whether Motif has kept this playing of it: the last capture is this song, made since it
+    /// Whether Tracks has kept this playing of it: the last capture is this song, made since it
     /// started.
     @MainActor
     static func isKept(_ track: PlayerTrack, player: PlayerModel, capture: CaptureService) -> Bool {
@@ -40,7 +40,7 @@ enum KeepStatus: Equatable {
         return last.capturedAt >= started.addingTimeInterval(-slack)
     }
 
-    /// Whether Motif has already decided not to keep this playing: it heard the song moments
+    /// Whether Tracks has already decided not to keep this playing: it heard the song moments
     /// ago, so this counts as the same play, or its station is excluded. The ring would fill
     /// and never turn into a check, so it isn't shown.
     @MainActor

@@ -1,7 +1,7 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
-/// One of Motif's mixes: its cover on a field of its colour, why it exists, and its songs.
+/// One of Tracks’ mixes: its cover on a field of its colour, why it exists, and its songs.
 struct MixDetailView: View {
     let mixID: String
     @Environment(PlayFeed.self) private var feed

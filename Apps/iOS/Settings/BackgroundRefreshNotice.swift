@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Whether Motif is actually catching up in the background, and when it last did.
+/// Whether Tracks is actually catching up in the background, and when it last did.
 ///
-/// Background App Refresh is opportunistic: iOS decides when, from how often Motif is used
+/// Background App Refresh is opportunistic: iOS decides when, from how often Tracks is used
 /// and the battery, and it may be hours or not at all. Without this the feature is invisible,
 /// and "iOS hasn't woken us yet" looks exactly like "this never worked".
 struct BackgroundRefreshNotice: View {
@@ -22,7 +22,7 @@ struct BackgroundRefreshNotice: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.ink(.orange))
                 }
-                // Opens Motif's page in Settings, which has the Background App Refresh switch.
+                // Opens Tracks’ page in Settings, which has the Background App Refresh switch.
                 if blocker == .turnedOff, let url = URL(string: UIApplication.openSettingsURLString) {
                     Button("Open Settings…") { openURL(url) }
                 }
@@ -33,7 +33,7 @@ struct BackgroundRefreshNotice: View {
         }
     }
 
-    /// When iOS last woke Motif. An unaccepted request is the more useful thing to say, since
+    /// When iOS last woke Tracks. An unaccepted request is the more useful thing to say, since
     /// it means no wake-up is even pending.
     private var status: String {
         if let lastError { return lastError }
@@ -44,11 +44,11 @@ struct BackgroundRefreshNotice: View {
     private func message(for blocker: BackgroundRefreshAvailability.Blocker) -> LocalizedStringKey {
         switch blocker {
         case .lowPowerMode:
-            "Low Power Mode is on, so Motif only catches up when you open it."
+            "Low Power Mode is on, so Tracks only catches up when you open it."
         case .turnedOff:
-            "Background App Refresh is off for Motif, so it only catches up when you open it."
+            "Background App Refresh is off for Tracks, so it only catches up when you open it."
         case .restricted:
-            "Background App Refresh isn't allowed on this device, so Motif only catches up when you open it."
+            "Background App Refresh isn't allowed on this device, so Tracks only catches up when you open it."
         }
     }
 }

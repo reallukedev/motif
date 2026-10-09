@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A tint made readable as text: 4.5:1, or 7:1 with Increase Contrast. System orange and
 /// green are made for fills; as text on a grouped background they mostly fail contrast.

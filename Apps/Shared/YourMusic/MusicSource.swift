@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Where Play's music comes from: Apple Music's catalog, or music you own, as files on this
 /// iPhone and on your own music servers.

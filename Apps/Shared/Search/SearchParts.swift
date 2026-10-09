@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// What you searched for lately, kept as lines in one stored string, newest first.
 enum RecentSearches {

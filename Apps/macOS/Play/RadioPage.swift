@@ -1,18 +1,18 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Radio: your own station first, on a field of its colour, then Apple Music's live stations,
 /// then the moods.
 struct RadioPage: View {
     @Environment(PlayFeed.self) private var feed
     @Environment(AppModel.self) private var model
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
                 if isRadioOn {
-                    MotifRadioStage()
+                    TracksRadioStage()
                 } else {
                     radioOff
                 }
@@ -33,14 +33,14 @@ struct RadioPage: View {
         .task(id: model.musicAuthorization) { await feed.loadAppleMusic() }
     }
 
-    /// Motif Radio hidden in Settings: said so where it would be, with the way back.
+    /// Tracks Radio hidden in Settings: said so where it would be, with the way back.
     private var radioOff: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Motif Radio Is Off")
+            Text("Tracks Radio Is Off")
                 .font(.title3.bold())
             Text("Your own station plays everything you love and new finds like it, picked as it plays.")
                 .foregroundStyle(.secondary)
-            Button("Turn On Motif Radio") { isRadioOn = true }
+            Button("Turn On Tracks Radio") { isRadioOn = true }
                 .buttonStyle(.bordered)
                 .padding(.top, 4)
         }
@@ -48,25 +48,25 @@ struct RadioPage: View {
     }
 }
 
-/// Motif Radio across the top of Radio: its artwork, what it's tuned to, and Play and Tune, on
+/// Tracks Radio across the top of Radio: its artwork, what it's tuned to, and Play and Tune, on
 /// a field of the station's own red.
-private struct MotifRadioStage: View {
+private struct TracksRadioStage: View {
     @Environment(PlayerModel.self) private var player
     @AppStorage(PlayPreferences.radioTuningKey) private var storedTuning = ""
     @State private var showsTuner = false
 
     var body: some View {
-        let isOn = player.isPlayingMotifRadio
+        let isOn = player.isPlayingTracksRadio
         let tuning = RadioTuning(stored: storedTuning)
         HStack(alignment: .center, spacing: 28) {
             Button {
-                if isOn { player.togglePlayPause() } else { player.playMotifRadio() }
+                if isOn { player.togglePlayPause() } else { player.playTracksRadio() }
             } label: {
-                MotifRadioArt(side: 200, isLive: isOn && player.isPlaying, isDriving: player.isRadioDriving)
+                TracksRadioArt(side: 200, isLive: isOn && player.isPlaying, isDriving: player.isRadioDriving)
                     .shadow(color: .black.opacity(0.3), radius: 18, y: 10)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Motif Radio")
+            .accessibilityLabel("Tracks Radio")
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Your Station")
@@ -74,7 +74,7 @@ private struct MotifRadioStage: View {
                     .textCase(.uppercase)
                     .kerning(0.6)
                     .foregroundStyle(.secondary)
-                Text("Motif Radio")
+                Text("Tracks Radio")
                     .font(.system(size: 30, weight: .bold))
                 Text(tuning.summary)
                     .font(.title3)
@@ -84,12 +84,12 @@ private struct MotifRadioStage: View {
                     .padding(.top, 8)
                 HStack(spacing: 10) {
                     Button {
-                        if isOn { player.togglePlayPause() } else { player.playMotifRadio() }
+                        if isOn { player.togglePlayPause() } else { player.playTracksRadio() }
                     } label: {
                         Label(isOn && player.isPlaying ? "Pause" : isOn ? "Resume" : "Play", systemImage: isOn && player.isPlaying ? "pause.fill" : "play.fill")
                             .contentTransition(.symbolEffect(.replace))
                     }
-                    .buttonStyle(.stagePrimary(tint: MotifRadioArt.color))
+                    .buttonStyle(.stagePrimary(tint: TracksRadioArt.color))
                     Button("Tune…", systemImage: "slider.horizontal.3") { showsTuner = true }
                         .buttonStyle(.stageSecondary)
                         .help("How adventurous it is, the genres it leans into, and old favorites")
@@ -104,14 +104,14 @@ private struct MotifRadioStage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
-                .fill(MotifRadioArt.color.mix(with: .black, by: 0.35).gradient)
+                .fill(TracksRadioArt.color.mix(with: .black, by: 0.35).gradient)
         }
         .padding(.horizontal, PlayMetrics.margin)
         .contextMenu {
-            Button(isOn && player.isPlaying ? "Pause" : isOn ? "Resume" : "Play Motif Radio", systemImage: isOn && player.isPlaying ? "pause" : "play") {
-                if isOn { player.togglePlayPause() } else { player.playMotifRadio() }
+            Button(isOn && player.isPlaying ? "Pause" : isOn ? "Resume" : "Play Tracks Radio", systemImage: isOn && player.isPlaying ? "pause" : "play") {
+                if isOn { player.togglePlayPause() } else { player.playTracksRadio() }
             }
-            Button("Tune Motif Radio…", systemImage: "slider.horizontal.3") { showsTuner = true }
+            Button("Tune Tracks Radio…", systemImage: "slider.horizontal.3") { showsTuner = true }
         }
         .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
     }

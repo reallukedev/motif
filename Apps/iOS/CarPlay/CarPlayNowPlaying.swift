@@ -1,16 +1,16 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Now Playing in the car: CarPlay's own screen, with Motif's buttons under the controls, and
+/// Now Playing in the car: CarPlay's own screen, with Tracks’ buttons under the controls, and
 /// Up Next as covers that keep up with the queue.
 ///
 /// The buttons change with what's playing, so none is ever there to do nothing:
 /// - A queue (an album, a playlist, a mix): Shuffle and Autoplay.
-/// - Motif Radio and Apple's stations pick as they go, so neither.
+/// - Tracks Radio and Apple's stations pick as they go, so neither.
 /// - Then always the ring with the song's play count, filling until it counts, the star for
-///   a song from Apple Music's catalog, More Like This on Motif Radio and the moods, and Not
+///   a song from Apple Music's catalog, More Like This on Tracks Radio and the moods, and Not
 ///   for Me.
 ///
 /// The song's name opens its album, as it does in Music.
@@ -95,7 +95,7 @@ extension CarPlaySceneDelegate {
         let context: String?
         let kind: String?
         let isPlaying: Bool
-        /// For Motif Radio's row in Radio, which counts a song still loading as playing.
+        /// For Tracks Radio's row in Radio, which counts a song still loading as playing.
         let isLoading: Bool
         let isFavorite: Bool?
         let plays: Int?
@@ -155,7 +155,7 @@ extension CarPlaySceneDelegate {
             }
         }
 
-        // More Like This, beside Not for Me, on Motif Radio or a mood: the car's way to steer
+        // More Like This, beside Not for Me, on Tracks Radio or a mood: the car's way to steer
         // one toward a song. Lit once asked. Not on a queue's Autoplay, whose Shuffle and
         // Autoplay buttons would take the car past its five.
         if let current, player.isLive, player.canAskForMoreLikeThis, let image = UIImage(systemName: "hand.thumbsup") {

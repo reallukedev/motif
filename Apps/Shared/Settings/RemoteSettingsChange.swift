@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 extension View {
     /// Re-reads a setting into the view's own state when another device changes it.

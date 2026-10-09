@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Albums and playlists as they came into the Apple Music library, newest first.
 enum LibraryRecentlyAdded {

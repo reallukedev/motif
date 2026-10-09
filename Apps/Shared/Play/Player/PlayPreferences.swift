@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// The Play tab's settings, by defaults key. Views read them with `@AppStorage` so they redraw;
 /// the player reads them at the moment it needs them.
@@ -11,9 +11,9 @@ enum PlayPreferences {
     static let transitionKey = "playTransition"
     static let crossfadeSecondsKey = "playCrossfadeSeconds"
     static let layoutKey = "playLayout"
-    /// Whether Motif Radio is offered. On by default.
-    static let motifRadioKey = "motifRadioIsOn"
-    static let radioTuningKey = "motifRadioTuning"
+    /// Whether Tracks Radio is offered. On by default.
+    static let tracksRadioKey = "tracksRadioIsOn"
+    static let radioTuningKey = "tracksRadioTuning"
     /// Where a song's Play button outside the Play tab sends it. See ``SongDestination``.
     static let songDestinationKey = "playSongDestination"
 
@@ -24,13 +24,13 @@ enum PlayPreferences {
         UserDefaults.standard.object(forKey: allowsExplicitKey) as? Bool ?? true
     }
 
-    static var isMotifRadioOn: Bool {
-        UserDefaults.standard.object(forKey: motifRadioKey) as? Bool ?? true
+    static var isTracksRadioOn: Bool {
+        UserDefaults.standard.object(forKey: tracksRadioKey) as? Bool ?? true
     }
 
-    /// Motif Radio from your own music starts with songs already on this iPhone and gets its
+    /// Tracks Radio from your own music starts with songs already on this iPhone and gets its
     /// new finds ready behind them. On by default.
-    static let radioDownloadsFirstKey = "motifRadioDownloadsFirst"
+    static let radioDownloadsFirstKey = "tracksRadioDownloadsFirst"
 
     static var radioDownloadsFirst: Bool {
         UserDefaults.standard.object(forKey: radioDownloadsFirstKey) as? Bool ?? true
@@ -50,22 +50,22 @@ enum PlayPreferences {
         UserDefaults.standard.string(forKey: speedVolumeAmountKey).flatMap(SpeedVolumeAmount.init) ?? .moderate
     }
 
-    /// Whether anything needs to know when you're driving: Motif Radio playing for the road,
+    /// Whether anything needs to know when you're driving: Tracks Radio playing for the road,
     /// or Louder at Speed.
     static var noticesDriving: Bool {
         radioNoticesDriving || volumeFollowsSpeed
     }
 
-    /// Shaking iPhone plays a song Motif thinks you'd like, then Motif Radio. On by default.
+    /// Shaking iPhone plays a song Tracks thinks you'd like, then Tracks Radio. On by default.
     static let shakeToPlayKey = "shakeToPlay"
 
     static var shakeToPlay: Bool {
         UserDefaults.standard.object(forKey: shakeToPlayKey) as? Bool ?? true
     }
 
-    /// Motif Radio's new finds are downloaded to play, and the download removed once they've
+    /// Tracks Radio's new finds are downloaded to play, and the download removed once they've
     /// played, unless you keep them. Off by default.
-    static let radioDeletesAfterPlayingKey = "motifRadioDeletesAfterPlaying"
+    static let radioDeletesAfterPlayingKey = "tracksRadioDeletesAfterPlaying"
 
     static var radioDeletesAfterPlaying: Bool {
         UserDefaults.standard.bool(forKey: radioDeletesAfterPlayingKey)
@@ -148,17 +148,17 @@ enum SongTransition: String, CaseIterable, Identifiable {
     }
 }
 
-/// Where songs played from Summary, History and Charts go: Motif's own player, which keeps every
-/// play, or Apple Music. The Play tab always plays in Motif.
+/// Where songs played from Summary, History and Charts go: Tracks’ own player, which keeps every
+/// play, or Apple Music. The Play tab always plays in Tracks.
 enum SongDestination: String, CaseIterable, Identifiable {
-    case motif
+    case tracks
     case appleMusic
 
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
         switch self {
-        case .motif: "Motif"
+        case .tracks: "Tracks"
         case .appleMusic: "Apple Music"
         }
     }

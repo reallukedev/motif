@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The lists of everything in your music, each a page of its own.
 enum YourMusicList: String, Hashable, CaseIterable, Identifiable {

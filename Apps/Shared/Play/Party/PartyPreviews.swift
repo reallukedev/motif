@@ -1,12 +1,12 @@
 #if DEBUG
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A model on sample data. The flag goes in a volatile domain, so it never reaches the real
 /// app's defaults, and a preview never opens the real store.
 @MainActor
 private let partyPreviewModel: AppModel = {
-    UserDefaults.standard.setVolatileDomain(["MotifDemoData": true], forName: UserDefaults.argumentDomain)
+    UserDefaults.standard.setVolatileDomain(["TracksDemoData": true], forName: UserDefaults.argumentDomain)
     return AppModel()
 }()
 

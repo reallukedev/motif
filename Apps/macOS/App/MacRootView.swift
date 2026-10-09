@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The main window: the sidebar of places, the page chosen, and the song playing at the foot
 /// of it, with Up Next and the song's history in a popover rising from it.
@@ -7,8 +7,8 @@ struct MacRootView: View {
     @Bindable var model: AppModel
     @State private var query = LaunchScene.searchText ?? ""
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .summary
-    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.motif
+    @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
+    @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.tracks
     @AppStorage(SearchScope.macStorageKey) private var searchScope: SearchScope = .appleMusic
     /// The panel and the full player: the window's, not the app's.
     @State private var playerWindow = PlayerWindowState()
@@ -36,7 +36,7 @@ struct MacRootView: View {
                 NavigationStack(path: $navigator.path) {
                     detail
                         .pageChrome()
-                        .motifDestinations()
+                        .tracksDestinations()
                         .playDestinations()
                 }
             }
@@ -115,7 +115,7 @@ struct MacRootView: View {
             .modelContainer(store.container)
             .environment(capture)
             .environment(playback)
-            .playEnvironment(model, playsSongsInMotif: songDestination == .motif)
+            .playEnvironment(model, playsSongsInTracks: songDestination == .tracks)
             .task { await model.playFeed.followSubscription() }
             .task { await model.lidarr.check() }
             .task(id: model.musicSource) {
@@ -133,7 +133,7 @@ struct MacRootView: View {
                 if hasQueue, LaunchScene.opensStage { openWindow(id: StageWindow.id) }
             }
             .task {
-                if UserDefaults.standard.bool(forKey: "MotifMenuBarPreview") {
+                if UserDefaults.standard.bool(forKey: "TracksMenuBarPreview") {
                     openWindow(id: "menubar-preview")
                 }
                 // A launch from a script isn't activated, so screenshots show a greyed-out window.
@@ -142,7 +142,7 @@ struct MacRootView: View {
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 CollectionScreenshotSetup.apply()
-                if UserDefaults.standard.bool(forKey: "MotifMiniPlayer") {
+                if UserDefaults.standard.bool(forKey: "TracksMiniPlayer") {
                     // Once the main window is up, as someone would open it.
                     try? await Task.sleep(for: .seconds(2))
                     openWindow(id: MiniPlayerWindow.id)
@@ -154,7 +154,7 @@ struct MacRootView: View {
             #endif
         } else {
             ContentUnavailableView {
-                Label("Motif Can't Open Your History", systemImage: "exclamationmark.triangle")
+                Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(model.startupError ?? "The database couldn't be opened.")
             }
@@ -267,14 +267,14 @@ extension SearchScope {
 extension View {
     /// Everything a page that plays music reads: the player and what it plays from, and where
     /// its pages push.
-    func playEnvironment(_ model: AppModel, playsSongsInMotif: Bool) -> some View {
-        modifier(PlayEnvironment(model: model, playsSongsInMotif: playsSongsInMotif))
+    func playEnvironment(_ model: AppModel, playsSongsInTracks: Bool) -> some View {
+        modifier(PlayEnvironment(model: model, playsSongsInTracks: playsSongsInTracks))
     }
 }
 
 private struct PlayEnvironment: ViewModifier {
     let model: AppModel
-    let playsSongsInMotif: Bool
+    let playsSongsInTracks: Bool
 
     func body(content: Content) -> some View {
         let player = model.player
@@ -288,9 +288,9 @@ private struct PlayEnvironment: ViewModifier {
             .environment(model.lidarr)
             .environment(navigator)
             .environment(\.openPlayRoute, OpenPlayRouteAction(stack: "main") { navigator.show($0) })
-            // A song's Play button plays in Motif, where every play is kept, unless Settings
+            // A song's Play button plays in Tracks, where every play is kept, unless Settings
             // sends songs to Music.
-            .environment(\.playSongs, playsSongsInMotif ? PlaySongsAction { items, title in
+            .environment(\.playSongs, playsSongsInTracks ? PlaySongsAction { items, title in
                 player.play(.history(items.map(HistorySong.init)), from: .songs(title))
             } : nil)
     }

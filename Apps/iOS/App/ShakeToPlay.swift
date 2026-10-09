@@ -3,7 +3,7 @@ import UIKit
 
 extension Notification.Name {
     /// iPhone was shaken, with no text being edited, where a shake means Undo.
-    static let motifDidShake = Notification.Name("MotifDidShake")
+    static let tracksDidShake = Notification.Name("TracksDidShake")
 }
 
 extension UIWindow {
@@ -11,12 +11,12 @@ extension UIWindow {
     open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         super.motionEnded(motion, with: event)
         guard motion == .motionShake else { return }
-        NotificationCenter.default.post(name: .motifDidShake, object: nil)
+        NotificationCenter.default.post(name: .tracksDidShake, object: nil)
     }
 }
 
 extension View {
-    /// Shake to Play: a shake plays a song Motif thinks you'd like, then Motif Radio on from it,
+    /// Shake to Play: a shake plays a song Tracks thinks you'd like, then Tracks Radio on from it,
     /// whichever music is the source. Once every few seconds, so one long shake is one song.
     /// - Parameter onPlay: once the song is playing, to show it: the app opens Now Playing.
     func shakeToPlay(_ player: PlayerModel, onPlay: @escaping () -> Void) -> some View {
@@ -32,7 +32,7 @@ private struct ShakeToPlay: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: .motifDidShake)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .tracksDidShake)) { _ in
                 guard PlayPreferences.shakeToPlay, Date.now.timeIntervalSince(lastShake) > 3 else { return }
                 lastShake = .now
                 shakes += 1

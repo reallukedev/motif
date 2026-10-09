@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The week, month, year or all time choice that heads Summary.
 struct RangePicker: View {

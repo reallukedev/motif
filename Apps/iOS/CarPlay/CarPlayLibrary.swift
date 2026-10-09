@@ -1,7 +1,7 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// Library: where your music is kept, a place at a time, as Music's Library is in the car.
 /// Playlists, Artists, Albums, Songs and Downloaded open their lists, and what you added lately
@@ -13,7 +13,7 @@ extension CarPlaySceneDelegate {
     func appleMusicLibrarySections() async -> [CPListSection] {
         guard MusicAuthorization.currentStatus == .authorized, !model.isDemoLaunch else {
             library.emptyViewTitleVariants = [String(localized: "Library Unavailable")]
-            library.emptyViewSubtitleVariants = [String(localized: "Allow Apple Music access in Motif on your iPhone to see your library here.")]
+            library.emptyViewSubtitleVariants = [String(localized: "Allow Apple Music access in Tracks on your iPhone to see your library here.")]
             return []
         }
         let places = CPListSection(items: [
@@ -275,7 +275,7 @@ extension CarPlaySceneDelegate {
         let music = model.yourMusic
         guard !music.index.isEmpty else {
             library.emptyViewTitleVariants = [String(localized: "No Music Yet")]
-            library.emptyViewSubtitleVariants = [String(localized: "Songs you add to Motif, and your servers' songs, show up here.")]
+            library.emptyViewSubtitleVariants = [String(localized: "Songs you add to Tracks, and your servers' songs, show up here.")]
             return []
         }
         var places: [CPListItem] = []
@@ -329,7 +329,7 @@ extension CarPlaySceneDelegate {
         return page(String(localized: "Playlists"), [CPListSection(items: rows)], empty: String(localized: "No Playlists"))
     }
 
-    private func localPlaylistPage(_ playlist: MotifPlaylist) async -> CPListTemplate {
+    private func localPlaylistPage(_ playlist: TracksPlaylist) async -> CPListTemplate {
         let music = model.yourMusic
         let player = model.player
         let songs = music.songs(in: playlist, facts: model.playFeed.facts)
@@ -570,7 +570,7 @@ extension CarPlaySceneDelegate {
         rows.isEmpty ? [] : [CPListSection(items: rows)]
     }
 
-    /// A row that plays something, with its symbol in Motif's red where a cover would be.
+    /// A row that plays something, with its symbol in Tracks’ red where a cover would be.
     func actionRow(_ title: String, symbol: String, action: @escaping () async -> Void) -> CPListItem {
         let row = CPListItem(text: title, detailText: nil, image: CarPlayImages.symbol(symbol, side: CPListItem.maximumImageSize.height, scale: scale))
         row.handler = { [weak self] _, completion in

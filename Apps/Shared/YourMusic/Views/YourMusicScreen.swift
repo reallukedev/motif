@@ -1,9 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Play, when your own music is the source: Motif Radio from everything you own, what's new,
+/// Play, when your own music is the source: Tracks Radio from everything you own, what's new,
 /// your mixes and moods from your files and servers, what each server has to discover, and
 /// your whole library a tap away.
 struct YourMusicScreen: View {
@@ -12,7 +12,7 @@ struct YourMusicScreen: View {
     @Environment(PlayFeed.self) private var feed
     @Environment(PlayerModel.self) private var player
     @Environment(Lidarr.self) private var lidarr
-    @AppStorage(PlayPreferences.motifRadioKey) private var isRadioOn = true
+    @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
     @State private var showsSettings = LaunchScene.opensPlaySettings
@@ -74,7 +74,7 @@ struct YourMusicScreen: View {
         .animation(.snappy, value: music.lastImport?.added)
         #if os(iOS)
         // Search as Play's own, with History beside your music. The Mac searches from the sidebar.
-        .motifSearch(isPresented: $isSearching, scopeKey: "yourMusicSearchScope", defaultScope: .library, source: .yourMusic)
+        .tracksSearch(isPresented: $isSearching, scopeKey: "yourMusicSearchScope", defaultScope: .library, source: .yourMusic)
         .navigationTitle("Play")
         #else
         .navigationTitle("Listen Now")
@@ -133,7 +133,7 @@ struct YourMusicScreen: View {
         }
     }
 
-    /// The crate for your own music: Motif Radio in the middle, starting in front, with this
+    /// The crate for your own music: Tracks Radio in the middle, starting in front, with this
     /// hour's mix and the rest of the day's either side, each only if enough of its songs are
     /// yours to play.
     private func crateCards(hasRadio: Bool) -> [ForYouCard] {
@@ -202,12 +202,12 @@ struct YourMusicScreen: View {
 
     private var layout: PlayLayout { PlayLayout(stored: storedLayout) }
 
-    /// Motif Radio plays from your music, and from what your servers find for you.
+    /// Tracks Radio plays from your music, and from what your servers find for you.
     private var hasRadio: Bool {
         isRadioOn && (!music.index.isEmpty || !music.servers.onlineServers.isEmpty)
     }
 
-    /// The crate leads, as on Apple Music's Play: Motif Radio, this hour's mix, the rest of
+    /// The crate leads, as on Apple Music's Play: Tracks Radio, this hour's mix, the rest of
     /// the day's, and songs past them either way.
     private var crate: [ForYouCard] { crateCards(hasRadio: hasRadio) }
 
@@ -247,7 +247,7 @@ struct YourMusicScreen: View {
                 ForYouCrate(cards: crate, leadID: crate.contains { $0.id == "station" } ? "station" : crate.first { if case .mix = $0 { true } else { false } }?.id)
             }
         case .suggestedSongs:
-            // Motif Radio leads the crate; with the crate hidden or empty, it leads these.
+            // Tracks Radio leads the crate; with the crate hidden or empty, it leads these.
             let radioHere = hasRadio && !hasCrate
             if player.isDemo, suggests {
                 // Sample data has no server: its suggestions stand in, from the sample catalog.
@@ -258,7 +258,7 @@ struct YourMusicScreen: View {
                     ServerForYouSection(server: server, shelf: .suggested, includesRadio: radioHere)
                 }
             } else if radioHere {
-                MotifRadioRow()
+                TracksRadioRow()
                     .padding(.horizontal, PlayMetrics.margin)
             }
         case .recentlyPlayed:
@@ -625,9 +625,9 @@ private struct YourMusicWelcome: View {
 
     private var folderNote: LocalizedStringKey {
         #if os(macOS)
-        "You can also drop music into Motif's Music folder, which Add Music shows in Finder. FLAC, ALAC, MP3, AAC, WAV and AIFF all play."
+        "You can also drop music into the Tracks Music folder, which Add Music shows in Finder. FLAC, ALAC, MP3, AAC, WAV and AIFF all play."
         #else
-        "You can also drop music into On My iPhone › Motif › Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play."
+        "You can also drop music into On My iPhone › Tracks › Music in the Files app. FLAC, ALAC, MP3, AAC, WAV and AIFF all play."
         #endif
     }
 
@@ -635,11 +635,11 @@ private struct YourMusicWelcome: View {
         #if os(macOS)
         hasServers
             ? "Your server can't be reached right now. Try again from Settings, or import songs to this Mac."
-            : "Play the FLAC and other files you own, and music from your own server. Every song you play is kept in your history, with Motif Radio, mixes and moods made from all of it."
+            : "Play the FLAC and other files you own, and music from your own server. Every song you play is kept in your history, with Tracks Radio, mixes and moods made from all of it."
         #else
         hasServers
             ? "Your server can't be reached right now. Pull down to try again, or import songs to this iPhone."
-            : "Play the FLAC and other files you own, and music from your own server. Every song you play is kept in your history, with Motif Radio, mixes and moods made from all of it."
+            : "Play the FLAC and other files you own, and music from your own server. Every song you play is kept in your history, with Tracks Radio, mixes and moods made from all of it."
         #endif
     }
 }

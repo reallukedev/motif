@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// The window that drops down from the menu bar: what's playing, today at a glance, and the
 /// last few songs.
@@ -27,7 +27,7 @@ struct MenuBarContent: View {
                 .environment(model.playFeed)
         } else {
             ContentUnavailableView {
-                Label("Motif Can't Open Your History", systemImage: "exclamationmark.triangle")
+                Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(model.startupError ?? "The database couldn't be opened.")
             }
@@ -60,10 +60,10 @@ private struct MenuBarBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Motif's own player, while it has something on; Music otherwise.
+            // Tracks’ own player, while it has something on; Music otherwise.
             Group {
                 if player.hasQueue {
-                    MotifPlayerHeader()
+                    TracksPlayerHeader()
                 } else {
                     NowPlayingHeader(monitor: monitor, latest: recent.first)
                 }
@@ -135,8 +135,8 @@ private struct HistoryPausedNote: View {
 
 // MARK: - Now playing
 
-/// What Motif itself is playing, with its controls, in the shape of Music's card below.
-private struct MotifPlayerHeader: View {
+/// What Tracks itself is playing, with its controls, in the shape of Music's card below.
+private struct TracksPlayerHeader: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -150,7 +150,7 @@ private struct MotifPlayerHeader: View {
                     CoverImage(cover: track.cover, size: 58)
                     VStack(alignment: .leading, spacing: 2) {
                         Label {
-                            Text(player.context.map { "\($0.title)" } ?? String(localized: "Playing in Motif"))
+                            Text(player.context.map { "\($0.title)" } ?? String(localized: "Playing in Tracks"))
                         } icon: {
                             PlayingWaveform(isActive: player.isPlaying)
                         }
@@ -250,7 +250,7 @@ private struct NowPlayingHeader: View {
     }
 
     // What to show, in order of preference: what Music is playing (captured or not yet),
-    // then the last song Motif kept.
+    // then the last song Tracks kept.
 
     /// Nothing is audible, as far as we know. Before the first read we don't claim either way.
     private var isStale: Bool {
@@ -661,7 +661,7 @@ struct MenuBarFooter: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Button("Open Motif") {
+            Button("Open Tracks") {
                 MainWindow.bringForward(openWindow: openWindow)
                 dismiss()
             }
@@ -690,8 +690,8 @@ struct MenuBarFooter: View {
                     dismiss()
                 }
                 .help("Settings")
-                Button("Quit Motif", systemImage: "power") { NSApp.terminate(nil) }
-                    .help("Quit Motif")
+                Button("Quit Tracks", systemImage: "power") { NSApp.terminate(nil) }
+                    .help("Quit Tracks")
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.glass)
@@ -703,9 +703,9 @@ struct MenuBarFooter: View {
 
     /// Opens Settings and puts it in front.
     ///
-    /// `openSettings()` on its own makes the window but leaves Motif in the background, which
+    /// `openSettings()` on its own makes the window but leaves Tracks in the background, which
     /// from the menu bar it almost always is. The window then sat behind whatever the user
-    /// was in and only appeared when they pressed "Open Motif", which activates Motif as a
+    /// was in and only appeared when they pressed "Open Tracks", which activates Tracks as a
     /// side effect. Activating first means SwiftUI opens the window into an app that is
     /// already frontmost; the second pass covers a window that was made before the activation
     /// landed, and raises one left over from a previous visit.
@@ -722,7 +722,7 @@ struct MenuBarFooter: View {
     ///
     /// SwiftUI gives it no public identity; AppKit calls it `com_apple_SwiftUI_Settings_window`.
     /// Matched loosely so a rename between releases doesn't quietly stop this working — no
-    /// other Motif window has "Settings" in its identifier. A miss is harmless: the window
+    /// other Tracks window has "Settings" in its identifier. A miss is harmless: the window
     /// may not exist yet, and activation alone usually brings it up.
     private static var settingsWindow: NSWindow? {
         NSApp.windows.first { $0.identifier?.rawValue.contains("Settings") == true }

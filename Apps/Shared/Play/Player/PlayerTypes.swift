@@ -1,6 +1,6 @@
 import Foundation
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// A cover to draw: MusicKit's own artwork where the player or the catalog gave one, or an
 /// address from the history, drawn by ``ArtworkView`` with its generated fallback.
@@ -26,7 +26,7 @@ struct PlayerTrack: Identifiable, Equatable, Codable {
     /// The song in your own music, when that's where it's playing from.
     var local: LocalTrack? = nil
 
-    /// The key Motif's history groups plays by, so a song's count can be found.
+    /// The key Tracks’ history groups plays by, so a song's count can be found.
     var songIdentity: String { HistoryImport.key(title: title, artistName: artistName) }
 }
 
@@ -56,7 +56,7 @@ extension MixSong {
 struct PlayContext: Equatable {
     enum Kind: Equatable {
         case station, mix, album, playlist, artist, songs
-        /// Motif Radio, which tops itself up as it plays.
+        /// Tracks Radio, which tops itself up as it plays.
         case endless
     }
 
@@ -67,10 +67,10 @@ struct PlayContext: Equatable {
 
     static func songs(_ title: String) -> PlayContext { PlayContext(kind: .songs, title: title) }
 
-    static let motifRadio = PlayContext(kind: .endless, title: String(localized: "Motif Radio"))
+    static let tracksRadio = PlayContext(kind: .endless, title: String(localized: "Tracks Radio"))
 }
 
-/// A song from Motif's history, known by id and by name. The demo player plays these by name,
+/// A song from Tracks’ history, known by id and by name. The demo player plays these by name,
 /// since sample songs have no catalog ids.
 nonisolated struct HistorySong: Equatable, Sendable {
     let songID: String
@@ -193,10 +193,10 @@ enum PlayerProblem: Error, Equatable {
     var message: String {
         switch self {
         case .accessDenied:
-            String(localized: "Turn on Media & Apple Music for Motif in Settings to play music here.")
+            String(localized: "Turn on Media & Apple Music for Tracks in Settings to play music here.")
         case .needsSubscription(let canSubscribe):
             canSubscribe
-                ? String(localized: "Motif plays songs from Apple Music, which needs a subscription.")
+                ? String(localized: "Tracks plays songs from Apple Music, which needs a subscription.")
                 : String(localized: "This Apple Account can't play Apple Music songs right now.")
         case .nothingToPlay:
             String(localized: "They may no longer be available in Apple Music.")
@@ -207,9 +207,9 @@ enum PlayerProblem: Error, Equatable {
         case .notInYourMusic:
             String(localized: "These songs aren't in your music, or their server can't be reached. Download songs to play them anywhere.")
         case .needsAppleMusic:
-            String(localized: "Motif is playing your own music. Switch Music Source to Apple Music in Settings to play this.")
+            String(localized: "Tracks is playing your own music. Switch Music Source to Apple Music in Settings to play this.")
         case .blockedArtist:
-            String(localized: "Motif doesn't play or suggest artists you've blocked. Unblock them to play this.")
+            String(localized: "Tracks doesn't play or suggest artists you've blocked. Unblock them to play this.")
         case .failed(let detail):
             detail
         }
@@ -245,7 +245,7 @@ extension PlayerProblem {
         case .unavailable:
             self = .nothingToPlay
         case .offline:
-            self = .failed(String(localized: "Motif couldn’t connect. Check your internet connection, then try again."))
+            self = .failed(String(localized: "Tracks couldn’t connect. Check your internet connection, then try again."))
         case .timedOut:
             self = .failed(String(localized: "It took too long to start. Try again in a moment."))
         case .superseded, .interrupted, .other:

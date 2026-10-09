@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Bars over time with a dashed average line, like Screen Time. Drag or hover to read a bar.
 struct ActivityChart: View {

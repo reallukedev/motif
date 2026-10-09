@@ -1,8 +1,8 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The shape every artist's page shares, whichever music they're in: their picture, their
-/// name, what Motif knows of you and them ("Your No. 3 artist · 412 plays since 2023"), then
+/// name, what Tracks knows of you and them ("Your No. 3 artist · 412 plays since 2023"), then
 /// the page's own sections, About them, and your own top songs by them last: the page is
 /// about the artist first and your history with them second.
 ///
@@ -474,7 +474,7 @@ struct BlockedArtistTag: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(.black.opacity(0.35), in: .capsule)
-                .accessibilityLabel("Blocked. Motif won't play or suggest this artist.")
+                .accessibilityLabel("Blocked. Tracks won't play or suggest this artist.")
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
         }
     }

@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 // MARK: - Fetching
 
@@ -15,8 +15,8 @@ nonisolated enum LibraryFetch {
                 do {
                     #if DEBUG
                     if let demo = LibraryDemo.items(Item.self) {
-                        // `-MotifLibraryDelay 1.5`: as long as a real library takes to answer.
-                        let delay = UserDefaults.standard.double(forKey: "MotifLibraryDelay")
+                        // `-TracksLibraryDelay 1.5`: as long as a real library takes to answer.
+                        let delay = UserDefaults.standard.double(forKey: "TracksLibraryDelay")
                         if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
                         continuation.yield(demo)
                         continuation.finish()
@@ -57,7 +57,7 @@ final class LibraryGatherer<Item: MusicLibraryRequestable & Sendable> {
     @ObservationIgnored private var gathering: Task<Void, Never>?
     @ObservationIgnored private var gatheredAt: ContinuousClock.Instant?
 
-    /// Big pages: there's no network between Motif and the library.
+    /// Big pages: there's no network between Tracks and the library.
     private static var batch: Int { 500 }
     /// How long a whole read stays good.
     private static var freshness: Duration { .seconds(120) }
@@ -284,7 +284,7 @@ final class LibraryPager<Item: MusicLibraryRequestable & Sendable> {
         next = more.hasNextBatch ? more : nil
     }
 
-    /// Where the page stands, or where `-MotifLibraryState` says it does.
+    /// Where the page stands, or where `-TracksLibraryState` says it does.
     var phase: LibraryPhase {
         if let forced = LibraryDebugState.current {
             switch forced {

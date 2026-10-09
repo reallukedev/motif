@@ -1,14 +1,14 @@
 import UIKit
 import CarPlay
 import MusicKit
-import MotifCore
+import TracksCore
 
-/// Motif in the car: four tabs made for a glance and one tap, as Music has them, built from
+/// Tracks in the car: four tabs made for a glance and one tap, as Music has them, built from
 /// CarPlay's own templates so they look and work like the rest of the car.
 ///
-/// - Listen Now leads with large cards (where you left off, the mix for right now, Motif
+/// - Listen Now leads with large cards (where you left off, the mix for right now, Tracks
 ///   Radio), then what you played last, your mixes, and your week.
-/// - Radio opens on Motif Radio's own header, then every mood as a tile, then Apple's live
+/// - Radio opens on Tracks Radio's own header, then every mood as a tile, then Apple's live
 ///   stations.
 /// - Library opens Playlists, Artists, Albums, Songs and Downloaded as pages, an album or
 ///   playlist with Play and Shuffle at the top, as Music's do.
@@ -28,7 +28,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var watch: Task<Void, Never>?
     private var refresh: Task<Void, Never>?
     private var radioRefresh: Task<Void, Never>?
-    /// Watches the settings the car shows (Motif Radio on or off, Autoplay), which live in
+    /// Watches the settings the car shows (Tracks Radio on or off, Autoplay), which live in
     /// UserDefaults, where nothing observable says they changed.
     private var settingsObserver: NSObjectProtocol?
     private var shownSettings: (radio: Bool, autoplay: Bool)?
@@ -46,7 +46,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var lastKeepStep: Int?
     /// Songs added to the library from Now Playing, so its button can show it worked.
     var addedToLibrary: Set<String> = []
-    /// Where Motif Radio stood when Radio was last built, so the tab is redrawn when it changes.
+    /// Where Tracks Radio stood when Radio was last built, so the tab is redrawn when it changes.
     var radioRowState: String?
     /// SharePlay's page while it's open, what keeps it current, and its code as last drawn.
     var sharePlayPage: CPListTemplate?
@@ -82,7 +82,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         tabs.delegate = self
         interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
 
-        // The car can start Motif with no phone window, so nothing else has started capture,
+        // The car can start Tracks with no phone window, so nothing else has started capture,
         // or listened for SharePlay.
         Task { await model.startCapture() }
         SharePlayController.shared.start(model: model)
@@ -93,7 +93,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             await model.playFeed.loadFromYourArtists()
             rebuild()
         }
-        shownSettings = (PlayPreferences.isMotifRadioOn, PlayPreferences.autoplay)
+        shownSettings = (PlayPreferences.isTracksRadioOn, PlayPreferences.autoplay)
         settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.settingsMayHaveChanged() }
         }
@@ -179,7 +179,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let playing: String?
         /// The song left paused, for Listen Now's Continue card.
         let waiting: String?
-        /// Whether there's enough listening for Motif Radio.
+        /// Whether there's enough listening for Tracks Radio.
         let captures: Bool
     }
 
@@ -225,14 +225,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Redraws what shows a setting when one the car shows has changed: any change to
     /// UserDefaults lands here, most of them nothing to do with the car.
     private func settingsMayHaveChanged() {
-        let now = (radio: PlayPreferences.isMotifRadioOn, autoplay: PlayPreferences.autoplay)
+        let now = (radio: PlayPreferences.isTracksRadioOn, autoplay: PlayPreferences.autoplay)
         guard let shown = shownSettings, shown != now else { return }
         shownSettings = now
         updateNowPlayingButtons()
         if shown.radio != now.radio { rebuild() }
     }
 
-    /// Radio's list again, on its own: its first row follows Motif Radio starting and pausing.
+    /// Radio's list again, on its own: its first row follows Tracks Radio starting and pausing.
     func refreshRadioList() {
         radioRefresh?.cancel()
         radioRefresh = Task {
@@ -298,9 +298,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         return hasher.finalize()
     }
 
-    /// Whether Motif Radio is on and has enough of your listening to play from.
-    var hasMotifRadio: Bool {
-        PlayPreferences.isMotifRadioOn && model.library.history.captures.count >= 20
+    /// Whether Tracks Radio is on and has enough of your listening to play from.
+    var hasTracksRadio: Bool {
+        PlayPreferences.isTracksRadioOn && model.library.history.captures.count >= 20
     }
 
     /// Whether what's playing came from here: a mix, mood or station by its name.

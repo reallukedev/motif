@@ -1,5 +1,5 @@
 import Charts
-import MotifCore
+import TracksCore
 import SwiftUI
 
 /// Louder at Speed's curve: how loud the music plays from a stop to the highway for the amount

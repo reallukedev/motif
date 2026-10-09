@@ -1,6 +1,6 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// What a collection is, for the small word over its title on the Mac.
 enum CollectionKind {

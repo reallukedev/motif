@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// The chart itself: every entry in order, with its place, its cover, how it moved, and its
 /// plays. A song's place turns into a play button under the pointer, as a track number does

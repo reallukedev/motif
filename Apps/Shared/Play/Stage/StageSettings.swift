@@ -104,7 +104,7 @@ final class StagePresenter {
 #if os(iOS)
 extension StagePresenter {
     /// Which ways up the app may be: Stage's choice while it's up, and upright otherwise, as
-    /// the rest of Motif is.
+    /// the rest of Tracks is.
     var orientations: UIInterfaceOrientationMask {
         isShowing ? StageOrientation.current.mask : .portrait
     }

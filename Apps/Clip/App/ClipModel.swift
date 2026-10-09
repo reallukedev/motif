@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import MotifCore
+import TracksCore
 
 /// The App Clip's one job: the SharePlay whose code opened it, and a search to pick songs.
 @MainActor
@@ -11,8 +11,8 @@ final class ClipModel {
     /// Opened without a code: from the App Clips list, or a link without one.
     private(set) var hasNoCode = false
 
-    /// The App Store's banner for Motif is up, at the bottom.
-    var offersMotif = false
+    /// The App Store's banner for Tracks is up, at the bottom.
+    var offersTracks = false
 
     var query = ""
     private(set) var results: [SharePlaySong] = []
@@ -24,11 +24,11 @@ final class ClipModel {
 
     #if DEBUG
     init() {
-        // `-MotifClipDemo`: a pretend session with sample songs, for screenshots.
-        if let scene = UserDefaults.standard.string(forKey: "MotifClipDemo") { ClipDemo.start(scene, in: self) }
-        // `-MotifClipURL`: opens with a code's link, as an invocation does, where Xcode's
+        // `-TracksClipDemo`: a pretend session with sample songs, for screenshots.
+        if let scene = UserDefaults.standard.string(forKey: "TracksClipDemo") { ClipDemo.start(scene, in: self) }
+        // `-TracksClipURL`: opens with a code's link, as an invocation does, where Xcode's
         // `_XCAppClipURL` doesn't reach (a simulator launched from the command line).
-        if let link = UserDefaults.standard.string(forKey: "MotifClipURL") { open(URL(string: link)) }
+        if let link = UserDefaults.standard.string(forKey: "TracksClipURL") { open(URL(string: link)) }
     }
     #endif
 

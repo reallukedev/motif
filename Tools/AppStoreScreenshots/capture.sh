@@ -4,10 +4,10 @@
 #   ./Tools/AppStoreScreenshots/capture.sh          (writes to build/raw/{iphone,mac})
 #   python3 Tools/AppStoreScreenshots/render.py     (then builds the framed set)
 #
-# Both apps run on sample data (-MotifDemoData YES), so no real history, iCloud or Last.fm
-# is touched. The Mac window is found by the demo process's PID, so a copy of Motif you
-# already have running is never captured. The Mac capture passes -AppleAccentColor 0 to
-# the demo process only, so it's drawn in red whatever accent colour the Mac is set to.
+# Both apps run on sample data (-TracksDemoData YES), so no real history, iCloud or Last.fm
+# is touched. The Mac window is found by the demo process's PID, so a copy of Tracks you
+# already have running is never captured. The Mac draws its own berry accent only while the
+# Mac's accent colour is Multicolor; another accent shows through in the Mac shots.
 # The Mac shots need Screen Recording permission for your terminal.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -18,7 +18,7 @@ iphone="${IPHONE_SIMULATOR:-iPhone 18 Pro Max}"
 mkdir -p "$out/iphone" "$out/mac"
 
 command -v xcodegen >/dev/null && xcodegen generate >/dev/null
-bundle_id="$(xcodebuild -project Motif.xcodeproj -scheme "Motif (iOS)" -showBuildSettings 2>/dev/null | awk -F' = ' '/ PRODUCT_BUNDLE_IDENTIFIER /{print $2; exit}')"
+bundle_id="$(xcodebuild -project Tracks.xcodeproj -scheme "Tracks (iOS)" -showBuildSettings 2>/dev/null | awk -F' = ' '/ PRODUCT_BUNDLE_IDENTIFIER /{print $2; exit}')"
 
 echo "iPhone"
 udid="$(xcrun simctl list devices available | grep -F "$iphone (" | head -1 | grep -oE '[0-9A-F-]{36}')"
@@ -31,9 +31,9 @@ xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMo
   --operatorName ""
 xcrun simctl ui "$udid" appearance light
 
-xcodebuild -project Motif.xcodeproj -scheme "Motif (iOS)" -configuration Debug \
+xcodebuild -project Tracks.xcodeproj -scheme "Tracks (iOS)" -configuration Debug \
   -destination "id=$udid" -derivedDataPath "$derived" build -quiet
-xcrun simctl install "$udid" "$derived/Build/Products/Debug-iphonesimulator/Motif.app"
+xcrun simctl install "$udid" "$derived/Build/Products/Debug-iphonesimulator/Tracks.app"
 
 # Opening another app first stops the status bar showing a "◂ back to" link.
 xcrun simctl launch "$udid" com.apple.Preferences >/dev/null
@@ -43,23 +43,24 @@ xcrun simctl terminate "$udid" com.apple.Preferences
 shot() {
   local name="$1"; shift
   xcrun simctl terminate "$udid" "$bundle_id" >/dev/null 2>&1 || true
-  xcrun simctl launch "$udid" "$bundle_id" -MotifDemoData YES -statsRange month "$@" >/dev/null
+  xcrun simctl launch "$udid" "$bundle_id" -TracksDemoData YES -statsRange month "$@" >/dev/null
   sleep 5
   xcrun simctl io "$udid" screenshot "$out/iphone/$name.png" >/dev/null 2>&1
   echo "  $name"
 }
-shot summary
-shot charts-songs -MotifTab charts -chartKind songs
-shot rhythm -MotifScroll rhythm
-shot history -MotifTab history
-shot artist -MotifOpen "artist:mara solis"
-shot records -MotifScroll records
+shot play -TracksTab play
+shot summary -TracksTab summary
+shot charts-songs -TracksTab charts -chartKind songs
+shot rhythm -TracksTab summary -TracksScroll rhythm
+shot history -TracksTab history
+shot artist -TracksOpen "artist:mara solis"
+shot records -TracksTab summary -TracksScroll records
 xcrun simctl terminate "$udid" "$bundle_id" >/dev/null 2>&1 || true
 
 echo "Mac"
-xcodebuild -project Motif.xcodeproj -scheme "Motif (macOS)" -configuration Debug \
+xcodebuild -project Tracks.xcodeproj -scheme "Tracks (macOS)" -configuration Debug \
   -derivedDataPath "$derived" -allowProvisioningUpdates build -quiet
-app="$derived/Build/Products/Debug/Motif.app/Contents/MacOS/Motif"
+app="$derived/Build/Products/Debug/Tracks.app/Contents/MacOS/Tracks"
 
 window_of() {
   swift -e 'import CoreGraphics
@@ -72,7 +73,7 @@ for w in list where (w[kCGWindowOwnerPID as String] as? Int) == pid && (w[kCGWin
 
 mac_shot() {
   local name="$1"; shift
-  "$app" -MotifDemoData YES -MotifActivate YES -AppleAccentColor 0 "$@" >/dev/null 2>&1 &
+  "$app" -TracksDemoData YES -TracksActivate YES "$@" >/dev/null 2>&1 &
   local pid=$!
   sleep 8
   local wid
@@ -86,10 +87,11 @@ mac_shot() {
   kill "$pid"
   wait "$pid" 2>/dev/null || true
 }
-mac_shot summary -statsRange month
-mac_shot history -statsRange month -MotifSidebar history
-mac_shot artists-year -statsRange year -MotifSidebar topArtists
-mac_shot rhythm -statsRange month -MotifScroll rhythm
-mac_shot artist -statsRange month -MotifOpen "artist:mara solis"
+mac_shot listen-now -TracksSidebar listenNow
+mac_shot summary -statsRange month -TracksSidebar summary
+mac_shot history -statsRange month -TracksSidebar history
+mac_shot artists-year -statsRange year -TracksSidebar topArtists
+mac_shot rhythm -statsRange month -TracksSidebar summary -TracksScroll rhythm
+mac_shot artist -statsRange month -TracksSidebar summary -TracksOpen "artist:mara solis"
 
 echo "Saved to $out"

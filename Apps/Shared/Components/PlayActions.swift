@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// Context menu items for a play in the history.
 struct PlayActions: View {
@@ -63,9 +63,9 @@ struct DeleteConfirmation: ViewModifier {
             }
         } message: { capture in
             if capture.scrobbledAt != nil {
-                Text("Removing the whole song also stops Motif recovering it from Recently Played. Scrobbles already sent stay on Last.fm.")
+                Text("Removing the whole song also stops Tracks recovering it from Recently Played. Scrobbles already sent stay on Last.fm.")
             } else {
-                Text("Removing the whole song also stops Motif recovering it from Recently Played.")
+                Text("Removing the whole song also stops Tracks recovering it from Recently Played.")
             }
         }
     }
@@ -77,7 +77,7 @@ extension View {
     }
 }
 
-/// Plays songs from the history in Motif's own player, where there is one.
+/// Plays songs from the history in Tracks’ own player, where there is one.
 ///
 /// The iPhone has one, on the Play tab, and sets this at the root so a song's page plays there
 /// and every play is kept. The Mac leaves it unset and hands songs to Music.app.

@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 struct SummaryScreen: View {
     @Environment(AppModel.self) private var model
@@ -49,7 +49,7 @@ struct SummaryScreen: View {
             }
         }
         .groupedBackground()
-        .motifSearch(isPresented: $isSearching, scopeKey: "summarySearchScope", defaultScope: .history)
+        .tracksSearch(isPresented: $isSearching, scopeKey: "summarySearchScope", defaultScope: .history)
         .navigationTitle("Summary")
         .sourceScopeSubtitle(sources.scope)
         .toolbar {

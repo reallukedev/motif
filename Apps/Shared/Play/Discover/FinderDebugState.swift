@@ -3,13 +3,13 @@ import Foundation
 import MusicKit
 
 /// States of the Song and Artist Finders that sample data doesn't reach on its own, for
-/// screenshots: `-MotifFinderState noAccess`, `loading`, `empty`, or `long` (songs and an
+/// screenshots: `-TracksFinderState noAccess`, `loading`, `empty`, or `long` (songs and an
 /// artist with names past 40 characters, first). Debug builds only.
 enum FinderDebugState: String {
     case noAccess, loading, empty, long
 
     static var current: FinderDebugState? {
-        UserDefaults.standard.string(forKey: "MotifFinderState").flatMap(FinderDebugState.init)
+        UserDefaults.standard.string(forKey: "TracksFinderState").flatMap(FinderDebugState.init)
     }
 
     static let longSuggestions: [Suggestion] = [

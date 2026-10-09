@@ -1,9 +1,9 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// The full player: one song, huge, on a field of its own colour, with the transport where the
-/// thumb is. Music's Now Playing, plus what only Motif knows: how many times you've heard this,
+/// thumb is. Music's Now Playing, plus what only Tracks knows: how many times you've heard this,
 /// counting up the moment it's kept, and, a double tap on the cover or the history button away,
 /// the back of its sleeve with your whole history with it.
 struct NowPlayingView: View {
@@ -13,7 +13,7 @@ struct NowPlayingView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var showsQueue = LaunchScene.opensQueue
     @State private var showsBack = LaunchScene.opensSleeve
-    /// Motif Radio's tuning, from Up Next or the song's menu. Presented from here, outside the
+    /// Tracks Radio's tuning, from Up Next or the song's menu. Presented from here, outside the
     /// stage's dark look, so the sheet reads as Settings does.
     @State private var showsTuner = LaunchScene.opensRadioTunerFromQueue
     /// Turns of the sleeve, for the haptic: only the person turns it.

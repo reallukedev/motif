@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Moving Summary back and forward a week, month or year, handed down to the cards whose
 /// charts can be swiped and the header that steps through periods.
@@ -127,7 +127,7 @@ struct NothingPlayedView: View {
                 "Nothing Played \(summary.phrase)",
                 systemImage: "waveform",
                 description: summary.range == .allTime
-                    ? Text("Songs appear here as Motif keeps them.")
+                    ? Text("Songs appear here as Tracks keeps them.")
                     : Text("Try another \(Text(summary.range.unitName)), or a longer range.")
             )
         }
