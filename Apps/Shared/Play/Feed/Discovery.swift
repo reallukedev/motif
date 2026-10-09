@@ -193,7 +193,7 @@ final class Discovery {
         // Like more of your artists ranks higher; ties go to the better-loved artist's.
         var score: [MusicItemID: (count: Int, first: Int, artist: Artist, because: [String])] = [:]
         for (rank, lookup) in lookups.enumerated() {
-            for similar in lookup.similar where isNew(similar) {
+            for similar in lookup.similar where !visited.contains(similar.id) {
                 let existing = score[similar.id]
                 score[similar.id] = (
                     (existing?.count ?? 0) + 1,
@@ -203,11 +203,18 @@ final class Discovery {
                 )
             }
         }
-        artists = score.values
-            .sorted { $0.count == $1.count ? $0.first < $1.first : $0.count > $1.count }
-            .map { SuggestedArtist(artist: $0.artist, because: $0.because) }
-        for artist in artists { visited.insert(artist.id) }
-        frontier = artists.map { ($0.artist, $0.because.first ?? "") }
+        let ranked = score.values.sorted { $0.count == $1.count ? $0.first < $1.first : $0.count > $1.count }
+        // Artists you already play are walked through, to reach the ones past them you don't.
+        let step = SuggestionWalk.step(
+            from: ranked,
+            id: { $0.artist.id },
+            name: { $0.artist.name },
+            visited: &visited,
+            heard: feed.heardArtists,
+            isLeftOut: isLeftOut
+        )
+        artists = step.new.map { SuggestedArtist(artist: $0.artist, because: $0.because) }
+        frontier = step.walk.map { ($0.artist, $0.because.first ?? "") }
         hasSeeded = true
 
         // The first step out, so the shelf opens with songs by artists like yours.
@@ -247,11 +254,16 @@ final class Discovery {
                 for (artist, root) in step {
                     guard let visit = found[artist.id] else { continue }
                     likes += fresh(visit.topSongs).prefix(2).map { Suggestion(song: $0, reason: .like(root)) }
-                    for similar in visit.similar where !visited.contains(similar.id) && isNew(similar) {
-                        visited.insert(similar.id)
-                        frontier.append((similar, root))
-                        artists.append(SuggestedArtist(artist: similar, because: [root]))
-                    }
+                    let next = SuggestionWalk.step(
+                        from: visit.similar,
+                        id: \.id,
+                        name: \.name,
+                        visited: &visited,
+                        heard: feed.heardArtists,
+                        isLeftOut: isLeftOut
+                    )
+                    frontier += next.walk.map { ($0, root) }
+                    artists += next.new.map { SuggestedArtist(artist: $0, because: [root]) }
                 }
             }
             // One of your artists' songs for every two by artists like them.
@@ -314,11 +326,9 @@ final class Discovery {
         }
     }
 
-    /// An artist the history has never played, and not asked to be left out.
-    private func isNew(_ artist: Artist) -> Bool {
-        let key = StatsCalculator.folded(artist.name)
-        return !feed.heardArtists.contains(key) && !hiddenArtists.contains(key)
-            && !player.signals.blocked.contains(artist: artist.name)
+    /// An artist asked not to be suggested, or blocked: never suggested, and never walked to.
+    private func isLeftOut(_ name: String) -> Bool {
+        hiddenArtists.contains(StatsCalculator.folded(name)) || player.signals.blocked.contains(artist: name)
     }
 
     /// Spread out so no artist comes twice in a row, the same way all day.
