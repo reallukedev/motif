@@ -1,8 +1,8 @@
 import BackgroundTasks
 import Foundation
-import MotifCore
+import TracksCore
 
-/// Background App Refresh: iOS wakes Motif now and then, for about 30 seconds, to catch up
+/// Background App Refresh: iOS wakes Tracks now and then, for about 30 seconds, to catch up
 /// on what played while it was closed.
 ///
 /// It can't watch the player. iOS gives no app a way to follow another app's playback in the
@@ -11,7 +11,7 @@ import MotifCore
 /// picks songs up before they fall off the end of Apple's list.
 enum BackgroundRefresh {
     /// Also listed under `BGTaskSchedulerPermittedIdentifiers` in Info.plist.
-    static let identifier = "\(Bundle.main.bundleIdentifier ?? "Motif").refresh"
+    static let identifier = "\(Bundle.main.bundleIdentifier ?? "Tracks").refresh"
 
     /// The soonest to ask for. iOS decides when it actually runs, from how often the app is
     /// used and the battery, so it can be hours.

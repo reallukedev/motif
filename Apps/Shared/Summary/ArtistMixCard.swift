@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// How the plays split between the top artists and everyone else: one bar for the whole,
 /// then a row per artist. Shades step down with rank, so the order reads without a key.

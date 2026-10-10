@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Motif Mac Screenshots</title>
+<title>Tracks Mac Screenshots</title>
 <link rel="stylesheet" href="shared.css">
 <script src="components.js"></script>
 </head>
@@ -40,12 +40,12 @@ const winScale = WIN_W / NATURAL[0];
 
 const frames = [
   {
-    headline: "You listen.\nMotif remembers.",
-    sub: "Every song you play in Apple Music, kept and counted. Radio included.",
+    headline: "Keep track.\nFind more.",
+    sub: "Play Apple Music or your own library. Every song is kept, and new ones are found for you.",
     copy: { top: 140, size: 148, subSize: 52, subWidth: 1180, align: "left", inset: 200 },
     build(i) {
       front.append(record({ cx: i * W + hero.cx, cy: hero.cy, r: hero.r }));
-      front.append(macWindow({ src: RAW + "summary.png", left: i * W + 200, top: 720, width: 1720 }));
+      front.append(macWindow({ src: RAW + "listen-now.png", left: i * W + 200, top: 720, width: 1720 }));
     },
   },
   {
@@ -84,7 +84,7 @@ const frames = [
       const macH = (macW * NATURAL[1]) / NATURAL[0];
       const phoneW = 462 * phoneS, phoneH = 978 * phoneS;
       const left = i * W + (W - (macW + phoneW - overlap)) / 2;
-      front.append(record({ cx: finale.cx, cy: finale.cy, r: finale.r, played: 360 }));
+      front.append(record({ cx: finale.cx, cy: finale.cy, r: finale.r }));
       front.append(macWindow({ src: RAW + "artist.png", left, top: floor - macH, width: macW }));
       front.append(iphone({ src: IPHONE_RAW + "summary.png", left: left + macW - overlap, top: floor - phoneH, s: phoneS }));
     },

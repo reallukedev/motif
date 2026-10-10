@@ -1,6 +1,6 @@
 import AppIntents
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// Plays back today's captures.
 ///
@@ -9,7 +9,7 @@ import MotifMusic
 struct PlayBackTodayIntent: AppIntent {
     static let title: LocalizedStringResource = "Play Back Today"
     static let description = IntentDescription(
-        "Plays the songs Motif captured today, so they count as real plays in your listening history.",
+        "Plays the songs Tracks captured today, so they count as real plays in your listening history.",
         categoryName: "Playback"
     )
 
@@ -17,7 +17,7 @@ struct PlayBackTodayIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = try MotifStore.shared()
+        let store = try TracksStore.shared()
         let controller = PlaybackController(store: store, service: PlatformPlaybackService.make())
         await controller.playBackToday()
 

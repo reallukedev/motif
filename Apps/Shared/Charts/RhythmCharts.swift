@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Plays per day of the week, weekends in a lighter shade.
 struct WeekdayChart: View {

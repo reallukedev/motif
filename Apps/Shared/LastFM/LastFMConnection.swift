@@ -1,6 +1,6 @@
 import SwiftUI
 import Observation
-import MotifCore
+import TracksCore
 
 /// Walks the user through connecting a Last.fm account.
 ///
@@ -43,7 +43,7 @@ final class LastFMConnection {
     ///   in-app sheet on iOS), so closing it without approving ends the attempt.
     func connect(waitsForPage: Bool = false, present: @escaping @MainActor (URL) async -> Void) {
         guard let client = LastFMClient.configured() else {
-            state = .failed(String(localized: "Last.fm isn't set up in this build of Motif."))
+            state = .failed(String(localized: "Last.fm isn't set up in this build of Tracks."))
             return
         }
         poll?.cancel()

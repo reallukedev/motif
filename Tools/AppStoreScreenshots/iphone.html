@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Motif iPhone Screenshots</title>
+<title>Tracks iPhone Screenshots</title>
 <link rel="stylesheet" href="shared.css">
 <script src="components.js"></script>
 </head>
@@ -39,11 +39,11 @@ const HEAD = { size: 132, subSize: 50, subWidth: 1040 };
 const frames = [
   {
     // 1. Hero: the record slides out of the phone like a sleeve.
-    headline: "You listen.\nMotif remembers.",
-    sub: "Every song you play in Apple Music, kept and counted. Radio included.",
+    headline: "Keep track.\nFind more.",
+    sub: "Play Apple Music or your own library. Every song is kept, and new ones are found for you.",
     build(f, i) {
       front.append(record({ cx: i * W + hero.cx, cy: hero.cy, r: hero.r }));
-      front.append(iphone({ src: RAW + "summary.png", left: phoneLeft(i), top: 1580, s: S }));
+      front.append(iphone({ src: RAW + "play.png", left: phoneLeft(i), top: 1580, s: S }));
     },
   },
   {
@@ -67,7 +67,7 @@ const frames = [
   },
   {
     headline: "Even radio\ncounts here.",
-    sub: "Apple Music doesn't count songs heard on a station as plays. Motif keeps every one.",
+    sub: "Apple Music doesn't count songs heard on a station as plays. Tracks keeps every one.",
     build(f, i) {
       const phone = { left: phoneLeft(i), top: 780, s: S };
       front.append(iphone({ src: RAW + "history.png", ...phone }));
@@ -96,11 +96,11 @@ const frames = [
     },
   },
   {
-    // 7. Closing: the ring is complete.
+    // 7. Closing: the record, whole.
     headline: "Yours, and only yours.",
     sub: "Your history stays on your devices and syncs through your own iCloud.",
     build(f, i) {
-      front.append(record({ cx: finale.cx, cy: finale.cy, r: finale.r, played: 360 }));
+      front.append(record({ cx: finale.cx, cy: finale.cy, r: finale.r }));
       front.append(pills({ top: 2200, left: i * W + 260, width: W - 520, items: ["No account", "No servers", "No ads", "No tracking"], size: 46, gap: 26 }));
       const note = copy({ top: 2540, headline: "", sub: "Scrobbles to Last.fm, if you want it to.", size: 0, subSize: 44, subWidth: 1000, left: i * W, right: (N - 1 - i) * W });
       note.querySelector(".sub").style.marginTop = "0";

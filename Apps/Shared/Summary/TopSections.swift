@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A horizontal shelf of artists, like the Music app's.
 struct TopArtistsShelf: View {

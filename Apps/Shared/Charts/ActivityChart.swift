@@ -1,6 +1,6 @@
 import SwiftUI
 import Charts
-import MotifCore
+import TracksCore
 
 /// Bars over time with a dashed average line, like Screen Time. Drag or hover to read a bar.
 struct ActivityChart: View {
@@ -21,6 +21,7 @@ struct ActivityChart: View {
     @Binding var selected: TimeBucket?
 
     @State private var selection: Date?
+    @Environment(\.statsPaging) private var paging
     private let calendar = Calendar.current
 
     init(
@@ -78,7 +79,7 @@ struct ActivityChart: View {
         }
         .chartXScale(domain: domain)
         .chartYScale(domain: 0...max(yCeiling, 1))
-        .chartXSelection(value: $selection)
+        .periodSwipe(paging, selection: $selection)
         .chartXAxis { Self.dateAxis(unit: unit, count: buckets.count) }
         .chartYAxis { Self.amountAxis(ceiling: yCeiling, measure: measure) }
         .frame(minHeight: height, maxHeight: fillsHeight ? .infinity : height)

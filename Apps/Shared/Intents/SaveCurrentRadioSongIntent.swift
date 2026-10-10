@@ -1,5 +1,5 @@
 import AppIntents
-import MotifCore
+import TracksCore
 
 /// Saves whatever radio song is playing right now.
 ///
@@ -18,7 +18,7 @@ struct SaveCurrentRadioSongIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = try MotifStore.shared()
+        let store = try TracksStore.shared()
         // Created before capturing so the capture counts as a change.
         let widgets = WidgetRefresher.shared
         let service = CaptureService(store: store)
@@ -62,7 +62,7 @@ struct SaveCurrentRadioSongIntent: AppIntent {
 }
 
 /// Exposes the intent to Spotlight and Siri with spoken phrases.
-struct MotifShortcuts: AppShortcutsProvider {
+struct TracksShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SaveCurrentRadioSongIntent(),
@@ -73,6 +73,45 @@ struct MotifShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Save Radio Song",
             systemImageName: "radio"
+        )
+        // Play's: "Play music in Tracks" and the rest. See PlayInTracksIntent. Each
+        // choice by name ("Play Discover in Tracks") comes from the last one's parameter, so
+        // the fixed phrases don't repeat those.
+        AppShortcut(
+            intent: PlayInTracksIntent(choice: .station),
+            phrases: [
+                "Play music in \(.applicationName)",
+                "Play \(.applicationName)",
+                "Play \(.applicationName) Radio",
+                "Play my station in \(.applicationName)",
+            ],
+            shortTitle: "Tracks Radio",
+            systemImageName: "dot.radiowaves.left.and.right"
+        )
+        AppShortcut(
+            intent: PlayInTracksIntent(choice: .forYou),
+            phrases: [
+                "Play something I like in \(.applicationName)",
+            ],
+            shortTitle: "My Mix",
+            systemImageName: "sun.max"
+        )
+        AppShortcut(
+            intent: PlayInTracksIntent(choice: .discover),
+            phrases: [
+                "Play something new in \(.applicationName)",
+            ],
+            shortTitle: "Discover",
+            systemImageName: "binoculars"
+        )
+        AppShortcut(
+            intent: PlayInTracksIntent(),
+            phrases: [
+                "Play \(\.$choice) in \(.applicationName)",
+                "Play \(\.$choice) on \(.applicationName)",
+            ],
+            shortTitle: "Play a Mix",
+            systemImageName: "play.circle"
         )
     }
 }

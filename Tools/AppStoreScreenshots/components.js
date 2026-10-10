@@ -12,9 +12,9 @@ function el(tag, style = {}, attrs = {}) {
 
 const px = (n) => `${n}px`;
 
-// The icon's record, from AppIcon.icon/Assets, in its own 1024-unit space.
-// `played` is how much of the ring the white arc covers, in degrees. The icon uses 265.
-function record({ cx, cy, r, played = 265, rotate = 0 }) {
+// The icon's record, from AppIcon.icon/Assets (disc, rim, grooves and label), in its own
+// 1024-unit space at poster size: black vinyl, the shine on its edge, and a cream label.
+function record({ cx, cy, r, rotate = 0 }) {
   const box = el("div", {
     left: px(cx - r),
     top: px(cy - r),
@@ -24,46 +24,33 @@ function record({ cx, cy, r, played = 265, rotate = 0 }) {
   });
   box.className = "record";
 
+  // Fine grooves between the icon's three bold ones, for texture at this size.
   let fine = "";
-  for (let radius = 160; radius <= 328; radius += 4.5) {
+  for (let radius = 150; radius <= 318; radius += 4.5) {
     const alpha = radius % 9 < 4.5 ? 0.05 : 0.025;
     fine += `<circle cx="512" cy="512" r="${radius}" fill="none" stroke="#fff" stroke-width="0.9" opacity="${alpha}"/>`;
   }
-
-  const arc = (() => {
-    if (played >= 359.5) {
-      return `<circle cx="512" cy="512" r="226" fill="none" stroke="#fff" stroke-width="66"/>`;
-    }
-    const end = ((-90 + played) * Math.PI) / 180;
-    const x = 512 + 226 * Math.cos(end);
-    const y = 512 + 226 * Math.sin(end);
-    const large = played > 180 ? 1 : 0;
-    return `<path d="M512,286 A226,226 0 ${large} 1 ${x.toFixed(2)},${y.toFixed(2)}" fill="none" stroke="#fff" stroke-width="66" stroke-linecap="round"/>`;
-  })();
+  const bold = [265, 218, 170]
+    .map((radius) => `<circle cx="512" cy="512" r="${radius}" fill="none" stroke="#fff" stroke-width="11" opacity="0.5"/>`)
+    .join("");
 
   box.innerHTML = `
     <svg viewBox="178 178 668 668" xmlns="${SVG_NS}">
       <defs>
         <radialGradient id="vinylShade" cx="0.5" cy="0.42" r="0.6">
-          <stop offset="0" stop-color="#2a262c"/>
-          <stop offset="1" stop-color="#141216"/>
+          <stop offset="0" stop-color="#26252b"/>
+          <stop offset="1" stop-color="#121216"/>
         </radialGradient>
-        <filter id="soften" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="9"/></filter>
-        <clipPath id="disc"><circle cx="512" cy="512" r="332"/></clipPath>
         <linearGradient id="labelShade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ff6a7f"/>
-          <stop offset="1" stop-color="#f23a55"/>
+          <stop offset="0" stop-color="#ffe58f"/>
+          <stop offset="1" stop-color="#ffbd4d"/>
         </linearGradient>
       </defs>
-      <circle cx="512" cy="512" r="334" fill="url(#vinylShade)"/>
+      <circle cx="512" cy="512" r="332" fill="url(#vinylShade)"/>
       ${fine}
-      <circle cx="512" cy="512" r="302" fill="none" stroke="#fff" stroke-width="5" opacity="0.22"/>
-      <circle cx="512" cy="512" r="150" fill="none" stroke="#fff" stroke-width="5" opacity="0.22"/>
-      <path d="M512.0,512.0 L665.99,222.39 A328,328 0 0 1 801.61,358.01 ZM512.0,512.0 L358.01,801.61 A328,328 0 0 1 222.39,665.99 ZM394.00,512.00 a118.00,118.00 0 1,0 236.00,0 a118.00,118.00 0 1,0 -236.00,0 Z" fill="#fff" fill-rule="evenodd" opacity="0.11" filter="url(#soften)" clip-path="url(#disc)"/>
-      <circle cx="512" cy="512" r="226" fill="none" stroke="#fff" stroke-width="66" opacity="0.12"/>
-      ${arc}
-      <path d="M398,512 a114,114 0 1,0 228,0 a114,114 0 1,0 -228,0 ZM492,512 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" fill="url(#labelShade)" fill-rule="evenodd"/>
-      <circle cx="512" cy="512" r="333" fill="none" stroke="#fff" stroke-width="1.2" opacity="0.18"/>
+      ${bold}
+      <path d="M180,512 a332,332 0 1,0 664,0 a332,332 0 1,0 -664,0 ZM197,512 a315,315 0 1,0 630,0 a315,315 0 1,0 -630,0 Z" fill="#fff" fill-rule="evenodd" opacity="0.78"/>
+      <path d="M392,512 a120,120 0 1,0 240,0 a120,120 0 1,0 -240,0 ZM492,512 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" fill="url(#labelShade)" fill-rule="evenodd"/>
     </svg>`;
   return box;
 }

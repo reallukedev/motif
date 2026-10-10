@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// One play in the history. Shared by the iPhone History list and the Mac menu bar.
 struct CaptureRow: View {
@@ -72,13 +72,13 @@ struct CaptureRow: View {
                         .monospacedDigit()
                     HStack(spacing: 4) {
                         if showsScrobbleState, capture.scrobbledAt == nil {
-                            let gaveUp = capture.scrobbleAttempts >= MotifStore.maxScrobbleAttempts
+                            let gaveUp = capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts
                             Image(systemName: gaveUp ? "exclamationmark.circle" : "clock")
                                 .foregroundStyle(gaveUp ? .orange : .secondary)
                         }
-                        if capture.kind == .imported {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .foregroundStyle(.teal)
+                        if !capture.kind.sourceIsKnown {
+                            Image(systemName: capture.kind.symbol)
+                                .foregroundStyle(capture.kind.tint)
                         }
                         playlistState
                     }
@@ -111,6 +111,7 @@ struct CaptureRow: View {
         case .radio: return String(localized: "\(capture.title) by \(capture.artistName), heard on the radio at \(time)")
         case .imported: return String(localized: "\(capture.title) by \(capture.artistName), recovered from Recently Played")
         case .onDemand: return String(localized: "\(capture.title) by \(capture.artistName), at \(time)")
+        case .lastFM: return String(localized: "\(capture.title) by \(capture.artistName), from Last.fm at \(time)")
         }
     }
 

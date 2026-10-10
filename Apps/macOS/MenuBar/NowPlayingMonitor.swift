@@ -1,7 +1,7 @@
 import SwiftUI
 import Observation
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// What Music is doing, for the menu bar's Now Playing card.
 ///

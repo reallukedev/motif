@@ -1,30 +1,27 @@
 import SwiftUI
 import MusicKit
-import MotifCore
+import TracksCore
 
 /// What's playing right now, shown at the top of Summary while there's music.
 struct NowPlayingCard: View {
     @Environment(CaptureService.self) private var capture
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(CaptureSettings.scrobblesToLastFMKey, store: CaptureSettings.sharedDefaults)
     private var scrobbles = true
     /// Follows connecting and disconnecting in Settings, without a Keychain read per render.
     @AppStorage(LastFMSessionStore.usernameDefaultsKey, store: CaptureSettings.sharedDefaults)
     private var lastFMUsername: String?
+    @Environment(PlayerModel.self) private var player
 
     var body: some View {
         if let song = capture.nowPlaying {
             Card(padding: 12) {
                 HStack(spacing: 12) {
-                    ArtworkView(url: song.artworkURL, seed: song.albumTitle ?? song.title, size: 52)
+                    cover(of: song)
                     VStack(alignment: .leading, spacing: 2) {
                         Label {
                             Text(caption)
                         } icon: {
-                            Image(systemName: "waveform")
-                                // A waveform that never stops is motion people can't opt
-                                // out of, so it stays still with Reduce Motion.
-                                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
+                            PlayingWaveform(isActive: true)
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tint)
@@ -41,6 +38,18 @@ struct NowPlayingCard: View {
             }
             .accessibilityElement(children: .combine)
             .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    /// Tracks’ own player has the song's cover to hand, even one only MusicKit can draw, and
+    /// before any lookup: used when it's the one playing. Otherwise the cover capture found.
+    @ViewBuilder
+    private func cover(of song: NowPlaying) -> some View {
+        if let track = player.current, player.isPlaying,
+           track.title == song.title, track.artistName == song.artistName {
+            CoverImage(cover: track.cover, size: 52)
+        } else {
+            ArtworkView(url: song.artworkURL, seed: song.albumTitle ?? song.title, size: 52)
         }
     }
 
@@ -77,14 +86,14 @@ struct StoreWarningBanner: View {
     }
 }
 
-/// The first-run screen: what Motif does, before there's any history.
+/// The first-run screen: what Tracks does, before there's any history.
 struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 24) {
             ContentUnavailableView {
                 Label("Your listening will show up here", systemImage: "waveform")
             } description: {
-                Text("Play something in Apple Music. Motif keeps what you listen to, including radio, and turns it into charts and highlights.")
+                Text("Play something in Apple Music. Tracks keeps what you listen to, including radio, and turns it into charts and highlights.")
             }
             // First run is when the reason for Apple Music access is easiest to see.
             MusicAccessCard()
@@ -95,7 +104,7 @@ struct WelcomeView: View {
 
 /// Explains Apple Music access and asks for it, or says how to turn it back on.
 ///
-/// Motif doesn't ask at launch: a prompt with no context is easy to refuse, and capture
+/// Tracks doesn't ask at launch: a prompt with no context is easy to refuse, and capture
 /// works without access. Shows nothing once access is granted, or with sample data.
 struct MusicAccessCard: View {
     @Environment(AppModel.self) private var model
@@ -128,18 +137,18 @@ struct MusicAccessCard: View {
         switch model.musicAuthorization {
         case .denied: "Apple Music Access Is Off"
         case .restricted: "Apple Music Access Is Restricted"
-        default: "Let Motif Use Apple Music"
+        default: "Let Tracks Use Apple Music"
         }
     }
 
     private var message: LocalizedStringKey {
         switch model.musicAuthorization {
         case .denied:
-            "Motif still keeps what you play here, but it can't fill in songs from Recently Played, find artwork, or add radio songs to your playlist. Turn on access for Motif in \(Self.settingsName)."
+            "Tracks still keeps what you play here, but it can't fill in songs from Recently Played, find artwork, or add radio songs to your playlist. Turn on access for Tracks in \(Self.settingsName)."
         case .restricted:
-            "This device limits access to Apple Music, for example with Screen Time. Motif still keeps what you play, but can't fill in songs from Recently Played, find artwork, or add radio songs to your playlist."
+            "This device limits access to Apple Music, for example with Screen Time. Tracks still keeps what you play, but can't fill in songs from Recently Played, find artwork, or add radio songs to your playlist."
         default:
-            "Motif already keeps what you play. With access it can also fill in songs you played while it was closed, find artwork, and add radio songs to your playlist."
+            "Tracks already keeps what you play. With access it can also fill in songs you played while it was closed, find artwork, and add radio songs to your playlist."
         }
     }
 

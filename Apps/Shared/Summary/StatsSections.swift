@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 // The Summary's deeper sections, shared by the iPhone and Mac layouts. Each hides
 // itself when the range has too little in it to say anything.
@@ -20,7 +20,7 @@ struct NewFavoritesSection: View {
     }
 }
 
-/// The genres played most beside the decades the songs came from. Fills in as Motif looks
+/// The genres played most beside the decades the songs came from. Fills in as Tracks looks
 /// songs up in Apple Music, so it's missing until enough plays have a genre or a year.
 struct GenresSection: View {
     let summary: StatsSummary

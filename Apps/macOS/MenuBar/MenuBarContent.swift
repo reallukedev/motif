@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
-import MotifCore
-import MotifMusic
+import TracksCore
+import TracksMusic
 
 /// The window that drops down from the menu bar: what's playing, today at a glance, and the
 /// last few songs.
@@ -23,9 +23,11 @@ struct MenuBarContent: View {
                 .environment(model)
                 .environment(capture)
                 .environment(playback)
+                .environment(model.player)
+                .environment(model.playFeed)
         } else {
             ContentUnavailableView {
-                Label("Motif Can't Open Your History", systemImage: "exclamationmark.triangle")
+                Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(model.startupError ?? "The database couldn't be opened.")
             }
@@ -37,7 +39,9 @@ struct MenuBarContent: View {
 
 private struct MenuBarBody: View {
     let monitor: NowPlayingMonitor
+    @Environment(PlayerModel.self) private var player
     @Environment(CaptureService.self) private var capture
+    @Environment(UnexpectedQuitMonitor.self) private var quitMonitor
     /// Only what the list shows. Today's figures have their own query in ``TodaySummary``,
     /// so opening the menu never loads the whole history.
     @Query private var recent: [Capture]
@@ -56,8 +60,23 @@ private struct MenuBarBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NowPlayingHeader(monitor: monitor, latest: recent.first)
-                .padding(14)
+            // Tracks’ own player, while it has something on; Music otherwise.
+            Group {
+                if player.hasQueue {
+                    TracksPlayerHeader()
+                } else {
+                    NowPlayingHeader(monitor: monitor, latest: recent.first)
+                }
+            }
+            .padding(14)
+
+            NearbyMenuSection()
+
+            if quitMonitor.notice != nil {
+                UnexpectedQuitNotice()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
 
             if !capture.isRunning {
                 HistoryPausedNote()
@@ -105,7 +124,7 @@ private struct HistoryPausedNote: View {
                 .font(.caption)
                 .foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Resume") { capture.start() }
+            Button("Resume") { Task { await capture.resume() } }
                 .controlSize(.small)
                 .accessibilityLabel("Resume History")
         }
@@ -115,6 +134,88 @@ private struct HistoryPausedNote: View {
 }
 
 // MARK: - Now playing
+
+/// What Tracks itself is playing, with its controls, in the shape of Music's card below.
+private struct TracksPlayerHeader: View {
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var previousPresses = 0
+    @State private var nextPresses = 0
+
+    var body: some View {
+        if let track = player.current {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    CoverImage(cover: track.cover, size: 58)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label {
+                            Text(player.context.map { "\($0.title)" } ?? String(localized: "Playing in Tracks"))
+                        } icon: {
+                            PlayingWaveform(isActive: player.isPlaying)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .lineLimit(1)
+                        Text(track.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(track.artistName)
+                                .lineLimit(1)
+                            PlayCountLine(track: track, showsSince: false)
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+                .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: track.id)
+
+                GlassEffectContainer(spacing: 18) {
+                    HStack(spacing: 18) {
+                        Button {
+                            previousPresses += 1
+                            player.skipToPrevious()
+                        } label: {
+                            SkipArrows(direction: .backward, height: 11, trigger: previousPresses)
+                                .frame(width: 18, height: 18)
+                        }
+                        .disabled(player.context?.isStation == true)
+                        .help("Previous")
+                        .accessibilityLabel("Previous")
+
+                        Button {
+                            player.togglePlayPause()
+                        } label: {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                                .frame(width: 24, height: 24)
+                        }
+                        .keyboardShortcut(.space, modifiers: [])
+                        .help(player.isPlaying ? "Pause" : "Play")
+                        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+
+                        Button {
+                            nextPresses += 1
+                            player.skipToNext()
+                        } label: {
+                            SkipArrows(direction: .forward, height: 11, trigger: nextPresses)
+                                .frame(width: 18, height: 18)
+                        }
+                        .help("Next")
+                        .accessibilityLabel("Next")
+                    }
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+            }
+        }
+    }
+}
 
 private struct NowPlayingHeader: View {
     let monitor: NowPlayingMonitor
@@ -149,7 +250,7 @@ private struct NowPlayingHeader: View {
     }
 
     // What to show, in order of preference: what Music is playing (captured or not yet),
-    // then the last song Motif kept.
+    // then the last song Tracks kept.
 
     /// Nothing is audible, as far as we know. Before the first read we don't claim either way.
     private var isStale: Bool {
@@ -202,12 +303,7 @@ private struct NowPlayingHeader: View {
                 Label {
                     Text("Now Playing")
                 } icon: {
-                    Image(systemName: "waveform")
-                        .symbolEffect(
-                            .variableColor.iterative,
-                            options: .repeating,
-                            isActive: monitor.music.isPlaying && !reduceMotion
-                        )
+                    PlayingWaveform(isActive: monitor.music.isPlaying)
                 }
                 .foregroundStyle(.tint)
             }
@@ -555,7 +651,7 @@ private struct RecentRow: View {
 
 // MARK: - Footer
 
-private struct MenuBarFooter: View {
+struct MenuBarFooter: View {
     @Environment(CaptureService.self) private var capture
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
@@ -565,7 +661,7 @@ private struct MenuBarFooter: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Button("Open Motif") {
+            Button("Open Tracks") {
                 MainWindow.bringForward(openWindow: openWindow)
                 dismiss()
             }
@@ -584,7 +680,7 @@ private struct MenuBarFooter: View {
                 // being kept, like a recording light.
                 Button(capture.isRunning ? "Pause History" : "Resume History",
                        systemImage: capture.isRunning ? "record.circle.fill" : "record.circle") {
-                    capture.isRunning ? capture.stop() : capture.start()
+                    if capture.isPaused { Task { await capture.resume() } } else { capture.pause() }
                 }
                 .foregroundStyle(capture.isRunning ? AnyShapeStyle(.red) : AnyShapeStyle(.orange))
                 .accessibilityValue(capture.isRunning ? "Keeping what you play" : "Paused")
@@ -594,8 +690,8 @@ private struct MenuBarFooter: View {
                     dismiss()
                 }
                 .help("Settings")
-                Button("Quit Motif", systemImage: "power") { NSApp.terminate(nil) }
-                    .help("Quit Motif")
+                Button("Quit Tracks", systemImage: "power") { NSApp.terminate(nil) }
+                    .help("Quit Tracks")
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.glass)
@@ -607,9 +703,9 @@ private struct MenuBarFooter: View {
 
     /// Opens Settings and puts it in front.
     ///
-    /// `openSettings()` on its own makes the window but leaves Motif in the background, which
+    /// `openSettings()` on its own makes the window but leaves Tracks in the background, which
     /// from the menu bar it almost always is. The window then sat behind whatever the user
-    /// was in and only appeared when they pressed "Open Motif", which activates Motif as a
+    /// was in and only appeared when they pressed "Open Tracks", which activates Tracks as a
     /// side effect. Activating first means SwiftUI opens the window into an app that is
     /// already frontmost; the second pass covers a window that was made before the activation
     /// landed, and raises one left over from a previous visit.
@@ -626,7 +722,7 @@ private struct MenuBarFooter: View {
     ///
     /// SwiftUI gives it no public identity; AppKit calls it `com_apple_SwiftUI_Settings_window`.
     /// Matched loosely so a rename between releases doesn't quietly stop this working — no
-    /// other Motif window has "Settings" in its identifier. A miss is harmless: the window
+    /// other Tracks window has "Settings" in its identifier. A miss is harmless: the window
     /// may not exist yet, and activation alone usually brings it up.
     private static var settingsWindow: NSWindow? {
         NSApp.windows.first { $0.identifier?.rawValue.contains("Settings") == true }

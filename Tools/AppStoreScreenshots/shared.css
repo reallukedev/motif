@@ -1,28 +1,28 @@
 /* Shared look for the App Store screenshot sets.
-   The field is Motif red, taken from the icon's gradient and darkened so white type holds
+   The field is Tracks berry, taken from the icon's gradient and darkened so white type holds
    at least 4.5:1 where the headlines sit. The record is the icon's artwork at poster size. */
 
-@font-face { font-family: "Motif Display"; font-weight: 500; src: local("SF Pro Display Medium"), url("file:///Library/Fonts/SF-Pro-Display-Medium.otf"); }
-@font-face { font-family: "Motif Display"; font-weight: 600; src: local("SF Pro Display Semibold"), url("file:///Library/Fonts/SF-Pro-Display-Semibold.otf"); }
-@font-face { font-family: "Motif Display"; font-weight: 700; src: local("SF Pro Display Bold"), url("file:///Library/Fonts/SF-Pro-Display-Bold.otf"); }
-@font-face { font-family: "Motif Display"; font-weight: 800; src: local("SF Pro Display Heavy"), url("file:///Library/Fonts/SF-Pro-Display-Heavy.otf"); }
+@font-face { font-family: "Tracks Display"; font-weight: 500; src: local("SF Pro Display Medium"), url("file:///Library/Fonts/SF-Pro-Display-Medium.otf"); }
+@font-face { font-family: "Tracks Display"; font-weight: 600; src: local("SF Pro Display Semibold"), url("file:///Library/Fonts/SF-Pro-Display-Semibold.otf"); }
+@font-face { font-family: "Tracks Display"; font-weight: 700; src: local("SF Pro Display Bold"), url("file:///Library/Fonts/SF-Pro-Display-Bold.otf"); }
+@font-face { font-family: "Tracks Display"; font-weight: 800; src: local("SF Pro Display Heavy"), url("file:///Library/Fonts/SF-Pro-Display-Heavy.otf"); }
 
 :root {
-  --red-top: #e3223f;       /* field behind the headlines: white text 4.6:1 */
-  --red-bottom: #b3102b;    /* field at the foot of the frame: white text 6.9:1 */
-  --red-glow: #fb5d78;      /* icon gradient start, used only as light */
-  --label: #fd4d66;         /* record label, icon.json "label" */
-  --vinyl: #1a171c;         /* record, icon.json "vinyl" */
+  --berry-top: #d61a5f;     /* field behind the headlines: white text 5.0:1 */
+  --berry-bottom: #a30d4a;  /* field at the foot of the frame: white text 7.7:1 */
+  --berry-glow: #ff6b94;    /* icon gradient start, used only as light */
+  --label: #ffd27a;         /* record label, icon.json "label" */
+  --vinyl: #19191e;         /* record, icon.json "disc" */
   --ink: #ffffff;
   --ink-soft: rgba(255, 255, 255, 0.94);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body { background: var(--red-bottom); }
+html, body { background: var(--berry-bottom); }
 
 body {
-  font-family: "Motif Display", -apple-system, system-ui, sans-serif;
+  font-family: "Tracks Display", -apple-system, system-ui, sans-serif;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   font-kerning: normal;
@@ -34,7 +34,7 @@ body {
   overflow: hidden;
   background:
     radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.07), transparent 55%),
-    linear-gradient(180deg, var(--red-top) 0%, #d11a37 45%, var(--red-bottom) 100%);
+    linear-gradient(180deg, var(--berry-top) 0%, #c41557 45%, var(--berry-bottom) 100%);
 }
 
 .layer { position: absolute; inset: 0; pointer-events: none; }
