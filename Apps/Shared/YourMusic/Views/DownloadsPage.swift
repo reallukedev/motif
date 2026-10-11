@@ -46,8 +46,15 @@ private struct DownloadsList: View {
                             LocalCover(artwork: track.artwork, seed: track.album ?? track.title, size: 44)
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(track.title).lineLimit(1)
-                                ProgressView(value: progress)
-                                    .tint(.accentColor)
+                                Group {
+                                    if downloads.sizeUnknown.contains(track.id) {
+                                        ProgressView()
+                                            .progressViewStyle(.linear)
+                                    } else {
+                                        ProgressView(value: progress)
+                                    }
+                                }
+                                .tint(.accentColor)
                             }
                         }
                         .accessibilityElement(children: .combine)

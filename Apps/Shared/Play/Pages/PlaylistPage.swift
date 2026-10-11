@@ -164,7 +164,8 @@ struct PlaylistPage: View {
                             duration: track.duration ?? 0,
                             isExplicit: track.contentRating == .explicit,
                             isCurrent: isCurrent(track),
-                            artwork: track.artwork.map(CoverArt.artwork)
+                            artwork: track.artwork.map(CoverArt.artwork),
+                            drag: SongDrag.Song(appleMusicID: track.id.rawValue, title: track.title, artistName: track.artistName, albumTitle: track.albumTitle)
                         )
                     },
                     play: { id in Int(id).map { playTrack(at: $0, context: context) } },

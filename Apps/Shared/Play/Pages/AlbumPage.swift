@@ -85,7 +85,6 @@ struct AlbumPage: View {
 
     private func header(_ album: Album, context: PlayContext) -> some View {
         let (kind, title) = CollectionKind.of(album)
-        let isComing = (album.releaseDate ?? .distantPast) > .now
         return CollectionHeader(
             kind: kind,
             title: title,
@@ -195,7 +194,8 @@ struct AlbumPage: View {
                 isExplicit: track.contentRating == .explicit,
                 isCurrent: isCurrent(track),
                 isPlayable: availability.map { $0 == .checking || $0.track != nil } ?? true,
-                status: availability.flatMap(Self.status)
+                status: availability.flatMap(Self.status),
+                drag: SongDrag.Song(appleMusicID: track.id.rawValue, title: track.title, artistName: track.artistName, albumTitle: album.title)
             )
         }
     }

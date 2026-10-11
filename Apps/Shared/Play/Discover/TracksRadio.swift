@@ -208,7 +208,7 @@ private struct RadioMenuItems: View {
         } else {
             Button("Play Tracks Radio", systemImage: "play") { player.playTracksRadio() }
         }
-        Button("Tune Tracks Radio", systemImage: "slider.horizontal.3") { showsTuner = true }
+        Button("Tune Tracks Radio…", systemImage: "slider.horizontal.3") { showsTuner = true }
     }
 }
 
@@ -253,7 +253,7 @@ struct TracksRadioRow: View {
                             .contentTransition(.symbolEffect(.replace))
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Tune") { showsTuner = true }
+                    Button("Tune…") { showsTuner = true }
                         .buttonStyle(.bordered)
                 }
                 .buttonBorderShape(.capsule)
@@ -488,6 +488,8 @@ struct RadioTuner: View {
                     if followsTime {
                         SettingsDetailRow(title: Text("Through the Day"), detail: Text(RadioDayWords.summary(RadioDay(stored: storedDay)))) {
                             Button("Customize…") { showsDay = true }
+                                // Anchored to its row, rather than a second sheet over this one.
+                                .popover(isPresented: $showsDay, arrowEdge: .trailing) { ThroughTheDaySheet() }
                         }
                     }
                 }
@@ -511,7 +513,6 @@ struct RadioTuner: View {
         }
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: tuning.genres.isEmpty)
         .animation(SettingsMotion.row(reduceMotion: reduceMotion), value: followsTime)
-        .sheet(isPresented: $showsDay) { ThroughTheDaySheet() }
         // Changes apply as they're made, so Escape has nothing to undo: it closes, as Done does.
         .onExitCommand { dismiss() }
         #if DEBUG

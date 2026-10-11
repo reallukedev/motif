@@ -152,6 +152,10 @@ struct DownloadStateIcon: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Waiting for Wi-Fi")
+            } else if music.downloads.sizeUnknown.contains(copy.id) {
+                // The server didn't say how big it is, so there's no telling how far along.
+                TurningRing()
+                    .accessibilityLabel("Downloading")
             } else if let progress = music.downloads.progress[copy.id] {
                 ZStack {
                     Circle().stroke(.quaternary, lineWidth: 2)
@@ -185,24 +189,6 @@ struct DownloadStateIcon: View {
     }
 }
 
-/// Asks a song's server to keep it, for a song found on a server that doesn't have it yet;
-/// once asked, says it's waiting.
-struct AddToYourMusicButton: View {
-    let track: LocalTrack
-    @Environment(YourMusic.self) private var music
-    @Environment(PlayerModel.self) private var player
-
-    var body: some View {
-        if music.servers.isWaitingToKeep(track) {
-            Label("Waiting for Your Server", systemImage: "clock")
-        } else {
-            Button("Add to Your Music", systemImage: "plus.circle") {
-                Task { player.confirm(await music.keep(track)) }
-            }
-        }
-    }
-}
-
 /// Everything that can be done with one of your songs.
 struct LocalTrackMenu: View {
     let track: LocalTrack
@@ -211,68 +197,146 @@ struct LocalTrackMenu: View {
     var showsStats = false
     /// Asks before deleting a file, where the page can ask.
     var onDelete: ((LocalTrack) -> Void)?
+    /// What a menu adds of its own, as the playing song's does.
+    var adjust: ((inout SongActions) -> Void)?
 
     @Environment(YourMusic.self) private var music
     @Environment(PlayerModel.self) private var player
     @Environment(\.openPlayRoute) private var openPlayRoute
 
     var body: some View {
-        if music.isPlayable(track) {
-            Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                player.enqueue(.local([track]), next: true, title: track.title)
-            }
-            Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") {
-                player.enqueue(.local([track]), next: false, title: track.title)
-            }
-            Divider()
-        }
-        if track.isFromServer, !music.isInYourMusic(track) {
-            // Found on a server that doesn't have it yet: ask it to keep the song, then it
-            // joins your music like any other, to download and find on its album.
-            AddToYourMusicButton(track: track)
-        } else {
-            if music.isRadioOnly(track) {
-                #if os(macOS)
-                Button("Keep on This Mac", systemImage: "pin") { music.keep(HistorySong(track)) }
-                #else
-                Button("Keep on iPhone", systemImage: "pin") { music.keep(HistorySong(track)) }
-                #endif
-            }
-            if track.isFromServer {
-                if music.downloads.isDownloaded(track.id) {
-                    Button("Remove Download", systemImage: "trash") { music.downloads.remove([track.id]) }
-                } else if music.downloads.isDownloading(track.id) {
-                    Button("Stop Downloading", systemImage: "xmark.circle") { music.downloads.cancel([track.id]) }
-                } else {
-                    Button("Download", systemImage: "arrow.down.circle") { music.downloads.download([track]) }
-                }
-            }
-            Button("Go to Album", systemImage: "square.stack") { go(.localAlbum(track.albumKey)) }
-            Button("Go to Artist", systemImage: "music.microphone") { go(.localArtist(track.artistKey)) }
-        }
-        Button("Add to Playlist…", systemImage: "text.badge.plus") {
-            music.playlists.picking = PlaylistPick(tracks: [track])
-        }
-        if showsStats {
-            Button("Your Stats", systemImage: "chart.bar.xaxis") { go(.stats(.song(track.identity))) }
-            Divider()
-            SuggestLessButton(songIdentity: track.identity)
-        } else {
-            Divider()
-        }
-        BlockArtistButton(songBy: track.artist)
-        if let onDelete, !track.isFromServer {
-            Divider()
-            #if os(macOS)
-            Button("Delete from This Mac", systemImage: "trash", role: .destructive) { onDelete(track) }
-            #else
-            Button("Delete from iPhone", systemImage: "trash", role: .destructive) { onDelete(track) }
-            #endif
-        }
+        var actions = SongActions.local(track, music: music, player: player, go: go, showsStats: showsStats, onDelete: onDelete)
+        let _ = adjust?(&actions)
+        SongMenuItems(actions)
     }
 
     private func go(_ route: PlayRoute) {
         if let onNavigate { onNavigate(route) } else { openPlayRoute(route) }
+    }
+}
+
+extension SongActions {
+    /// One of your songs' actions.
+    /// - Parameters:
+    ///   - go: where Go to Album, Go to Artist and Your Stats lead.
+    ///   - onDelete: asks before deleting the file, where the page can ask. Nil leaves it out.
+    static func local(
+        _ track: LocalTrack,
+        music: YourMusic,
+        player: PlayerModel,
+        play: (() -> Void)? = nil,
+        go: @escaping (PlayRoute) -> Void,
+        showsStats: Bool = true,
+        onDelete: ((LocalTrack) -> Void)? = nil
+    ) -> SongActions {
+        let isPlayable = music.isPlayable(track)
+        var actions = SongActions(
+            play: isPlayable ? play : nil,
+            playlistTracks: [track],
+            stats: showsStats ? { go(.stats(.song(track.identity))) } : nil,
+            suggestLess: showsStats ? track.identity : nil,
+            block: track.artist
+        )
+        if isPlayable {
+            actions.playNext = { player.enqueue(.local([track]), next: true, title: track.title) }
+            actions.playLast = { player.enqueue(.local([track]), next: false, title: track.title) }
+        }
+        if track.isFromServer, !music.isInYourMusic(track) {
+            // Found on a server that doesn't have it yet: ask it to keep the song, then it
+            // joins your music like any other, to download and find on its album.
+            actions.keep.append(.addToYourMusic(track, music: music, player: player))
+            return actions
+        }
+        if music.isRadioOnly(track) {
+            #if os(macOS)
+            actions.keep.append(SongMenuButton(title: "Keep on This Mac", systemImage: "pin") { music.keep(HistorySong(track)) })
+            #else
+            actions.keep.append(SongMenuButton(title: "Keep on iPhone", systemImage: "pin") { music.keep(HistorySong(track)) })
+            #endif
+        }
+        if track.isFromServer {
+            if music.downloads.isDownloaded(track.id) {
+                actions.keep.append(SongMenuButton(title: "Remove Download", systemImage: "trash") { music.downloads.remove([track.id]) })
+            } else if music.downloads.isDownloading(track.id) {
+                actions.keep.append(SongMenuButton(title: "Stop Downloading", systemImage: "xmark.circle") { music.downloads.cancel([track.id]) })
+            } else {
+                actions.keep.append(SongMenuButton(title: "Download", systemImage: "arrow.down.circle") { music.downloads.download([track]) })
+            }
+        }
+        actions.goToAlbum = { go(.localAlbum(track.albumKey)) }
+        actions.goToArtist = { go(.localArtist(track.artistKey)) }
+        #if os(macOS)
+        if let file = music.fileURL(of: track) {
+            actions.reveal.append(SongMenuButton(title: "Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([file])
+            })
+        }
+        #endif
+        if let onDelete, !track.isFromServer {
+            #if os(macOS)
+            actions.trailing.append(SongMenuButton(title: "Delete from This Mac", systemImage: "trash", role: .destructive) { onDelete(track) })
+            #else
+            actions.trailing.append(SongMenuButton(title: "Delete from iPhone", systemImage: "trash", role: .destructive) { onDelete(track) })
+            #endif
+        }
+        return actions
+    }
+}
+
+extension SongMenuButton {
+    /// Asks a song's server to keep it, for a song found on a server that doesn't have it yet;
+    /// once asked, says it's waiting.
+    static func addToYourMusic(_ track: LocalTrack, music: YourMusic, player: PlayerModel) -> SongMenuButton {
+        if music.servers.isWaitingToKeep(track) {
+            return SongMenuButton(title: "Waiting for Your Server", systemImage: "clock", isDisabled: true) {}
+        }
+        return SongMenuButton(title: "Add to Your Music", systemImage: "plus.circle") {
+            Task { player.confirm(await music.keep(track)) }
+        }
+    }
+}
+
+extension YourMusic {
+    /// The song's file on this device: one of your files, or a server's song downloaded.
+    /// Nil for a song only on its server.
+    func fileURL(of track: LocalTrack) -> URL? {
+        switch track.origin {
+        case .file(let path): LibraryFolders.music.appending(path: path)
+        case .server: downloads.fileURL(for: track.id)
+        }
+    }
+}
+
+/// Add to Playlist, for songs of yours. On the Mac a submenu of your playlists, as Music's is,
+/// with New Playlist… at its end; on iPhone it opens the sheet to choose one.
+struct AddToPlaylistMenu: View {
+    let tracks: [LocalTrack]
+    @Environment(YourMusic.self) private var music
+    @Environment(PlayerModel.self) private var player
+
+    var body: some View {
+        #if os(macOS)
+        Menu("Add to Playlist", systemImage: "text.badge.plus") {
+            ForEach(music.playlists.fillable) { playlist in
+                Button(playlist.name) {
+                    music.playlists.add(tracks, to: playlist.id)
+                    player.confirm(String(localized: "Added to \u{201C}\(playlist.name)\u{201D}"))
+                }
+            }
+            if !music.playlists.fillable.isEmpty {
+                Divider()
+            }
+            Button("New Playlist…") {
+                let pick = PlaylistPick(tracks: tracks)
+                PlaylistPickerSheet.startsNew.insert(pick.id)
+                music.playlists.picking = pick
+            }
+        }
+        #else
+        Button("Add to Playlist…", systemImage: "text.badge.plus") {
+            music.playlists.picking = PlaylistPick(tracks: tracks)
+        }
+        #endif
     }
 }
 
@@ -305,9 +369,7 @@ struct LocalAlbumMenu: View {
             }
         }
         Divider()
-        Button("Add to Playlist…", systemImage: "text.badge.plus") {
-            music.playlists.picking = PlaylistPick(tracks: album.tracks)
-        }
+        AddToPlaylistMenu(tracks: album.tracks)
     }
 }
 

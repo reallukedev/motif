@@ -116,3 +116,11 @@ extension View {
         #endif
     }
 }
+
+extension View {
+    /// A chart's axis labels grow with Dynamic Type only so far, as Health's do: past that they
+    /// crowd out the bars they label. The words around the chart still grow.
+    func chartTextSize() -> some View {
+        dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+}

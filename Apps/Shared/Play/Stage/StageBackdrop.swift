@@ -25,7 +25,7 @@ enum StageBackground: String, CaseIterable, Identifiable {
     var footer: LocalizedStringKey {
         switch self {
         case .flow: "The cover's colours flow into one another and swell with the bass."
-        case .bloom: "The cover fills the screen, soft and slowly turning, and breathes with the beat."
+        case .bloom: "The cover fills the screen, soft and slowly turning, and breathes with the music."
         default: nowPlaying?.footer ?? ""
         }
     }
@@ -52,6 +52,8 @@ struct StageBackdrop: View {
     let levels: SmoothedLevels
     let energy: Double
     let isPlaying: Bool
+    /// Where the cover sits, in this view's space.
+    var focus: CGRect?
 
     var body: some View {
         ZStack {
@@ -62,7 +64,7 @@ struct StageBackdrop: View {
             case .bloom:
                 BloomBackdrop(cover: cover, levels: levels, energy: energy, isPlaying: isPlaying)
             default:
-                NowPlayingBackdrop(cover: cover, tint: tint, isPlaying: isPlaying, style: style.nowPlaying)
+                NowPlayingBackdrop(cover: cover, tint: tint, isPlaying: isPlaying, style: style.nowPlaying, focus: focus)
             }
         }
         .animation(.easeInOut(duration: 0.6), value: style)
@@ -94,7 +96,7 @@ private struct FlowBackdrop: View {
     @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: isSettled || !isOnScreen)) { context in
+        TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: reduceMotion), paused: isSettled || !isOnScreen)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
             let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
             let bass = Float(bands.prefix(5).reduce(0, +) / 5)
@@ -161,7 +163,7 @@ private struct BloomBackdrop: View {
     var body: some View {
         GeometryReader { proxy in
             let side = max(proxy.size.width, proxy.size.height) * 1.5
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: isSettled || !isOnScreen)) { context in
+            TimelineView(.animation(minimumInterval: reduceMotion || LowPowerMode.shared.isOn ? 1 / 20 : 1 / 30, paused: isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
                 let bass = CGFloat(bands.prefix(5).reduce(0, +) / 5)

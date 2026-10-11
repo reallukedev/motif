@@ -220,7 +220,8 @@ enum MoodShelfItem: Identifiable {
     static let all: [MoodShelfItem] = [.handpicked] + Mood.allCases.map(MoodShelfItem.mood)
 }
 
-/// A mood on the shelf: its field, its symbol large and faint in the corner, and its name.
+/// A mood on the shelf: its page's field, its symbol large and faint in the corner, and its
+/// name in its page's type, so the tile and the page read as one thing.
 struct MoodTile: View {
     let mood: Mood
     let height: CGFloat
@@ -228,10 +229,11 @@ struct MoodTile: View {
     var fillsWidth = false
 
     var body: some View {
+        let style = mood.style
         // Party opens its own page, for finding a party's playlist.
         NavigationLink(value: mood == .party ? PlayRoute.party : PlayRoute.mood(mood)) {
             ZStack(alignment: .bottomLeading) {
-                MoodField(mood: mood)
+                RoomTileField(style: style)
                 Image(systemName: mood.symbol)
                     .font(.system(size: height * 0.72, weight: .bold))
                     .foregroundStyle(.white.opacity(0.2))
@@ -240,10 +242,11 @@ struct MoodTile: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .accessibilityHidden(true)
                 Text(mood.title)
-                    .font(.headline)
+                    .font(style.title.font(size: Self.nameSize))
+                    .tracking(style.title.tracking * 0.5)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
                     .padding(12)
             }
             .frame(width: fillsWidth ? nil : height * 1.75, height: height)
@@ -254,6 +257,12 @@ struct MoodTile: View {
         .buttonStyle(.pressable)
         .accessibilityLabel(mood.title)
     }
+
+    #if os(macOS)
+    static let nameSize: CGFloat = 19
+    #else
+    static let nameSize: CGFloat = 20
+    #endif
 }
 
 // MARK: - The mood's page
@@ -276,54 +285,75 @@ enum MoodFlow: String, CaseIterable, Identifiable {
         case .new: "New Music"
         }
     }
+
+    /// What Play mixes, for the menu under it.
+    var summary: LocalizedStringKey {
+        switch self {
+        case .yours: "Only Your Songs"
+        case .both: "Your Songs and New Ones"
+        case .new: "Only New Music"
+        }
+    }
 }
 
-/// One mood, two ways: go with its flow, a live mix of your songs and new ones picked as it
-/// plays, or go looking, through new songs and new artists for it, your own songs that suit
-/// it, and Apple Music's playlists and stations.
+/// What Apple Music has given a page so far.
+enum CatalogReach: Equatable {
+    case loading
+    case found
+    /// Tracks hasn't been given access to Apple Music.
+    case notAuthorized
+    /// Asked, and nothing came back: offline, most likely.
+    case unreachable
+}
+
+/// A mood's page, built for the mood: its colours, type and covers, a section only it has,
+/// your songs that suit it, new songs and artists for it, and Apple Music's playlists and
+/// stations. Play goes with its flow, a live mix of your songs and new ones picked as it plays.
 struct MoodView: View {
     let mood: Mood
     @Environment(AppModel.self) private var model
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
-    @State private var yours: [MixSong] = []
+    @Environment(\.openURL) private var openURL
+    /// Nil until your songs that suit it are worked out.
+    @State private var room: ListeningRoom?
     @State private var newSongs: [Suggestion] = []
     @State private var newArtists: [Artist] = []
     @State private var stations: [FeedItem] = []
     @State private var playlists: [FeedItem] = []
-    @State private var hasLoaded = false
+    @State private var reach = CatalogReach.loading
     @State private var flow = MoodFlow.both
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @State private var showsAllYours = false
     @State private var showsAllNew = false
+    @State private var showsAllSignature = false
 
     var body: some View {
+        let style = mood.style
         ScrollView {
-            VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
-                hero
-
-                newToYou
-                artistsToDiscover
-                yourSongs
-
-                if !playlists.isEmpty {
-                    Shelf(title: String(localized: "Playlists"), items: playlists) { FeedTile(item: $0) }
+            VStack(alignment: .leading, spacing: 0) {
+                hero(style)
+                VStack(alignment: .leading, spacing: style.pace.sectionSpacing) {
+                    signature(style)
+                    yourSongs(style)
+                    newToYou(style)
+                    artistsToDiscover
+                    if !playlists.isEmpty {
+                        Shelf(title: String(localized: "Playlists"), items: playlists) { FeedTile(item: $0) }
+                    }
+                    if !stations.isEmpty {
+                        Shelf(title: String(localized: "Stations"), items: stations) { FeedTile(item: $0) }
+                    }
                 }
-                if !stations.isEmpty {
-                    Shelf(title: String(localized: "Stations"), items: stations) { FeedTile(item: $0) }
-                }
-
-                if hasLoaded, yours.isEmpty, newSongs.isEmpty, stations.isEmpty, playlists.isEmpty {
-                    ContentUnavailableView(
-                        "Nothing for \(mood.title) Yet",
-                        systemImage: mood.symbol,
-                        description: Text("Apple Music couldn't be reached, and none of your songs suit it yet. As Tracks learns the genres of what you play, they'll show up here.")
-                    )
-                }
+                .padding(.top, 12)
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, 32)
         }
+        .tint(style.ink)
         .heroTitle(mood.title)
+        #if DEBUG
+        .launchScroll()
+        #endif
         #if os(macOS)
         .navigationTitle(mood.title)
         // The mood's field runs on under the toolbar, which says nothing the field doesn't.
@@ -340,149 +370,235 @@ struct MoodView: View {
 
     // MARK: Hero
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: mood.symbol)
-                    .font(.system(size: 28, weight: .semibold))
-                    .frame(height: 34, alignment: .bottomLeading)
-                    .accessibilityHidden(true)
-                Text(mood.title)
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-                    .padding(.top, 8)
-                    .accessibilityAddTraits(.isHeader)
-                Text(mood.tagline)
-                    .font(.title3)
-                    .opacity(0.9)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
-            }
-
+    private func hero(_ style: RoomStyle) -> some View {
+        RoomHero(
+            style: style,
+            title: mood.title,
+            tagline: mood.tagline,
+            facts: room.flatMap(mood.facts(for:)),
+            covers: heroCovers(style),
+            isLoading: room == nil
+        ) {
             VStack(alignment: .leading, spacing: 14) {
-                // Your own music has no new songs from Apple Music to mix in.
-                if model.musicSource == .appleMusic {
-                    Picker("Play", selection: $flow) {
-                        ForEach(MoodFlow.allCases) { option in
-                            Text(option.title).tag(option)
+                RoomPlayButtons(
+                    style: style,
+                    playTitle: playTitle,
+                    playSymbol: isOn && player.isPlaying ? "pause.fill" : "play.fill",
+                    canPlay: canPlay,
+                    shuffle: yours.isEmpty ? nil : { shuffleYours() } as () -> Void,
+                    play: playOrPause
+                ) {
+                    if let session = mood.session {
+                        RoomRoundMenu(title: session.title, symbol: session.symbol, isOn: player.sleepTimer != nil) {
+                            sessionItems(session)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .tint(mood.base)
-                    .environment(\.colorScheme, .dark)
                 }
-
-                // What Play does, above it, clear of the fade below.
-                Text(flowLine)
-                    .font(.footnote)
-                    .opacity(0.85)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-
-                #if os(macOS)
-                Button {
-                    play(startingWith: nil)
-                } label: {
-                    Label("Go with the Flow", systemImage: "play.fill")
+                // Your own music has no new songs from Apple Music to mix in.
+                if model.musicSource == .appleMusic {
+                    flowMenu
                 }
-                .buttonStyle(.stagePrimary(tint: mood.color))
-                .disabled(!canPlay)
-                #else
-                Button {
-                    play(startingWith: nil)
-                } label: {
-                    Label("Go with the Flow", systemImage: "play.fill")
-                        .font(.headline)
-                        .foregroundStyle(mood.color)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(.white, in: .capsule)
-                }
-                .buttonStyle(.pressable)
-                .disabled(!canPlay)
-                #endif
             }
-            // A line's worth of controls on the Mac, not the window's width.
             .frame(maxWidth: Self.controlsWidth, alignment: .leading)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, PlayMetrics.margin)
-        .padding(.top, Self.heroTop)
-        .padding(.bottom, 24 + HeroField.fade)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            HeroField(color: mood.base, symbol: mood.symbol)
+    }
+
+    /// The covers of your songs that suit it; of new songs for it when you have none.
+    private func heroCovers(_ style: RoomStyle) -> [CoverArt] {
+        let count = CoverMosaic.count(for: style.covers)
+        if let room, !room.isEmpty { return room.covers(count) }
+        return newSongs.prefix(count).map { $0.song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: $0.song.albumTitle ?? $0.song.title) }
+    }
+
+    @ViewBuilder
+    private func sessionItems(_ session: MoodSession) -> some View {
+        if player.sleepTimer != nil {
+            Button("Turn Off Timer", systemImage: "xmark") { player.setSleepTimer(nil) }
+            Divider()
         }
-        .animation(.snappy, value: flow)
+        ForEach(session.minutes, id: \.self) { minutes in
+            Button(session.itemTitle(minutes)) { startSession(minutes: minutes) }
+        }
+    }
+
+    /// The choice of what Play mixes, as a menu under it: a setting, so it stays small.
+    private var flowMenu: some View {
+        Menu {
+            Picker("Play", selection: $flow) {
+                ForEach(MoodFlow.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            // The chevron rides on the text's last line, so a long label wraps rather than
+            // pushing the page wider than the screen.
+            Text("\(Text(flow.summary)) \(Image(systemName: "chevron.up.chevron.down"))")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.88))
+                .multilineTextAlignment(.leading)
+                .frame(minHeight: Self.menuHeight)
+                .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(Text("Mix"))
+        .accessibilityValue(Text(flow.summary))
     }
 
     #if os(macOS)
-    private static let controlsWidth: CGFloat = 400
-    private static let heroTop: CGFloat = 28
+    private static let controlsWidth: CGFloat = 520
+    private static let menuHeight: CGFloat = 22
     #else
     private static let controlsWidth: CGFloat = .infinity
-    private static let heroTop: CGFloat = 12
+    private static let menuHeight: CGFloat = 32
     #endif
 
-    private var canPlay: Bool {
-        switch flow {
-        case .yours: !yours.isEmpty
-        case .new: !newSongs.isEmpty || !stations.isEmpty || !hasLoaded
-        case .both: !yours.isEmpty || !newSongs.isEmpty || !stations.isEmpty || !hasLoaded
-        }
+    /// The mood's flow is on, playing or paused.
+    private var isOn: Bool {
+        player.hasQueue && player.context == PlayContext(kind: .endless, title: mood.title)
     }
 
-    private var flowLine: String {
+    private var playTitle: LocalizedStringKey {
+        guard isOn else { return "Play" }
+        return player.isPlaying ? "Pause" : "Resume"
+    }
+
+    private var yours: [ListeningRoom.Song] { room?.songs ?? [] }
+
+    private var canPlay: Bool {
+        guard room != nil, reach != .loading else { return true }
         switch flow {
-        case _ where model.musicSource == .yourMusic:
-            yours.isEmpty
-                ? String(localized: "None of your music suits \(mood.title) yet. Tracks goes by each song's genre.")
-                : String(localized: "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
-        case .yours:
-            yours.isEmpty
-                ? String(localized: "None of your songs suit \(mood.title) yet.")
-                : String(localized: "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
-        case .both:
-            String(localized: "Your songs and new ones, picked as it plays. What you skip steers what comes next.")
-        case .new:
-            String(localized: "Only songs you've never played, picked as it plays. Keep the ones you love with a tap.")
+        case .yours: return !yours.isEmpty
+        case .new: return !newSongs.isEmpty || !stations.isEmpty
+        case .both: return !yours.isEmpty || !newSongs.isEmpty || !stations.isEmpty
         }
     }
 
     // MARK: Sections
 
     @ViewBuilder
-    private var newToYou: some View {
-        if !newSongs.isEmpty {
-            let shown = Array(newSongs.visible(in: model.yourMusic, source: model.musicSource, mode: suggestionMode).prefix(showsAllNew ? 25 : 6))
-            VStack(alignment: .leading, spacing: 4) {
-                ShelfHeader(title: String(localized: "New to You")) {
-                    FindMoreLink(route: .songFinder(.mood(mood)))
-                }
-                if shown.isEmpty, newSongs.unanswered(in: model.yourMusic, source: model.musicSource) > 0 {
-                    LoadingRows(count: 3)
-                }
-                ForEach(shown) { suggestion in
-                    SuggestionRow(suggestion: suggestion, showsReason: false) {
-                        let all = newSongs.map(\.song)
-                        player.play(.songs(all, startingAt: all.firstIndex(of: suggestion.song) ?? 0), from: .songs(mood.title))
+    private func signature(_ style: RoomStyle) -> some View {
+        let signature = mood.signature
+        if let room, case let songs = signature.songs(room), !songs.isEmpty {
+            let shown = Array(songs.prefix(showsAllSignature ? songs.count : style.pace.rows))
+            VStack(alignment: .leading, spacing: 0) {
+                RoomSectionHeader(title: signature.title, note: signature.note) {
+                    RoomSectionAction(title: "Play", symbol: "play.fill", ink: style.ink) {
+                        play(songs, title: signature.title, shuffled: false)
                     }
-                    .contextMenu { SuggestionMenu(suggestion: suggestion) }
-                    if suggestion.id != shown.last?.id { Divider().padding(.leading, 64) }
                 }
-                if newSongs.count > 6 {
-                    showMore(isShowingAll: $showsAllNew)
+                RoomColumns(items: shown, ruleInset: signature.isSequence ? RoomSongRow.numberedTextInset : RoomSongRow.textInset) { song in
+                    historyRow(song, number: signature.isSequence ? (songs.firstIndex(of: song) ?? 0) + 1 : nil, detail: signature.detail(song)) {
+                        play(songs, startingAt: song, title: signature.title)
+                    }
                 }
-            }
-            .padding(.horizontal, PlayMetrics.margin)
-        } else if !hasLoaded {
-            VStack(alignment: .leading, spacing: 4) {
-                ShelfHeader(title: String(localized: "New to You")) { EmptyView() }
-                LoadingRows(count: 6)
+                if songs.count > style.pace.rows {
+                    RoomShowMore(isShowingAll: $showsAllSignature, ink: style.ink)
+                }
             }
             .padding(.horizontal, PlayMetrics.margin)
         }
+    }
+
+    @ViewBuilder
+    private func yourSongs(_ style: RoomStyle) -> some View {
+        let title = String(localized: "Your \(mood.title) Songs")
+        VStack(alignment: .leading, spacing: 0) {
+            RoomSectionHeader(title: title)
+            if let room {
+                if room.isEmpty {
+                    RoomNote(
+                        text: String(localized: "None of your songs suit \(mood.title) yet. Tracks goes by each song's genre, so they'll gather here as you play."),
+                        symbol: mood.symbol
+                    )
+                } else {
+                    let songs = room.songs
+                    let shown = Array(songs.prefix(showsAllYours ? 25 : style.pace.rows))
+                    RoomColumns(items: shown) { song in
+                        historyRow(song, detail: PlayCountText.short(song.plays)) {
+                            play(startingWith: song.song, flow: .yours)
+                        }
+                    }
+                    if songs.count > style.pace.rows {
+                        RoomShowMore(isShowingAll: $showsAllYours, ink: style.ink)
+                    }
+                }
+            } else {
+                LoadingRows(count: style.pace.rows)
+            }
+        }
+        .padding(.horizontal, PlayMetrics.margin)
+    }
+
+    private func historyRow(_ song: ListeningRoom.Song, number: Int? = nil, detail: String?, play: @escaping () -> Void) -> some View {
+        let canPlay = player.canPlay(songID: song.song.songID)
+        return Button(action: play) {
+            RoomSongRow(
+                title: song.song.title,
+                artist: song.song.artistName,
+                cover: song.cover,
+                number: number,
+                detail: detail,
+                isCurrent: player.current?.songIdentity == song.song.songIdentity,
+                isPlayable: canPlay
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!canPlay)
+        .contextMenu { HistorySongMenu(song: song.song) }
+    }
+
+    @ViewBuilder
+    private func newToYou(_ style: RoomStyle) -> some View {
+        let visible = newSongs.visible(in: model.yourMusic, source: model.musicSource, mode: suggestionMode)
+        VStack(alignment: .leading, spacing: 0) {
+            RoomSectionHeader(title: String(localized: "New to You")) {
+                if !newSongs.isEmpty {
+                    FindMoreLink(route: .songFinder(.mood(mood)))
+                }
+            }
+            switch reach {
+            case .loading:
+                LoadingRows(count: style.pace.rows)
+            case .notAuthorized:
+                RoomNote(
+                    text: String(localized: "Connect Apple Music for new songs, playlists and stations for \(mood.title)."),
+                    symbol: "music.note",
+                    action: model.musicAuthorization == .denied
+                        ? RoomNoteAction(title: "Open Settings", run: openMusicSettings)
+                        : RoomNoteAction(title: "Connect Apple Music", run: connectAppleMusic)
+                )
+            case .unreachable:
+                RoomNote(
+                    text: String(localized: "Couldn't reach Apple Music. New songs and playlists for \(mood.title) will be here when it's back."),
+                    symbol: "wifi.slash",
+                    action: RoomNoteAction(title: "Try Again", run: retryCatalog)
+                )
+            case .found:
+                if newSongs.isEmpty {
+                    RoomNote(text: String(localized: "Nothing new for \(mood.title) right now. You've heard everything Apple Music suggests for it."))
+                } else {
+                    let shown = Array(visible.prefix(showsAllNew ? 25 : style.pace.rows))
+                    if shown.isEmpty, newSongs.unanswered(in: model.yourMusic, source: model.musicSource) > 0 {
+                        LoadingRows(count: 3)
+                    }
+                    RoomColumns(items: shown) { suggestion in
+                        SuggestionRow(suggestion: suggestion, showsReason: false) {
+                            let all = newSongs.map(\.song)
+                            player.play(.songs(all, startingAt: all.firstIndex(of: suggestion.song) ?? 0), from: .songs(mood.title))
+                        }
+                        .contextMenu { SuggestionMenu(suggestion: suggestion) }
+                    }
+                    if visible.count > style.pace.rows {
+                        RoomShowMore(isShowingAll: $showsAllNew, ink: style.ink)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, PlayMetrics.margin)
     }
 
     @ViewBuilder
@@ -490,126 +606,91 @@ struct MoodView: View {
         if !newArtists.isEmpty {
             Shelf(title: String(localized: "Artists to Discover"), items: newArtists) { artist in
                 NavigationLink(value: PlayRoute.artist(artist)) {
-                    VStack(spacing: 8) {
-                        CoverImage(cover: artist.artwork.map(CoverArt.artwork) ?? .url(nil, seed: artist.name), size: 110, isCircle: true)
-                        Text(artist.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
-                    .frame(width: 110)
+                    ArtistCircleTile(
+                        name: artist.name,
+                        picture: artist.artwork.map(CoverArt.artwork),
+                        detail: nil
+                    )
                 }
                 .buttonStyle(.pressable)
             }
         }
     }
 
-    @ViewBuilder
-    private var yourSongs: some View {
-        if !yours.isEmpty {
-            let shown = Array(yours.prefix(showsAllYours ? 25 : 5))
-            VStack(alignment: .leading, spacing: 4) {
-                ShelfHeader(title: String(localized: "Your \(mood.title) Songs")) { EmptyView() }
-                ForEach(shown) { song in
-                    Button {
-                        play(startingWith: song, flow: .yours)
-                    } label: {
-                        TrackRow(
-                            title: song.title,
-                            subtitle: song.artistName,
-                            cover: .url(song.artworkURL, seed: song.albumTitle ?? song.title),
-                            plays: song.plays,
-                            isCurrent: player.current?.songIdentity == song.songIdentity
-                        )
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!player.canPlay(songID: song.songID))
-                    .contextMenu { HistorySongMenu(song: song) }
-                    if song.id != shown.last?.id { Divider().padding(.leading, 60) }
-                }
-                if yours.count > 5 {
-                    showMore(isShowingAll: $showsAllYours)
-                }
-            }
-            .padding(.horizontal, PlayMetrics.margin)
+    // MARK: Playing
+
+    private func playOrPause() {
+        if isOn {
+            player.togglePlayPause()
+        } else {
+            play(startingWith: nil)
         }
     }
-
-    private func showMore(isShowingAll: Binding<Bool>) -> some View {
-        Button {
-            withAnimation(.snappy) { isShowingAll.wrappedValue.toggle() }
-        } label: {
-            Text(isShowingAll.wrappedValue ? "Show Less" : "Show More")
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.tint)
-    }
-
-    // MARK: Playing and loading
 
     private func play(startingWith first: MixSong?, flow: MoodFlow? = nil) {
         let flow = flow ?? self.flow
-        let found = hasLoaded ? MoodCatalog.Found(stations: stations, playlists: playlists, newSongs: newSongs.map(\.song)) : nil
+        let found = reach == .found ? MoodCatalog.Found(stations: stations, playlists: playlists, newSongs: newSongs.map(\.song)) : nil
         Task {
             await MoodPlayback.start(mood, model: model, flow: flow, found: found, startingWith: first)
         }
     }
 
+    /// Your songs that suit it, in a fresh order.
+    private func shuffleYours() {
+        play(yours, title: String(localized: "Your \(mood.title) Songs"), shuffled: true)
+    }
+
+    private func play(_ songs: [ListeningRoom.Song], startingAt first: ListeningRoom.Song? = nil, title: String, shuffled: Bool = false) {
+        let playable = songs.filter { player.canPlay(songID: $0.song.songID) }
+        let start = first.flatMap { playable.firstIndex(of: $0) } ?? 0
+        player.play(.history(playable.map { HistorySong($0.song) }, startingAt: start), from: .songs(title), shuffled: shuffled)
+    }
+
+    /// Plays for a while, then stops: the player's sleep timer, set for the session.
+    private func startSession(minutes: Int) {
+        player.setSleepTimer(.at(.now.addingTimeInterval(TimeInterval(minutes * 60))))
+        if !isOn { play(startingWith: nil) }
+    }
+
+    private func connectAppleMusic() {
+        Task {
+            await model.requestMusicAccess()
+            await loadCatalog()
+        }
+    }
+
+    private func openMusicSettings() {
+        if let url = SystemSettingsLink.musicAccess { openURL(url) }
+    }
+
+    private func retryCatalog() {
+        reach = .loading
+        Task { await loadCatalog() }
+    }
+
+    // MARK: Loading
+
     private func load() async {
         // Once per visit: coming back from an artist or an album shouldn't search again.
-        guard !hasLoaded else { return }
-        let (history, signals, mood) = (model.library.history, player.signals, mood)
-        // Your own music: the songs whose genre suits the mood, and, unless suggestions are
-        // off, new songs for it from Apple Music's catalog, each marked for whether you have
-        // it. Apple's own playlists and stations play only from Apple Music, so they stay out.
-        if model.musicSource == .yourMusic {
-            let tracks = model.yourMusic.playableTracks
-            let mix = await OffMainActor.run { LiveMix.mood(mood, from: tracks, history: history, signals: signals, seed: 1) }
-            let songs: [MixSong] = mix.candidates.map(\.song).sorted { lhs, rhs in
-                lhs.plays == rhs.plays ? lhs.title < rhs.title : lhs.plays > rhs.plays
-            }
-            yours = songs.map(withCover)
-            flow = .both
-            if suggestionMode != .off {
-                let found = await MoodCatalog.find(mood, isDemo: player.isDemo)
-                newSongs = fresh(found.newSongs)
-            }
-            hasLoaded = true
-            if suggestionMode != .off {
-                newArtists = await MoodCatalog.artists(of: newSongs.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
-            }
+        guard room == nil else { return }
+        let (history, signals, drives, mood) = (model.library.history, player.signals, player.drive.log, mood)
+        let room = await OffMainActor.run { ListeningRoom.mood(mood, in: history, signals: signals, drives: drives) }
+        self.room = room
+        if room.isEmpty { flow = .new }
+        await loadCatalog()
+    }
+
+    private func loadCatalog() async {
+        guard player.isDemo || model.musicAuthorization == .authorized else {
+            reach = .notAuthorized
             return
         }
-        yours = await OffMainActor.run { MoodMix.songs(for: mood, in: history, signals: signals) }
-            .filter { player.canPlay(songID: $0.songID) }
-        if yours.isEmpty { flow = .new }
-
         let found = await MoodCatalog.find(mood, isDemo: player.isDemo)
         stations = found.stations
         playlists = found.playlists
         newSongs = fresh(found.newSongs)
-        hasLoaded = true
+        reach = found.stations.isEmpty && found.playlists.isEmpty && found.newSongs.isEmpty && !player.isDemo ? .unreachable : .found
         newArtists = await MoodCatalog.artists(of: newSongs.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
-    }
-
-    /// A song of yours with its cover, which a mix doesn't carry.
-    private func withCover(_ song: MixSong) -> MixSong {
-        let music = model.yourMusic
-        let artwork: String? = music.index.track(id: song.songID).flatMap { music.artworkURL($0.artwork)?.absoluteString }
-        return MixSong(
-            songIdentity: song.songIdentity,
-            songID: song.songID,
-            title: song.title,
-            artistName: song.artistName,
-            albumTitle: song.albumTitle,
-            artworkURL: artwork,
-            plays: song.plays,
-            lastHeard: song.lastHeard,
-            genre: song.genre
-        )
     }
 
     /// Songs never played, the version the explicit setting allows, no artist twice in a row.

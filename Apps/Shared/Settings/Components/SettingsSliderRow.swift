@@ -76,12 +76,18 @@ struct SettingsSliderRow: View {
 }
 
 private extension View {
-    /// Writes the draft into the stored value about 200 ms after it stops changing.
+    /// Writes the draft into the stored value about 200 ms after it stops changing, or at
+    /// once if the row goes away first, so a quick change before leaving the page still counts.
     func settling(draft: Binding<Double?>, into value: Binding<Double>) -> some View {
         task(id: draft.wrappedValue) {
             guard let settled = draft.wrappedValue else { return }
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled else { return }
+            value.wrappedValue = settled
+            draft.wrappedValue = nil
+        }
+        .onDisappear {
+            guard let settled = draft.wrappedValue else { return }
             value.wrappedValue = settled
             draft.wrappedValue = nil
         }

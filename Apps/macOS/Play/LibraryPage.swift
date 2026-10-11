@@ -104,6 +104,8 @@ private struct LibrarySearchResults: View {
     @State private var playlists = LibraryPager<Playlist>()
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
+    /// A click selects a song, and a double-click or Return plays it.
+    @FocusState private var selectedSong: String?
 
     var body: some View {
         LibraryAccessGate {
@@ -135,9 +137,8 @@ private struct LibrarySearchResults: View {
                     Section("Songs") {
                         ForEach(Array(shownSongs.enumerated()), id: \.element.id) { index, song in
                             let identity = HistoryImport.key(title: song.title, artistName: song.artistName)
-                            Button {
-                                player.play(.songs(shownSongs, startingAt: index), from: .songs(String(localized: "Search")))
-                            } label: {
+                            let play = { player.play(.songs(shownSongs, startingAt: index), from: .songs(String(localized: "Search"))) }
+                            SongResultRow(id: song.id.rawValue, selection: $selectedSong, step: { step(from: index, by: $0) }, play: play) {
                                 TrackRow(
                                     title: song.title,
                                     subtitle: [song.artistName, song.albumTitle].compactMap(\.self).joined(separator: " · "),
@@ -147,8 +148,8 @@ private struct LibrarySearchResults: View {
                                     isCurrent: player.current?.songIdentity == identity
                                 )
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu { SongMenu(song: song) }
+                            .draggable(SongDrag(song))
+                            .contextMenu { SongMenu(song: song, play: play) }
                         }
                     }
                 }
@@ -173,6 +174,12 @@ private struct LibrarySearchResults: View {
     }
 
     private var shownSongs: [Song] { Array(songs.items.prefix(12)) }
+
+    private func step(from index: Int, by offset: Int) {
+        let songs = shownSongs
+        guard songs.indices.contains(index + offset) else { return }
+        selectedSong = songs[index + offset].id.rawValue
+    }
 
     private var isLoading: Bool {
         [songs.phase, albums.phase, artists.phase, playlists.phase].contains(.loading)

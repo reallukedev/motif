@@ -84,6 +84,7 @@ struct PlayScreen: View {
         .sheet(isPresented: $showsEditor) {
             PlayLayoutEditor()
         }
+        .refreshCommand()
         .refreshable {
             await feed.loadAppleMusic(force: true)
             await feed.loadFromYourArtists(force: true)
@@ -120,7 +121,8 @@ struct PlayScreen: View {
         case .suggestedSongs:
             if blocker == nil {
                 // Tracks Radio leads the crate; with the crate hidden, it leads these instead.
-                SuggestedSongsSection(includesRadio: !layout.isVisible(.forYou) || crateCards.isEmpty)
+                // Not while the crate is still coming, or Radio would show here and then leave.
+                SuggestedSongsSection(includesRadio: !layout.isVisible(.forYou) || crateCards.isEmpty && !isCrateLoading)
             }
         case .suggestedArtists:
             if blocker == nil {
@@ -247,6 +249,11 @@ struct PlayScreen: View {
         } else {
             CratePlaceholder()
         }
+    }
+
+    /// Whether For You is still waiting on the history or Apple Music to show its crate.
+    private var isCrateLoading: Bool {
+        feed.liveStations.isEmpty && !(feed.hasBuilt && model.library.isLoaded && feed.appleMusicState != .loading)
     }
 
     /// The crate: Tracks Radio in the middle, starting in front, with this hour's mix, Discover

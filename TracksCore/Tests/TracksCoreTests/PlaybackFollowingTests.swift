@@ -113,6 +113,26 @@ struct PlaybackFollowingTests {
         #expect(yesterday.playedBackAt == nil)
     }
 
+    /// The slow request finishing last used to start following its own queue, which
+    /// stopped the newer one being followed and left its song unmarked.
+    @Test("a slow earlier request finishing late doesn't take over from a newer one")
+    func latestRequestIsFollowed() async throws {
+        let older = try capture("1", secondsIntoToday: 1)
+        let newer = try capture("2", secondsIntoToday: 2)
+        service.slowSongs = ["1"]
+
+        let controller = PlaybackController(store: store, service: service)
+        let slow = Task { await controller.play(PlaybackItem(songID: "1", title: "T1", artistName: "A")) }
+        try await waitUntil { service.played.count == 1 }
+        await controller.play(PlaybackItem(songID: "2", title: "T2", artistName: "A"))
+        await slow.value
+
+        service.reach("2")
+        try await waitUntil { newer.playedBackAt != nil }
+        #expect(older.playedBackAt == nil)
+        #expect(controller.queuedCount == 1)
+    }
+
     /// Sync can merge a capture away before playback reaches it.
     @Test("a queued capture deleted before it's reached is skipped")
     func deletedBeforeReached() async throws {

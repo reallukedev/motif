@@ -131,9 +131,8 @@ struct ChartActivityCard: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .foregroundStyle(.secondary)
                     .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                        Text("avg")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        // The chart's card: its fill over the page.
+                        AverageTag { Color.cardFill.background(Color.pageBackground) }
                     }
             }
         }
@@ -168,6 +167,14 @@ struct ChartActivityCard: View {
         .accessibilityLabel("Listening by \(Text(bucketNoun))")
         .accessibilityValue(accessibilitySummary)
         .accessibilityChartDescriptor(ActivityDescriptor(buckets: activity.buckets, name: bucketName))
+        // The bars open by tap alone; VoiceOver opens them from the actions instead.
+        .accessibilityActions {
+            if activity.bucketSpan != nil {
+                ForEach(activity.buckets.filter { $0.start <= .now }) { bucket in
+                    Button(bucketName(bucket)) { openBucket(bucket) }
+                }
+            }
+        }
     }
 
     private func barStyle(_ bucket: PeriodActivity.Bucket) -> AnyShapeStyle {
@@ -252,6 +259,19 @@ struct ChartStats: View {
     let activity: PeriodActivity
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            figures
+            // About listening time, so on a line of its own rather than under the lead figure.
+            if let comparison {
+                comparison
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var figures: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 28) {
                 lead
@@ -261,14 +281,15 @@ struct ChartStats: View {
                 }
                 Spacer(minLength: 0)
             }
-            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 14) {
+            // Two even columns, so the second lines up at the card's middle whatever the figures.
+            Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 14) {
                 GridRow {
-                    lead
-                    small(others[0])
+                    lead.frame(maxWidth: .infinity, alignment: .leading)
+                    small(others[0]).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 GridRow {
-                    small(others[1])
-                    small(others[2])
+                    small(others[1]).frame(maxWidth: .infinity, alignment: .leading)
+                    small(others[2]).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -281,7 +302,7 @@ struct ChartStats: View {
     }
 
     private var time: Stat {
-        Stat(title: "Listening Time", value: Duration.seconds(activity.seconds).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated, maximumUnitCount: 2)))
+        Stat(title: "Listening Time", value: Format.listening(activity.seconds))
     }
 
     private var plays: Stat { Stat(title: "Plays", value: activity.plays.formatted()) }
@@ -310,11 +331,6 @@ struct ChartStats: View {
             case .albums:
                 label("Albums")
                 big(activity.albums)
-            }
-            if let comparison {
-                comparison
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -346,13 +362,14 @@ struct ChartStats: View {
             .foregroundStyle(.secondary)
     }
 
-    /// "↑ 50% more listening than last week", said of the period before this one.
+    /// "↑ 50% more listening than this time last week": listening time against the period
+    /// before, cut to the same point while this one is still under way.
     private var comparison: Text? {
         guard let change = activity.change else { return nil }
         let percent = abs(change).formatted(.percent.precision(.fractionLength(0)))
-        let before = Text(period.beforeName)
+        let before = period.isCurrent() ? Text("this time \(Text(period.beforeName))") : Text(period.beforeName)
         if abs(change) < 0.005 {
-            return Text("As much as \(before)")
+            return Text("About the same as \(before)")
         }
         let arrow = Image(systemName: change > 0 ? "arrow.up" : "arrow.down")
         return change > 0

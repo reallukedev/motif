@@ -40,8 +40,9 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     private var itemObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
     /// The item playing, by identity: the same song queued twice is two items.
     private var currentItemID: ObjectIdentifier?
-    /// The last item that failed, so a failure reported twice is handled once.
-    private var lastFailedItem: ObjectIdentifier?
+    /// The last item that failed, so a failure reported twice is handled once. Weak, as an
+    /// identifier could match a new item made at a freed one's address.
+    private weak var lastFailedItem: AVPlayerItem?
     /// The song that couldn't stream but that its server is getting: the player waits on it,
     /// loading, rather than moving on, and plays it when a sync brings it in.
     private var awaitingArrival: String?
@@ -74,11 +75,13 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         music.onSongsArrived = { [weak self] in self?.songsArrived($0) }
         player.actionAtItemEnd = .advance
         player.automaticallyWaitsToMinimizeStalling = true
+        // KVO calls back on whichever thread made the change, which AVFoundation sometimes
+        // does on its own queue: assuming the main actor there would stop the app.
         observations.append(player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.updateStatus() }
+            Self.onMain { self?.updateStatus() }
         })
         observations.append(player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.currentItemChanged() }
+            Self.onMain { self?.currentItemChanged() }
         })
         let center = NotificationCenter.default
         notifications.append(center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
@@ -86,15 +89,20 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             MainActor.assumeIsolated { self?.itemFinished(item) }
         })
         notifications.append(center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
-            let item = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            let item = note.object as? AVPlayerItem
             MainActor.assumeIsolated { self?.itemFailed(item) }
         })
         #if os(iOS)
-        notifications.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
-            let info = note.userInfo
-            let type = (info?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init(rawValue:))
-            let options = (info?[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init(rawValue:))
-            MainActor.assumeIsolated { self?.interrupted(type, options: options) }
+        notifications.append(center.addObserver(forName: AVAudioSession.didBecomeInactiveNotification, object: nil, queue: .main) { [weak self] note in
+            // Only the system's: a session Tracks let go of itself isn't an interruption.
+            let context = note.userInfo?[AVAudioSession.deactivationContextKey] as? AVAudioSession.DeactivationContext
+            guard context?.source == .system else { return }
+            MainActor.assumeIsolated { self?.interruptionBegan() }
+        })
+        notifications.append(center.addObserver(forName: AVAudioSession.resumptionRecommendationNotification, object: nil, queue: .main) { [weak self] note in
+            let context = note.userInfo?[AVAudioSession.resumptionContextKey] as? AVAudioSession.ResumptionContext
+            let shouldResume = context?.recommendation == .shouldResume
+            MainActor.assumeIsolated { self?.interruptionEnded(shouldResume: shouldResume) }
         })
         notifications.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
             let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
@@ -400,7 +408,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         itemEntries[id] = entry.id
         itemObservations[id] = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             guard item.status == .failed else { return }
-            Task { @MainActor in self?.itemFailed(id) }
+            Task { @MainActor [weak item] in self?.itemFailed(item) }
         }
         return item
     }
@@ -473,8 +481,11 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         }
     }
 
-    private func itemFailed(_ item: ObjectIdentifier?) {
-        guard let item, item == currentItemID, item != lastFailedItem else { return }
+    private func itemFailed(_ item: AVPlayerItem?) {
+        // Word of a failure can arrive after the queue was cleared or replaced.
+        guard let item, ObjectIdentifier(item) == currentItemID, item !== lastFailedItem,
+              entries.indices.contains(index)
+        else { return }
         lastFailedItem = item
         // A song found for you that its server couldn't preview, often because it couldn't find
         // it anywhere to stream, but is fetching the file for: wait here for it, not skip past.
@@ -542,23 +553,30 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         scrobbleToServerIfDue()
     }
 
+    /// Runs `body` straight away on the main thread, in order, or hops there from any other.
+    nonisolated private static func onMain(_ body: @escaping @MainActor @Sendable () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(body)
+        } else {
+            Task { @MainActor in body() }
+        }
+    }
+
     // MARK: - Interruptions
 
     #if os(iOS)
     private var wasPlayingBeforeInterruption = false
 
-    private func interrupted(_ type: AVAudioSession.InterruptionType?, options: AVAudioSession.InterruptionOptions?) {
-        switch type {
-        case .began:
-            wasPlayingBeforeInterruption = status == .playing
-        case .ended:
-            if wasPlayingBeforeInterruption, options?.contains(.shouldResume) == true {
-                player.play()
-            }
-            wasPlayingBeforeInterruption = false
-        default:
-            break
+    private func interruptionBegan() {
+        wasPlayingBeforeInterruption = status == .playing
+    }
+
+    private func interruptionEnded(shouldResume: Bool) {
+        if wasPlayingBeforeInterruption, shouldResume {
+            try? AVAudioSession.sharedInstance().setActive(true)
+            player.play()
         }
+        wasPlayingBeforeInterruption = false
     }
     #endif
 
@@ -574,29 +592,29 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         isActive = true
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.playFromRemote() }
+            Self.onMain { self?.playFromRemote() }
             return .success
         }
         center.pauseCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated { self?.pause() }
+            Self.onMain { self?.pause() }
             return .success
         }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated {
+            Self.onMain {
                 guard let self else { return }
                 if self.status == .playing { self.pause() } else { self.playFromRemote() }
             }
             return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated {
+            Self.onMain {
                 guard let self else { return }
                 if let onRemoteNext = self.onRemoteNext { onRemoteNext() } else { Task { try? await self.skipToNext() } }
             }
             return .success
         }
         center.previousTrackCommand.addTarget { [weak self] _ in
-            MainActor.assumeIsolated {
+            Self.onMain {
                 guard let self else { return }
                 if let onRemotePrevious = self.onRemotePrevious { onRemotePrevious() } else { Task { try? await self.skipToPrevious() } }
             }
@@ -605,7 +623,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let time = event.positionTime
-            MainActor.assumeIsolated { self?.seek(to: time) }
+            Self.onMain { self?.seek(to: time) }
             return .success
         }
     }
@@ -625,6 +643,10 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         player.pause()
         player.removeAllItems()
         itemEntries = [:]
+        itemObservations = [:]
+        currentItemID = nil
+        lastFailedItem = nil
+        awaitingArrival = nil
         music.playbacks = [:]
         entries = []
         unshuffled = []
@@ -676,10 +698,9 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             serverScrobble = (entry.id, false)
             Task.detached { try? await client.scrobble(songID: songID, submission: false) }
         }
-        let needs = min(
-            CaptureSettings().minimumListen(forDuration: entry.track.duration),
-            (entry.track.duration ?? CaptureSettings.assumedSongLength) / 2
-        )
+        // Counted by Last.fm's rule, which the server passes plays on to, whatever Tracks's own
+        // threshold for keeping a song is: Straight Away would otherwise count every skip.
+        guard let needs = ScrobblePolicy().requiredPlayback(forDuration: entry.track.duration) else { return }
         if serverScrobble?.counted == false, playbackTime >= needs {
             serverScrobble = (entry.id, true)
             Task.detached { try? await client.scrobble(songID: songID, submission: true) }

@@ -9,9 +9,9 @@ public struct SubsonicServer: Codable, Sendable, Hashable, Identifiable {
     public var name: String
     public var url: URL
     public var username: String
-    /// Mixed into the password for the token each request carries, so the password itself
-    /// never goes over the wire. Fixed per server, so cover addresses stay the same between
-    /// launches and their images stay cached.
+    /// Mixed into the password for the token cover addresses carry, so the password itself
+    /// never goes over the wire. Fixed per server, so those addresses stay the same between
+    /// launches and their images stay cached. Every other request gets a salt of its own.
     public var salt: String
 
     public init(id: String = UUID().uuidString, name: String, url: URL, username: String, salt: String = SubsonicServer.makeSalt()) {
@@ -66,7 +66,8 @@ public struct URLSessionTransport: SubsonicTransport {
 /// Talks to one Subsonic server.
 public struct SubsonicClient: Sendable {
     public let server: SubsonicServer
-    private let token: String
+    /// Kept to sign each request with a fresh salt. Only its salted hash leaves the device.
+    private let password: String
     private let transport: any SubsonicTransport
 
     /// The API version asked for. 1.16.1 is the last Subsonic release; OpenSubsonic servers
@@ -75,7 +76,7 @@ public struct SubsonicClient: Sendable {
 
     public init(server: SubsonicServer, password: String, transport: any SubsonicTransport = URLSessionTransport()) {
         self.server = server
-        self.token = Self.token(password: password, salt: server.salt)
+        self.password = password
         self.transport = transport
     }
 
@@ -86,13 +87,19 @@ public struct SubsonicClient: Sendable {
 
     // MARK: - Addresses
 
-    /// An endpoint's address with the credentials every request carries.
+    /// An endpoint's address with the credentials every request carries, signed with a salt
+    /// of its own. With one salt for good, the token in any address that reached a log
+    /// would sign every request after it.
     public func url(_ endpoint: String, _ parameters: [String: String] = [:], json: Bool = true) -> URL {
+        url(endpoint, parameters, json: json, salt: SubsonicServer.makeSalt())
+    }
+
+    private func url(_ endpoint: String, _ parameters: [String: String], json: Bool, salt: String) -> URL {
         var components = URLComponents(url: server.url.appending(path: "rest/\(endpoint)"), resolvingAgainstBaseURL: false)!
         var items = [
             URLQueryItem(name: "u", value: server.username),
-            URLQueryItem(name: "t", value: token),
-            URLQueryItem(name: "s", value: server.salt),
+            URLQueryItem(name: "t", value: Self.token(password: password, salt: salt)),
+            URLQueryItem(name: "s", value: salt),
             URLQueryItem(name: "v", value: Self.apiVersion),
             URLQueryItem(name: "c", value: "Tracks"),
         ]
@@ -119,8 +126,10 @@ public struct SubsonicClient: Sendable {
         url("download", ["id": songID], json: false)
     }
 
+    /// Signed with the server's own salt, so the address is the same every time and the
+    /// image stays cached.
     public func coverArtURL(id: String, size: Int? = nil) -> URL {
-        url("getCoverArt", size.map { ["id": id, "size": String($0)] } ?? ["id": id], json: false)
+        url("getCoverArt", size.map { ["id": id, "size": String($0)] } ?? ["id": id], json: false, salt: server.salt)
     }
 
     // MARK: - Asking

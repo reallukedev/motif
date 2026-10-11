@@ -183,7 +183,8 @@ struct LocalAlbumContent: View {
                             plays: feed.facts[track.identity]?.plays ?? 0,
                             duration: track.duration ?? 0,
                             isCurrent: player.current?.local?.id == track.id,
-                            isPlayable: music.isPlayable(track)
+                            isPlayable: music.isPlayable(track),
+                            drag: SongDrag([track]).songs.first
                         )
                     },
                     style: .album,

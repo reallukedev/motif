@@ -66,14 +66,12 @@ struct DayClock {
     mutating func facts(for date: Date) -> Facts? {
         if current.map({ $0.interval.start <= date && date < $0.interval.end }) != true {
             guard let interval = days.interval(containing: date) else { return nil }
-            let zone = calendar.timeZone
             current = Day(
                 interval: interval,
                 weekday: calendar.component(.weekday, from: interval.start),
                 isWeekend: calendar.isDateInWeekend(interval.start),
                 year: calendar.component(.year, from: interval.start),
-                isSteady: zone.secondsFromGMT(for: interval.start)
-                    == zone.secondsFromGMT(for: interval.end.addingTimeInterval(-1))
+                isSteady: Self.isSteady(interval, calendar: calendar)
             )
         }
         guard let day = current else { return nil }
@@ -81,5 +79,14 @@ struct DayClock {
             ? Int(date.timeIntervalSince(day.interval.start)) / 3_600
             : calendar.component(.hour, from: date)
         return Facts(day: day.interval, hour: hour, weekday: day.weekday, isWeekend: day.isWeekend, year: day.year)
+    }
+
+    /// Whether the time since `day` began is its clock time. Not on a day the clocks change,
+    /// including one where they change at midnight and the day starts at 1 AM, with the same
+    /// offset all day.
+    static func isSteady(_ day: DateInterval, calendar: Calendar) -> Bool {
+        let zone = calendar.timeZone
+        return zone.secondsFromGMT(for: day.start) == zone.secondsFromGMT(for: day.end.addingTimeInterval(-1))
+            && calendar.component(.hour, from: day.start) == 0
     }
 }

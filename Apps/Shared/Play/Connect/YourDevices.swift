@@ -376,7 +376,7 @@ struct RemoteTransport: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        HStack(spacing: size == .large ? 26 : 4) {
+        HStack(spacing: size == .large ? 26 : 8) {
             button("Previous", "backward.fill", .previous, diameter: small)
                 .disabled(!state.canSkipBack)
             button(state.isPlaying ? "Pause" : "Play", state.isPlaying ? "pause.fill" : "play.fill", .playPause, diameter: big)
@@ -388,6 +388,15 @@ struct RemoteTransport: View {
     private var small: CGFloat { size == .large ? 36 : 30 }
     private var big: CGFloat { size == .large ? 46 : 36 }
 
+    /// Each button answers a touch across a full fingertip, around the smaller glyph.
+    private var hitSide: CGFloat {
+        #if os(iOS)
+        44
+        #else
+        0
+        #endif
+    }
+
     private func button(_ title: LocalizedStringKey, _ symbol: String, _ command: TransportCommand, diameter: CGFloat) -> some View {
         Button {
             model.nearby.send(command, to: device)
@@ -396,7 +405,8 @@ struct RemoteTransport: View {
                 .font(.system(size: diameter * 0.42, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: diameter, height: diameter)
-                .contentShape(.circle)
+                .frame(minWidth: hitSide, minHeight: hitSide)
+                .contentShape(.rect)
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(Text(title))

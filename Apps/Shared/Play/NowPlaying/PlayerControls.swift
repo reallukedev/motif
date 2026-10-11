@@ -41,7 +41,7 @@ struct PlayerTransport: View {
             .buttonStyle(PlayerButtonStyle(diameter: 88))
             .overlay {
                 if player.isPlaying, player.status == .loading {
-                    TurningRing(diameter: 84, lineWidth: 2.5, style: AnyShapeStyle(.primary.opacity(0.5)))
+                    TurningRing(diameter: 84, lineWidth: 2.5, color: .primary.opacity(0.5))
                         .transition(.opacity)
                         .allowsHitTesting(false)
                 }
@@ -240,44 +240,41 @@ struct NowPlayingMenuItems: View {
 
     var body: some View {
         if let local = track.local {
-            LocalTrackMenu(track: local, onNavigate: { navigate(.play($0)) })
-            Divider()
+            LocalTrackMenu(track: local, onNavigate: { navigate(.play($0)) }, showsStats: true, adjust: addNowPlaying)
+        } else {
+            SongMenuItems(actions)
         }
-        if let song = track.song {
-            Button("Add to Library", systemImage: "plus") { player.addToLibrary(song) }
-            FavoriteMenuItem(song: song)
-            Button("Create Station", systemImage: "dot.radiowaves.left.and.right") { player.playStation(from: song) }
-            Divider()
-            Button("Go to Album", systemImage: "square.stack") {
-                Task { if let album = await SongLinks.album(of: song) { navigate(.play(.album(album))) } }
-            }
-            Button("Go to Artist", systemImage: "music.microphone") {
-                Task { if let artist = await SongLinks.artist(of: song) { navigate(.play(.artist(artist))) } }
-            }
+    }
+
+    private var actions: SongActions {
+        var actions = if let song = track.song {
+            SongActions.catalog(song, player: player, go: { navigate(.play($0)) })
+        } else {
+            // The demo's songs, known by name alone.
+            SongActions(suggestLess: track.songIdentity, block: track.artistName)
         }
-        Button("Your Stats", systemImage: "chart.bar.xaxis") {
-            navigate(.stats(.song(track.songIdentity)))
-        }
-        if let url = track.song?.url {
-            ShareLink(item: url) { Label("Share Song", systemImage: "square.and.arrow.up") }
-        }
-        Divider()
+        addNowPlaying(&actions)
+        return actions
+    }
+
+    /// What the playing song's menu has beyond any song's: stats on your stats' own stack,
+    /// steering a live mix, and tuning Tracks Radio.
+    private func addNowPlaying(_ actions: inout SongActions) {
+        let identity = track.songIdentity
+        // It's already playing, or already queued.
+        actions.playNext = nil
+        actions.playLast = nil
+        actions.stats = { navigate(.stats(.song(identity))) }
         // Steering what a live mix plays next, for the song on only.
-        if player.canAskForMoreLikeThis, track.songIdentity == player.current?.songIdentity {
-            let isAsked = player.moreLikeThis.contains(track.songIdentity)
-            Button(isAsked ? "Asked for More Like This" : "Play More Like This", systemImage: isAsked ? "hand.thumbsup.fill" : "hand.thumbsup") {
+        if player.canAskForMoreLikeThis, identity == player.current?.songIdentity {
+            let isAsked = player.moreLikeThis.contains(identity)
+            let title: LocalizedStringKey = isAsked ? "Asked for More Like This" : "Play More Like This"
+            actions.steer.append(SongMenuButton(title: title, systemImage: isAsked ? "hand.thumbsup.fill" : "hand.thumbsup", isDisabled: isAsked) {
                 player.playMoreLikeThis()
-            }
-            .disabled(isAsked)
+            })
         }
-        SuggestLessButton(songIdentity: track.songIdentity)
-        // Your own songs' menu above already offers it.
-        if track.local == nil {
-            BlockArtistButton(songBy: track.artistName)
-        }
-        if let onTuneRadio, player.isPlayingTracksRadio, track.songIdentity == player.current?.songIdentity {
-            Divider()
-            Button("Tune Tracks Radio", systemImage: "slider.horizontal.3", action: onTuneRadio)
+        if let onTuneRadio, player.isPlayingTracksRadio, identity == player.current?.songIdentity {
+            actions.trailing.append(SongMenuButton(title: "Tune Tracks Radio…", systemImage: "slider.horizontal.3", action: onTuneRadio))
         }
     }
 
@@ -296,6 +293,7 @@ struct NowPlayingMenuItems: View {
 /// Stop playing after a while, or at the end of the song. Shows the time left while it runs.
 struct SleepTimerButton: View {
     @Environment(PlayerModel.self) private var player
+    @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
         Menu {
@@ -305,8 +303,13 @@ struct SleepTimerButton: View {
                 Image(systemName: player.sleepTimer == nil ? "moon.zzz" : "moon.zzz.fill")
                     .font(.title3)
                 if player.sleepTimer != nil {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(label(at: context.date))
+                    TimelineView(.animation(minimumInterval: 1, paused: !isOnScreen || player.sleepTimer == .endOfSong)) { context in
+                        let label = label(at: context.date)
+                        // Sized by its digits as zeros with the ticking time drawn over it, so
+                        // the row isn't laid out again every second.
+                        Text(verbatim: label.replacing(/\d/, with: "0"))
+                            .hidden()
+                            .overlay(alignment: .leading) { Text(verbatim: label) }
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
                     }

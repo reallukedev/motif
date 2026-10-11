@@ -246,6 +246,33 @@ struct HighlightTests {
         #expect(!summary(captures).insights.contains { $0.id == "repeatedSong" })
     }
 
+    /// Dictionary order changes from one launch to the next, so a tie decided by it showed a
+    /// different song each time.
+    @Test(arguments: 0..<12)
+    func `a tie on repeat goes to the same song every time`(pair: Int) throws {
+        let day = date(2026, 9, 14)
+        let captures = ["b", "a"].flatMap { side in
+            (0..<3).map { play("loop \(pair)\(side)", at: day.addingTimeInterval(Double($0) * 3_600 + (side == "a" ? 600 : 0))) }
+        }
+        let onRepeat = try #require(summary(captures).insights.first { $0.id == "onRepeat" })
+        guard case .onRepeat(let title, _, 3, _) = onRepeat else {
+            Issue.record("expected a song on repeat, got \(onRepeat)")
+            return
+        }
+        #expect(title == "loop \(pair)a")
+    }
+
+    /// A six hour session that began the evening before the month counts its two hours in
+    /// it, as the listening totals do.
+    @Test func `the longest session only counts its time in the range`() {
+        let captures = (0..<4).map { play("s\($0)", at: date(2026, 9, 1, 1).addingTimeInterval(Double($0) * 600)) }
+        let session = SessionStat(startedAt: date(2026, 8, 31, 20), finishedAt: date(2026, 9, 1, 2), stationName: "Apple Music 1")
+        let summary = StatsCalculator.summary(
+            range: .month, captures: captures, sessions: [session], calendar: calendar, now: date(2026, 9, 20)
+        )
+        #expect(summary.insights.contains(.longestSession(minutes: 120)))
+    }
+
     @Test func `nothing counts as new in someone's first week`() {
         let captures = (0..<12).map { play("s\($0)", by: "artist \($0)", at: date(2026, 9, 14, 8 + $0)) }
         let insights = summary(captures).insights

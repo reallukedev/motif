@@ -9,7 +9,7 @@ public struct DedupePolicy: Sendable, Equatable {
     /// How long after a witnessed play an import of the same song is still that play.
     ///
     /// An import is dated when it was *found*, not when it played (see ``HistoryImport``), so
-    /// it lands after the witnessed copy — once observed 45 minutes after it. The ordinary
+    /// it lands after the witnessed copy, once observed 45 minutes after it. The ordinary
     /// window is far too short to catch that.
     ///
     /// It must still be bounded. Treating an import as "always the same play" meant a song
@@ -34,7 +34,7 @@ public struct DedupePolicy: Sendable, Equatable {
     /// That covers two separate ways one play becomes two rows:
     ///
     /// - A play this device witnessed, then recovered from Recently Played before the
-    ///   witnessed row ruled it out — once seen 45 minutes apart.
+    ///   witnessed row ruled it out, once seen 45 minutes apart.
     /// - A play on *another* device. Apple Music's recently-played list is account-wide, so
     ///   the iPhone reads back plays that happened on the Mac and imports them dated now,
     ///   hours later. ``TracksStore/importPlayedSongs(_:lookback:settings:now:)`` suppresses
@@ -44,7 +44,7 @@ public struct DedupePolicy: Sendable, Equatable {
     /// A day is the horizon because the importer uses the same one: it will not write a
     /// second import of a song already in the store from the last 24 hours. So two imports
     /// closer together than that cannot have come from one device, and are the same play seen
-    /// twice — while two further apart are two plays the importer deliberately let through.
+    /// twice, while two further apart are two plays the importer deliberately let through.
     public func mergeWindow(earlier: CaptureKind, later: CaptureKind) -> TimeInterval {
         later.timeIsKnown ? window : importWindow
     }
@@ -107,8 +107,46 @@ public struct ScrobblePolicy: Sendable, Equatable {
 
     /// Whether a track of `duration`, played for `playedFor`, qualifies.
     public func shouldScrobble(duration: TimeInterval, playedFor: TimeInterval) -> Bool {
-        guard duration > Self.minimumTrackDuration else { return false }
-        let threshold = min(duration / 2, Self.maximumRequiredPlayback)
+        guard let threshold = requiredPlayback(forDuration: duration) else { return false }
         return playedFor >= threshold
+    }
+
+    /// How long a track of `duration` has to play to qualify. Nil for one too short to ever
+    /// qualify. A track of unknown length is taken as ``CaptureSettings/assumedSongLength``,
+    /// as the share that must play before a song counts is.
+    public func requiredPlayback(forDuration duration: TimeInterval?) -> TimeInterval? {
+        let length = duration.flatMap { $0 > 0 ? $0 : nil } ?? CaptureSettings.assumedSongLength
+        guard length > Self.minimumTrackDuration else { return nil }
+        return min(length / 2, Self.maximumRequiredPlayback)
+    }
+
+    /// Why a play isn't owed to Last.fm, kept on the row in ``Capture/lastScrobbleError``.
+    /// Also how a row held back by this policy is told from one Last.fm refused.
+    public static let tooShortReason = "Last.fm doesn’t count tracks of 30 seconds or less."
+    public static let notPlayedEnoughReason = "Last.fm counts a song once half of it or four minutes has played."
+}
+
+extension Capture {
+    /// Whether the scrobble queue is passing this play over because it's too short or didn't
+    /// play long enough for Last.fm, rather than because Last.fm refused it.
+    public var isHeldFromScrobbling: Bool {
+        scrobbledAt == nil
+            && (lastScrobbleError == ScrobblePolicy.tooShortReason
+                || lastScrobbleError == ScrobblePolicy.notPlayedEnoughReason)
+    }
+
+    /// Keeps the play out of the scrobble queue, which skips rows that have used up their
+    /// attempts. No new field, which CloudKit would need deploying again for.
+    @MainActor
+    func holdFromScrobbling(reason: String) {
+        scrobbleAttempts = TracksStore.maxScrobbleAttempts
+        lastScrobbleError = reason
+    }
+
+    /// Puts a play held back by ``holdFromScrobbling(reason:)`` into the scrobble queue.
+    func releaseForScrobbling() {
+        guard isHeldFromScrobbling else { return }
+        scrobbleAttempts = 0
+        lastScrobbleError = nil
     }
 }

@@ -183,31 +183,27 @@ final class PlaylistMerge {
         }
         guard let playlist = music.playlists.playlist(id: id), var link = playlist.appleMusic else { return 0 }
         let inApple = Set(songs.map(\.identity))
-        var seen = Set(link.seen)
-        var notFound = Set(link.notFound)
+        var ledger = AppleMusicMergeLedger(link: link, here: playlist.identities, inApple: inApple)
 
         // Taken out in Apple Music since the last merge: out of here too.
-        let takenOut = seen.subtracting(inApple)
+        let takenOut = ledger.takeOut(keeping: inApple)
         if !takenOut.isEmpty {
             music.playlists.update(id) { $0.entries.removeAll { takenOut.contains($0.track.identity) } }
-            seen.subtract(takenOut)
         }
 
         // Added in Apple Music since: found in your music or on your server. One seen before
         // and not here was taken out here, and stays out.
-        var here = playlist.identities
+        var here = music.playlists.playlist(id: id)?.identities ?? []
         var found: [LocalTrack] = []
         var left = 0
-        for song in songs where !seen.contains(song.identity) && !here.contains(song.identity) && !notFound.contains(song.identity) {
+        for song in songs where ledger.isNew(apple: song.identity, here: here) {
             switch await find(song, in: music, finds: &finds) {
             case .found(let track):
                 found.append(track)
                 here.insert(song.identity)
-                // Both names for it, so neither side takes the other's for a new song.
-                seen.formUnion([song.identity, track.identity])
+                ledger.found(apple: song.identity, here: track.identity)
             case .notFound:
-                notFound.insert(song.identity)
-                seen.insert(song.identity)
+                ledger.missing(apple: song.identity)
             case .later:
                 left += 1
             }
@@ -218,18 +214,22 @@ final class PlaylistMerge {
         let current = music.playlists.playlist(id: id)?.entries ?? []
         for entry in current {
             let identity = entry.track.identity
-            guard !inApple.contains(identity), !seen.contains(identity), !notFound.contains(identity) else { continue }
+            guard ledger.needsAdding(here: identity, inApple: inApple) else { continue }
             guard adds > 0 else { break }
             adds -= 1
-            if let added = try? await add(entry.track, to: partner) {
-                seen.formUnion([identity, added])
-            } else {
-                notFound.insert(identity)
+            do {
+                if let added = try await add(entry.track, to: partner) {
+                    ledger.added(here: identity, apple: added)
+                } else {
+                    ledger.notInCatalog(here: identity)
+                }
+            } catch {
+                // Not reached this time, so it's tried again next merge.
             }
         }
+        ledger.settle(here: Set(current.map(\.track.identity)), inApple: inApple)
 
-        link.seen = Array(seen)
-        link.notFound = Array(notFound)
+        link = ledger.written(to: link)
         link.name = partner.name
         link.mergedAt = .now
         music.playlists.update(id, touches: false) { $0.appleMusic = link }

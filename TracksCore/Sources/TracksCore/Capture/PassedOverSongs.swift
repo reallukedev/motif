@@ -41,7 +41,9 @@ public struct PassedOverSongs: Sendable, Equatable {
         })
     }
 
-    private mutating func trim(now: Date) {
+    /// Forgets the passes older than ``memory`` and keeps the newest ``limit``. Also run on
+    /// the joined lists from two devices, which each trim only their own.
+    mutating func trim(now: Date) {
         let cutoff = now.addingTimeInterval(-Self.memory)
         entries.removeAll { Self.parse($0).map { $0.at < cutoff } ?? true }
         if entries.count > Self.limit { entries.removeFirst(entries.count - Self.limit) }

@@ -101,51 +101,46 @@ struct YourMusicSongMenu: View {
     @Environment(\.openPlayRoute) private var openPlayRoute
 
     var body: some View {
+        SongMenuItems(actions)
+    }
+
+    private var actions: SongActions {
         let availability = music.availability(title: song.title, artist: song.artistName)
+        var actions = SongActions(block: showsBlock ? song.artistName : nil)
         if let track = availability.track {
-            Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                player.enqueue(.local([track]), next: true, title: track.title)
-            }
-            Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") {
-                player.enqueue(.local([track]), next: false, title: track.title)
-            }
+            actions.playNext = { player.enqueue(.local([track]), next: true, title: track.title) }
+            actions.playLast = { player.enqueue(.local([track]), next: false, title: track.title) }
             if track.isFromServer, !music.isInYourMusic(track) {
-                AddToYourMusicButton(track: track)
+                actions.keep.append(.addToYourMusic(track, music: music, player: player))
             } else if track.isFromServer, !music.downloads.isDownloaded(track.id) {
-                Button("Download", systemImage: "arrow.down.circle") { music.downloads.download([track]) }
+                actions.keep.append(SongMenuButton(title: "Download", systemImage: "arrow.down.circle") { music.downloads.download([track]) })
             }
-            Divider()
         }
         if lidarr.isSetUp {
             switch availability {
             case .unavailable, .comingFromLidarr, .checking:
                 if let album = song.albumTitle {
-                    Button("Ask Lidarr for This Album", systemImage: "tray.and.arrow.down") {
+                    actions.keep.append(SongMenuButton(title: "Ask Lidarr for This Album", systemImage: "tray.and.arrow.down") {
                         Task { player.confirm(await lidarr.request(album: album, by: song.artistName)) }
-                    }
+                    })
                 }
-                Button("Add \(song.artistName) to Lidarr", systemImage: "person.crop.circle.badge.plus") {
+                actions.keep.append(SongMenuButton(title: "Add \(song.artistName) to Lidarr", systemImage: "person.crop.circle.badge.plus") {
                     Task { player.confirm(await lidarr.follow(artistNamed: song.artistName)) }
-                }
+                })
             case .inLidarr:
-                Button("Download from Your Collection", systemImage: "arrow.down.circle") {
+                actions.keep.append(SongMenuButton(title: "Download from Your Collection", systemImage: "arrow.down.circle") {
                     Task { player.confirm(await music.getFromLidarr(title: song.title, artist: song.artistName)) }
-                }
+                })
             case .playable:
-                EmptyView()
+                break
             }
-            Divider()
         }
-        Button("Go to Artist", systemImage: "music.microphone") {
-            Task { if let artist = await SongLinks.artist(of: song) { openPlayRoute(.artist(artist)) } }
+        if let go = openPlayRoute.ifPushes {
+            actions.goToAlbum = { Task { if let album = await SongLinks.album(of: song) { go(.album(album)) } } }
+            actions.goToArtist = { Task { if let artist = await SongLinks.artist(of: song) { go(.artist(artist)) } } }
+            actions.stats = { go(.stats(.song(HistoryImport.key(title: song.title, artistName: song.artistName)))) }
         }
-        Button("Go to Album", systemImage: "square.stack") {
-            Task { if let album = await SongLinks.album(of: song) { openPlayRoute(.album(album)) } }
-        }
-        if showsBlock {
-            Divider()
-            BlockArtistButton(songBy: song.artistName)
-        }
+        return actions
     }
 }
 

@@ -12,7 +12,9 @@ import TracksMusic
 ///
 /// On the Mac the player isn't touched until Tracks first plays something (see
 /// `TracksPlayerContext.isInUse`), so someone who only plays music in Music keeps their media
-/// keys there.
+/// keys there. On iPhone it's first reached once launch has settled, and every call to it waits
+/// out a scene change, which a call reconnecting to Apple's player service can outlast (see
+/// ``PlayerQuiet``).
 @MainActor
 final class MusicKitPlayerEngine: PlayerEngine {
     var onChange: (() -> Void)?
@@ -36,6 +38,9 @@ final class MusicKitPlayerEngine: PlayerEngine {
     /// can lose its picture as the mini player opens into Now Playing (see ``CoverImage``);
     /// these are drawn from Tracks’ own cache instead.
     private var queuedCovers: [String: Artwork] = [:]
+    /// Each entry's track as last made, by entry id. The player reports a change many times a
+    /// song, and most of the queue is the same each time.
+    private var made: [String: MadeTrack] = [:]
     private var player: ApplicationMusicPlayer { ApplicationMusicPlayer.shared }
     private var watch: Task<Void, Never>?
 
@@ -61,8 +66,21 @@ final class MusicKitPlayerEngine: PlayerEngine {
             }
             for await _ in changes {
                 guard let self else { return }
-                self.refresh()
+                self.refreshWhenQuiet()
             }
+        }
+    }
+
+    private var refreshOwed = false
+
+    /// The player reports many changes at once as it reconnects, often as a scene changes:
+    /// they're read once it has settled, in one go.
+    private func refreshWhenQuiet() {
+        guard !refreshOwed else { return }
+        refreshOwed = true
+        PlayerQuiet.run { [weak self] in
+            self?.refreshOwed = false
+            self?.refresh()
         }
     }
 
@@ -112,36 +130,56 @@ final class MusicKitPlayerEngine: PlayerEngine {
         }
         let entries = Array(player.queue.entries)
         let currentEntry = player.queue.currentEntry
-        current = currentEntry.map(track(from:))
+        var kept: [String: MadeTrack] = [:]
+        func track(_ entry: MusicPlayer.Queue.Entry) -> PlayerTrack {
+            let made = self.track(from: entry)
+            kept[entry.id] = made
+            return made.track
+        }
+        current = currentEntry.map(track)
         if TracksPlayerContext.isStation {
             upNext = []
         } else if let currentEntry, let index = entries.firstIndex(where: { $0.id == currentEntry.id }) {
-            upNext = entries[(index + 1)...].map(track(from:))
+            upNext = entries[(index + 1)...].map(track)
         } else {
-            upNext = entries.map(track(from:))
+            upNext = entries.map(track)
         }
+        made = kept
         onChange?()
     }
 
-    private func track(from entry: MusicPlayer.Queue.Entry) -> PlayerTrack {
+    /// A track as made from an entry, and what it was made from.
+    private struct MadeTrack {
+        let songID: String?
+        let title: String
+        let isStation: Bool
+        let track: PlayerTrack
+    }
+
+    private func track(from entry: MusicPlayer.Queue.Entry) -> MadeTrack {
         var song: Song?
         if case .song(let resolved) = entry.item { song = resolved }
+        let isStation = TracksPlayerContext.isStation
+        if let cached = made[entry.id], cached.songID == song?.id.rawValue, cached.title == entry.title, cached.isStation == isStation {
+            return cached
+        }
         let title = song?.title ?? entry.title
         var artwork = song?.artwork ?? entry.artwork
         if artwork.flatMap(Self.loadableCover) == nil, let queued = song.flatMap({ queuedCovers[$0.id.rawValue] }) {
             artwork = queued
         }
-        return PlayerTrack(
+        let track = PlayerTrack(
             id: entry.id,
             title: title,
             artistName: song?.artistName ?? entry.subtitle ?? "",
             albumTitle: song?.albumTitle,
             cover: artwork.map(CoverArt.artwork) ?? .url(nil, seed: title),
             // A station's songs report a length, but it can't be scrubbed or counted down.
-            duration: TracksPlayerContext.isStation ? nil : song?.duration,
+            duration: isStation ? nil : song?.duration,
             isExplicit: song?.contentRating == .explicit,
             song: song
         )
+        return MadeTrack(songID: song?.id.rawValue, title: entry.title, isStation: isStation, track: track)
     }
 
     // MARK: - Playing
@@ -206,6 +244,8 @@ final class MusicKitPlayerEngine: PlayerEngine {
             throw PlayerProblem.nothingToPlay
         }
 
+        // Every call to the player waits out a scene change: see ``PlayerQuiet``.
+        await PlayerQuiet.settled()
         // Overtaken while the songs were looked up: the newer request plays instead.
         guard playID == latestPlay else { throw CancellationError() }
 
@@ -247,6 +287,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
             guard PlaybackFailure(error).isWorthRetrying else { throw PlayerProblem(error) }
         }
         try? await Task.sleep(for: .milliseconds(400))
+        await PlayerQuiet.settled()
         guard playID == latestPlay else { throw CancellationError() }
         do {
             try await ready(playID, on: startSong)
@@ -305,6 +346,8 @@ final class MusicKitPlayerEngine: PlayerEngine {
             songs = list
         case .album(let album):
             guard !allowsExplicit else {
+                await PlayerQuiet.settled()
+                guard queueID == latestPlay, starting == 0 else { throw CancellationError() }
                 try await ApplicationPlayerCommands.insert([album], next: next)
                 refresh()
                 return
@@ -312,6 +355,8 @@ final class MusicKitPlayerEngine: PlayerEngine {
             songs = try await Self.tracks(of: album)
         case .playlist(let playlist):
             guard !allowsExplicit else {
+                await PlayerQuiet.settled()
+                guard queueID == latestPlay, starting == 0 else { throw CancellationError() }
                 try await ApplicationPlayerCommands.insert([playlist], next: next)
                 refresh()
                 return
@@ -323,6 +368,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
         }
         let allowed = Self.allowed(songs, allowsExplicit: allowsExplicit)
         guard !allowed.isEmpty else { throw Self.emptyProblem(allowsExplicit: allowsExplicit) }
+        await PlayerQuiet.settled()
         try Task.checkCancellation()
         guard queueID == latestPlay, starting == 0 else { throw CancellationError() }
         queuedCovers.merge(Self.covers(of: allowed)) { _, new in new }
@@ -333,10 +379,11 @@ final class MusicKitPlayerEngine: PlayerEngine {
     func pause() {
         // Switching the music source pauses the old player, which may never have played.
         guard TracksPlayerContext.isInUse else { return }
-        player.pause()
+        PlayerQuiet.run { [player] in player.pause() }
     }
 
     func resume() async throws {
+        await PlayerQuiet.settled()
         do {
             try await ApplicationPlayerCommands.play()
         } catch {
@@ -345,12 +392,14 @@ final class MusicKitPlayerEngine: PlayerEngine {
     }
 
     func skipToNext() async throws {
+        await PlayerQuiet.settled()
         try await ApplicationPlayerCommands.skipToNext()
     }
 
     /// Back to the start of the song after the first few seconds, as every player does, and
     /// to the song before otherwise.
     func skipToPrevious() async throws {
+        await PlayerQuiet.settled()
         if playbackTime > 3 || upNext.isEmpty && TracksPlayerContext.isStation {
             player.restartCurrentEntry()
         } else {
@@ -359,47 +408,56 @@ final class MusicKitPlayerEngine: PlayerEngine {
     }
 
     func seek(to time: TimeInterval) {
-        player.playbackTime = max(0, time)
+        PlayerQuiet.run { [player] in player.playbackTime = max(0, time) }
     }
 
     func setShuffled(_ isShuffled: Bool) {
-        player.state.shuffleMode = isShuffled ? .songs : .off
+        PlayerQuiet.run { [player] in player.state.shuffleMode = isShuffled ? .songs : .off }
     }
 
     func setRepeat(_ mode: PlayerRepeat) {
-        player.state.repeatMode = switch mode {
-        case .off: MusicPlayer.RepeatMode.none
+        let repeatMode: MusicPlayer.RepeatMode = switch mode {
+        case .off: .none
         case .all: .all
         case .one: .one
         }
+        PlayerQuiet.run { [player] in player.state.repeatMode = repeatMode }
     }
 
+    // Offsets into ``upNext`` are found in the player's own list by entry, not by position:
+    // the player's list can have moved on since ``upNext`` was last made from it, and a stale
+    // position can name the wrong song or one past the end.
+
     func jump(toUpNext index: Int) async throws {
-        guard let base = upNextStart else { return }
-        let entries = player.queue.entries
-        let target = entries.index(entries.startIndex, offsetBy: base + index, limitedBy: entries.endIndex)
-        guard let target, target < entries.endIndex else { return }
-        player.queue.currentEntry = entries[target]
+        await PlayerQuiet.settled()
+        guard upNext.indices.contains(index),
+              let entry = player.queue.entries.first(where: { $0.id == upNext[index].id })
+        else { return }
+        player.queue.currentEntry = entry
         try await ApplicationPlayerCommands.play()
     }
 
     func removeUpNext(at offsets: IndexSet) {
-        guard let base = upNextStart else { return }
-        player.queue.entries.remove(atOffsets: IndexSet(offsets.map { $0 + base }))
+        let ids = Set(offsets.filter(upNext.indices.contains).map { upNext[$0].id })
+        PlayerQuiet.run { [player] in
+            let entryIDs = player.queue.entries.map(\.id)
+            let places = IndexSet(entryIDs.indices.filter { ids.contains(entryIDs[$0]) })
+            guard !places.isEmpty else { return }
+            player.queue.entries.remove(atOffsets: places)
+        }
     }
 
     func moveUpNext(from offsets: IndexSet, to destination: Int) {
-        guard let base = upNextStart else { return }
-        player.queue.entries.move(fromOffsets: IndexSet(offsets.map { $0 + base }), toOffset: destination + base)
-    }
-
-    /// Where ``upNext`` starts in the player's own list.
-    private var upNextStart: Int? {
-        let entries = player.queue.entries
-        guard let currentID = player.queue.currentEntry?.id,
-              let index = entries.firstIndex(where: { $0.id == currentID })
-        else { return nil }
-        return entries.distance(from: entries.startIndex, to: index) + 1
+        let ids = Set(offsets.filter(upNext.indices.contains).map { upNext[$0].id })
+        // Before the entry that was at the destination, or at the end.
+        let before = upNext.indices.contains(destination) ? upNext[destination].id : nil
+        PlayerQuiet.run { [player] in
+            let entryIDs = player.queue.entries.map(\.id)
+            let places = IndexSet(entryIDs.indices.filter { ids.contains(entryIDs[$0]) })
+            guard !places.isEmpty else { return }
+            let target = before.flatMap { entryIDs.firstIndex(of: $0) } ?? entryIDs.count
+            player.queue.entries.move(fromOffsets: places, toOffset: target)
+        }
     }
 
     // MARK: - Helpers

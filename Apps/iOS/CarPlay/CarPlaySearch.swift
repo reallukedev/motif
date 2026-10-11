@@ -83,10 +83,10 @@ extension CarPlaySceneDelegate {
         if !songs.isEmpty {
             let context = PlayContext.songs(term)
             var rows: [CPListItem] = []
+            let (side, scale) = (CPListItem.maximumImageSize.height, scale)
+            let standIn = CarPlayImages.placeholder(symbol: "music.note", side: side, scale: scale)
             for (index, song) in songs.enumerated() {
-                let art = song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title)
-                let image = await CarPlayImages.cover(art, side: CPListItem.maximumImageSize.height, scale: scale)
-                let row = CPListItem(text: song.title, detailText: song.artistName, image: image)
+                let row = CPListItem(text: song.title, detailText: song.artistName, image: standIn)
                 row.isExplicitContent = song.contentRating == .explicit
                 row.isPlaying = player.current?.song?.id == song.id
                 row.handler = { [weak self] _, completion in
@@ -94,24 +94,29 @@ extension CarPlaySceneDelegate {
                 }
                 rows.append(row)
             }
+            fillImages(rows) { index in
+                let song = songs[index]
+                let art = song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title)
+                return await CarPlayImages.cover(art, side: side, scale: scale)
+            }
             sections.append(CPListSection(items: rows, header: String(localized: "Songs"), sectionIndexTitle: nil))
         }
 
         let artists = Array(response.artists.prefix(4))
         if !artists.isEmpty {
             var rows: [CPListItem] = []
-            let side = CPListItem.maximumImageSize.height
+            let (side, scale) = (CPListItem.maximumImageSize.height, scale)
+            let standIn = CarPlayImages.placeholder(symbol: "music.microphone", side: side, scale: scale, round: true)
             for artist in artists {
-                let image = if let artwork = artist.artwork {
-                    CarPlayImages.circle(await CarPlayImages.cover(.artwork(artwork), side: side, scale: scale))
-                } else {
-                    CarPlayImages.placeholder(symbol: "music.microphone", side: side, scale: scale, round: true)
-                }
-                let row = CPListItem(text: artist.name, detailText: nil, image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
+                let row = CPListItem(text: artist.name, detailText: nil, image: standIn, accessoryImage: nil, accessoryType: .disclosureIndicator)
                 row.handler = { [weak self] _, completion in
                     self?.open({ await self?.catalogArtistPage(artist) }, then: completion)
                 }
                 rows.append(row)
+            }
+            fillImages(rows) { index in
+                guard let artwork = artists[index].artwork else { return nil }
+                return CarPlayImages.circle(await CarPlayImages.cover(.artwork(artwork), side: side, scale: scale))
             }
             sections.append(CPListSection(items: rows, header: String(localized: "Artists"), sectionIndexTitle: nil))
         }
@@ -137,43 +142,55 @@ extension CarPlaySceneDelegate {
         if !tracks.isEmpty {
             let context = PlayContext.songs(term)
             var rows: [CPListItem] = []
+            let (side, scale) = (CPListItem.maximumImageSize.height, scale)
+            let standIn = CarPlayImages.placeholder(symbol: "music.note", side: side, scale: scale)
             for (index, track) in tracks.enumerated() {
-                let image = await CarPlayImages.cover(url: music.artworkURL(track.artwork)?.absoluteString, seed: track.album ?? track.title, side: CPListItem.maximumImageSize.height, scale: scale)
-                let row = CPListItem(text: track.title, detailText: track.artist, image: image)
+                let row = CPListItem(text: track.title, detailText: track.artist, image: standIn)
                 row.isPlaying = player.current?.local?.id == track.id
                 row.handler = { [weak self] _, completion in
                     self?.play({ await player.start(.local(tracks, startingAt: index), from: context) }, completion: completion)
                 }
                 rows.append(row)
             }
+            fillImages(rows) { index in
+                let track = tracks[index]
+                return await CarPlayImages.cover(url: music.artworkURL(track.artwork)?.absoluteString, seed: track.album ?? track.title, side: side, scale: scale)
+            }
             sections.append(CPListSection(items: rows, header: String(localized: "Songs"), sectionIndexTitle: nil))
         }
         if !found.artists.isEmpty {
             let side = CPListItem.maximumImageSize.height
             var rows: [CPListItem] = []
-            for artist in found.artists.prefix(4) {
-                let image = if let picture = music.artistPicture(for: artist) {
-                    CarPlayImages.circle(await CarPlayImages.cover(picture, side: side, scale: scale))
-                } else {
-                    CarPlayImages.placeholder(symbol: "music.microphone", side: side, scale: scale, round: true)
-                }
-                let row = CPListItem(text: artist.name, detailText: nil, image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
+            let artists = Array(found.artists.prefix(4))
+            let standIn = CarPlayImages.placeholder(symbol: "music.microphone", side: side, scale: scale, round: true)
+            for artist in artists {
+                let row = CPListItem(text: artist.name, detailText: nil, image: standIn, accessoryImage: nil, accessoryType: .disclosureIndicator)
                 row.handler = { [weak self] _, completion in
                     self?.open({ await self?.localArtistPage(artist) }, then: completion)
                 }
                 rows.append(row)
             }
+            let scale = scale
+            fillImages(rows) { index in
+                guard let picture = music.artistPicture(for: artists[index]) else { return nil }
+                return CarPlayImages.circle(await CarPlayImages.cover(picture, side: side, scale: scale))
+            }
             sections.append(CPListSection(items: rows, header: String(localized: "Artists"), sectionIndexTitle: nil))
         }
         if !found.albums.isEmpty {
             var rows: [CPListItem] = []
-            for album in found.albums.prefix(6) {
-                let image = await CarPlayImages.cover(url: music.artworkURL(album.artwork)?.absoluteString, seed: album.title, side: CPListItem.maximumImageSize.height, scale: scale)
-                let row = CPListItem(text: album.displayTitle, detailText: album.artist, image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
+            let albums = Array(found.albums.prefix(6))
+            let (side, scale) = (CPListItem.maximumImageSize.height, scale)
+            let standIn = CarPlayImages.placeholder(symbol: "square.stack", side: side, scale: scale)
+            for album in albums {
+                let row = CPListItem(text: album.displayTitle, detailText: album.artist, image: standIn, accessoryImage: nil, accessoryType: .disclosureIndicator)
                 row.handler = { [weak self] _, completion in
                     self?.open({ await self?.localAlbumPage(album) }, then: completion)
                 }
                 rows.append(row)
+            }
+            fillImages(rows) { index in
+                await CarPlayImages.cover(url: music.artworkURL(albums[index].artwork)?.absoluteString, seed: albums[index].title, side: side, scale: scale)
             }
             sections.append(CPListSection(items: rows, header: String(localized: "Albums"), sectionIndexTitle: nil))
         }

@@ -33,16 +33,8 @@ enum AutoplaySource {
     /// seconds: Autoplay mustn't keep the last song waiting.
     static func similar(to songs: [Song]) async -> [MixSong] {
         let allowsExplicit = PlayPreferences.allowsExplicit
-        let found = await withTaskGroup(of: [Song]?.self) { group in
-            group.addTask { await lookUpSimilar(to: songs) }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(4))
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first ?? []
-        }
+        // Not a task group, which would wait out a lookup that doesn't stop when cancelled.
+        let found = await TimeLimit.value(within: .seconds(4)) { await lookUpSimilar(to: songs) } ?? []
         return PlayPreferences.versions(of: found, allowsExplicit: allowsExplicit).map(MixSong.init(catalog:))
     }
 

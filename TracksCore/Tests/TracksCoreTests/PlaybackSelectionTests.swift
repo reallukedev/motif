@@ -81,6 +81,8 @@ final class FakePlaybackService: PlaybackService, @unchecked Sendable {
     private let continuation: AsyncStream<String>.Continuation
     private let stream: AsyncStream<String>
     var playResult: Result<Void, any Error> = .success(())
+    /// Songs the player takes a while to start, as Apple Music does on a poor connection.
+    var slowSongs: Set<String> = []
 
     var played: [[String]] { lock.withLock { _played } }
 
@@ -90,6 +92,7 @@ final class FakePlaybackService: PlaybackService, @unchecked Sendable {
 
     func play(songIDs: [String]) async throws {
         lock.withLock { _played.append(songIDs) }
+        if !slowSongs.isDisjoint(with: songIDs) { try? await Task.sleep(for: .milliseconds(200)) }
         try playResult.get()
     }
 

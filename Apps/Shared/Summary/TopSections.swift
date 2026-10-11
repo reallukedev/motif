@@ -36,6 +36,7 @@ struct TopArtistsShelf: View {
         }
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.viewAligned)
+        .shelfBleed()
     }
 }
 
@@ -199,5 +200,18 @@ struct TopAlbumsShelf: View {
         }
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.viewAligned)
+        .shelfBleed()
+    }
+}
+
+extension View {
+    /// On iPhone a shelf runs out to the screen's edges, as Music's do, rather than stopping
+    /// at the page's margin. The Mac keeps it inside the column, clear of the sidebar.
+    func shelfBleed() -> some View {
+        #if os(iOS)
+        scrollClipDisabled()
+        #else
+        self
+        #endif
     }
 }

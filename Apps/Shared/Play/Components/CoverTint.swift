@@ -141,7 +141,11 @@ enum CoverTint {
         while relativeLuminance(r * scale, g * scale, b * scale) > maximum, scale > 0.02 {
             scale -= 0.02
         }
-        return (r * scale, g * scale, b * scale)
+        // Yellow darkened keeping its hue turns olive. Leaned toward amber as it deepens, it
+        // stays gold, as the moving backgrounds' shader does.
+        let yellow = min(1, max(0, (min(r, g) - b) / max(max(r, g), 0.001)))
+        let green = g * (1 - 0.2 * yellow * (1 - scale))
+        return (r * scale, green * scale, b * scale)
     }
 
     /// HSB to RGB, as `UIColor(hue:saturation:brightness:alpha:)` converts it, without a

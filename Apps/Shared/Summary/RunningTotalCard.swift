@@ -151,6 +151,7 @@ struct RunningTotalCard: View {
         .chartYAxis { ActivityChart.amountAxis(ceiling: ceiling, measure: .listening) }
         .chartLegend(.hidden)
         .frame(minHeight: 150, maxHeight: .infinity)
+        .chartTextSize()
         .sensoryFeedback(.selection, trigger: selected?.start)
     }
 

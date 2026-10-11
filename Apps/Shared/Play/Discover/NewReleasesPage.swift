@@ -129,6 +129,7 @@ struct NewReleasesPage: View {
             guard !Task.isCancelled else { return }
             yours = found
         }
+        .refreshCommand()
         .refreshable { await discovery.loadReleases(force: true) }
     }
 
@@ -372,7 +373,7 @@ struct ReleaseTile: View {
                             Circle()
                                 .fill(.tint)
                                 .frame(width: 7, height: 7)
-                                .accessibilityLabel("New to you")
+                                .accessibilityLabel("New to You")
                         }
                         Text(CollectionKind.of(release.album).title)
                             .font(.subheadline.weight(.medium))
@@ -395,6 +396,12 @@ struct ReleaseTile: View {
                 withAnimation(PlayMotion.hover) { isHovered = hovering }
             }
             .accessibilityElement(children: .combine)
+            // Play shows only under the pointer, so VoiceOver has it as an action.
+            .accessibilityActions {
+                if !release.isUpcoming {
+                    Button("Play", action: playAlbum)
+                }
+            }
         }
         .buttonStyle(.pressable)
         .contextMenu {
@@ -424,10 +431,9 @@ struct ReleaseTile: View {
         .shadow(color: .black.opacity(isHovered ? 0.25 : 0.12), radius: isHovered ? 12 : 6, y: isHovered ? 6 : 3)
         .overlay(alignment: .bottomTrailing) {
             if isHovered, !release.isUpcoming {
-                Button {
-                    player.play(.album(release.album), from: PlayContext(kind: .album, title: release.album.title))
-                } label: {
-                    Image(systemName: "play.fill")
+                Button(action: playAlbum) {
+                    Label("Play \(release.album.title)", systemImage: "play.fill")
+                        .labelStyle(.iconOnly)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(width: 36, height: 36)
@@ -440,6 +446,10 @@ struct ReleaseTile: View {
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
+    }
+
+    private func playAlbum() {
+        player.play(.album(release.album), from: PlayContext(kind: .album, title: release.album.title))
     }
 
     /// "Single · Sep 20", or "Album · in 12 days" for one not out yet.

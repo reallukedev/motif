@@ -104,6 +104,7 @@ public final class ScrobbleService {
             do {
                 outcomes = try await client.submit(scrobbles, session: session)
             } catch {
+                Log.lastFM.error("Scrobbling failed: \(String(describing: error), privacy: .public)")
                 let message = Self.describe(error)
                 lastError = message
                 if Self.isTheScrobblesFault(error) {
@@ -184,29 +185,52 @@ public final class ScrobbleService {
         )
     }
 
+    /// What went wrong talking to Last.fm, in words: what happened and what to do. Last.fm's
+    /// own codes and messages mean nothing to the person reading, so they only go to the log.
     /// Public so the connect flow reports failures in the same words.
-    public static func describe(_ error: any Error) -> String {
-        guard let error = error as? LastFMError else { return String(describing: error) }
+    public nonisolated static func describe(_ error: any Error) -> String {
+        if let error = error as? URLError {
+            return switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff:
+                String(localized: "You’re offline. Connect to the internet and try again.")
+            case .timedOut, .cannotConnectToHost, .cannotFindHost:
+                String(localized: "Last.fm isn’t responding. Try again later.")
+            default:
+                String(localized: "Couldn’t reach Last.fm. Try again.")
+            }
+        }
+        guard let error = error as? LastFMError else {
+            return String(localized: "Something went wrong with Last.fm. Try again.")
+        }
         return switch error {
-        case .notConfigured: "This build has no Last.fm API key."
-        case .notConnected: "No Last.fm account is connected."
-        case .notAuthorised: "Last.fm has not approved this connection yet."
-        case .http(let status): "Last.fm returned HTTP \(status)."
-        case .service(let code, let message): "Last.fm error \(code): \(message)"
-        case .malformedResponse: "Last.fm sent a response Tracks could not read."
+        case .notConfigured:
+            String(localized: "Last.fm isn’t set up in this build of Tracks.")
+        // 4 authentication failed, 9 invalid session key.
+        case .notConnected, .service(code: 4, _), .service(code: 9, _):
+            String(localized: "You’re signed out of Last.fm. Connect your account again.")
+        // 14 token not authorised, 15 token expired.
+        case .notAuthorised, .service(code: 14, _), .service(code: 15, _):
+            String(localized: "Last.fm didn’t get your approval. Try connecting again.")
+        case _ where error.isRetryable:
+            String(localized: "Last.fm isn’t responding. Try again later.")
+        case .http, .service, .malformedResponse:
+            String(localized: "Something went wrong with Last.fm. Try again.")
         }
     }
 
-    /// Why Last.fm ignored one scrobble from a batch, in words for the history.
-    public static func describeIgnored(code: Int, message: String) -> String {
-        let reason = switch code {
-        case 1: "Last.fm ignored the artist."
-        case 2: "Last.fm ignored the track."
-        case 3: "Too old for Last.fm, which only takes scrobbles from the last two weeks."
-        case 4: "Last.fm thinks this was played in the future. Check the date and time."
-        case 5: "Last.fm's daily scrobble limit was reached."
-        default: "Last.fm ignored this scrobble (code \(code))."
+    /// Why Last.fm ignored one scrobble from a batch, in words for the history. Last.fm's own
+    /// message for it only goes to the log.
+    public nonisolated static func describeIgnored(code: Int, message: String) -> String {
+        if !message.isEmpty {
+            Log.lastFM.notice("Last.fm ignored a scrobble, code \(code): \(message, privacy: .public)")
         }
-        return message.isEmpty ? reason : "\(reason) \(message)"
+        return switch code {
+        case 1: String(localized: "Last.fm ignored the artist.")
+        case 2: String(localized: "Last.fm ignored the track.")
+        case 3: String(localized: "Too old for Last.fm, which only takes scrobbles from the last two weeks.")
+        case 4: String(localized: "Last.fm thinks this was played in the future. Check the date and time.")
+        case 5: String(localized: "Last.fm’s daily scrobble limit was reached.")
+        default: String(localized: "Last.fm didn’t take this scrobble.")
+        }
     }
 }

@@ -88,5 +88,6 @@ struct DecadesCard: View {
         }
         .chartYAxis(.hidden)
         .frame(minHeight: 120, maxHeight: .infinity)
+        .chartTextSize()
     }
 }

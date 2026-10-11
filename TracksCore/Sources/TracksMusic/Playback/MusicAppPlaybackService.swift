@@ -21,10 +21,6 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
     private struct Pending: Sendable {
         var remaining: [Song] = []
         var current: Song?
-        /// Songs that started before anyone subscribed, so the first isn't lost between
-        /// `play` returning and the controller subscribing.
-        var buffered: [String] = []
-        var continuation: AsyncStream<String>.Continuation?
     }
 
     private struct Song: Sendable, Equatable {
@@ -38,7 +34,8 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
     }
 
     private let state = Mutex(Pending())
-    private let sequencer = Mutex<Task<Void, Never>?>(nil)
+    private let reached = ReachedSongs()
+    private let sequencer = TaskSlot()
 
     public init(playlistName: @escaping @Sendable () -> String) {
         self.playlistName = playlistName
@@ -100,12 +97,12 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
         }
         guard let first = ordered.first else { throw PlaybackError.nothingToPlay }
 
-        cancelSequencer()
+        sequencer.cancel()
         state.withLock {
             $0.remaining = Array(ordered.dropFirst())
             $0.current = nil
-            $0.buffered = []
         }
+        reached.clearBacklog()
 
         try await start(first)
         startSequencer()
@@ -137,7 +134,7 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
                     // Music.app is on this song now.
                     if !announced.contains(current.id) {
                         announced.insert(current.id)
-                        deliver(current.id)
+                        reached.deliver(current.id)
                     }
                 } else if let playing, playing.isStream {
                     // The user started a station, so drop the queue. Without this, a station
@@ -160,7 +157,9 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
                 try? await Task.sleep(for: .seconds(3))
             }
         }
-        sequencer.withLock { $0 = task }
+        // Replacing cancels the one before: two play-backs started together each start one,
+        // and the earlier must not keep driving Music.app.
+        sequencer.replace(with: task)
     }
 
     /// Pauses Music.app once the queue is done, if it's still playing.
@@ -172,40 +171,12 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
         _ = await ScriptingQueue.run { MediaTransportControl.perform(.playPause) }
     }
 
-    private func cancelSequencer() {
-        sequencer.withLock { task in
-            task?.cancel()
-            task = nil
-        }
-    }
-
-    private func deliver(_ songID: String) {
-        state.withLock { pending in
-            if let continuation = pending.continuation {
-                continuation.yield(songID)
-            } else {
-                pending.buffered.append(songID)
-            }
-        }
-    }
-
     public func nowPlayingIDs() -> AsyncStream<String> {
-        AsyncStream { continuation in
-            let backlog = state.withLock { pending -> [String] in
-                pending.continuation = continuation
-                defer { pending.buffered = [] }
-                return pending.buffered
-            }
-            for songID in backlog { continuation.yield(songID) }
-            // `[weak self]` because `Mutex` is non-copyable and can't be captured on its own.
-            continuation.onTermination = { [weak self] _ in
-                self?.state.withLock { $0.continuation = nil }
-            }
-        }
+        reached.subscribe()
     }
 
     public func pause() async {
-        cancelSequencer()
+        sequencer.cancel()
         state.withLock { $0.remaining = [] }
         _ = await ScriptingQueue.run { MediaTransportControl.perform(.playPause) }
     }
@@ -234,16 +205,18 @@ public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
+    /// What went wrong, in words. Music's own answer to the script only goes to the log.
     static func describe(_ failure: MusicLibraryPlayback.Failure, playlist: String) -> String {
         switch failure {
         case .musicNotRunning:
-            "Music isn't running."
+            return String(localized: "Music isn’t open. Open Music and try again.")
         case .notInLibrary(let title):
             // Music can only be told to play what's in the library, and a song streamed from
             // Apple Music isn't until someone adds it.
-            "“\(title)” isn't in your Music library, so Tracks can't start it. Add it in Music first."
+            return String(localized: "“\(title)” isn’t in your Music library, so Tracks can’t start it. Add it in Music first.")
         case .scriptFailed(let detail):
-            "Music refused to play it: \(detail)"
+            Log.playback.error("Music refused to play a song: \(detail, privacy: .public)")
+            return String(localized: "Music couldn’t start the song. Open Music and try again.")
         }
     }
 }

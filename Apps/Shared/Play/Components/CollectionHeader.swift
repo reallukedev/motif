@@ -174,8 +174,8 @@ struct CollectionHeader<Cover: View, More: View>: View {
             CoverStage(tint: fieldTint, deepens: false)
                 .padding(.top, -Self.overscroll)
                 .overlay(alignment: .bottom) {
-                    // Long and eased, from behind Play down, so the colour melts into the page
-                    // rather than stopping at a line.
+                    // Eased, so the colour melts into the page rather than stopping at a line,
+                    // and starting under Play and Shuffle: their white words need the field.
                     LinearGradient(
                         stops: Self.easedStops.map { .init(color: Color.pageBackground.opacity($0.opacity), location: $0.location) },
                         startPoint: .top,
@@ -192,8 +192,8 @@ struct CollectionHeader<Cover: View, More: View>: View {
 
     /// The field's foot below the buttons, where the page shows through at last.
     static var fade: CGFloat { 40 }
-    /// How far up the fade reaches: behind the buttons and the words above them.
-    private static var fadeReach: CGFloat { 190 }
+    /// How far up the fade reaches: to the middle of the buttons, where it's still faint.
+    private static var fadeReach: CGFloat { 100 }
     /// Smoothstep, so the fade has no start or end to see.
     private static var easedStops: [(opacity: Double, location: Double)] {
         (0...10).map { step in

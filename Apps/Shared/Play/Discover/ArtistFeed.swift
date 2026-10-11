@@ -51,10 +51,10 @@ struct ArtistFeed: View {
     private static let maximumWidth: CGFloat = 1_400
 
     #if os(macOS)
-    static let cardHeight: CGFloat = 440
+    nonisolated static let cardHeight: CGFloat = 440
     private static let spacing: CGFloat = 24
     #else
-    static let cardHeight: CGFloat = 420
+    nonisolated static let cardHeight: CGFloat = 420
     private static let spacing: CGFloat = 20
     #endif
 
@@ -168,6 +168,7 @@ private struct CardWords: View {
     let eyebrow: String
     let title: String
     var line: String?
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = CardWords.baseTitleSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -177,7 +178,7 @@ private struct CardWords: View {
                 .kerning(0.5)
                 .foregroundStyle(.white.opacity(0.75))
             Text(title)
-                .font(.system(size: Self.titleSize, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
@@ -192,9 +193,9 @@ private struct CardWords: View {
     }
 
     #if os(macOS)
-    private static let titleSize: CGFloat = 32
+    private static let baseTitleSize: CGFloat = 32
     #else
-    private static let titleSize: CGFloat = 28
+    private static let baseTitleSize: CGFloat = 28
     #endif
 }
 
@@ -209,10 +210,12 @@ private struct CardButton: View {
             Label(title, systemImage: systemImage)
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 16)
-                .frame(height: 34)
+                .padding(.vertical, 8)
+                .frame(minHeight: 34)
                 .foregroundStyle(.black)
                 .background(.white, in: .capsule)
-                .contentShape(.capsule)
+                .frame(minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.pressable)
     }
@@ -256,6 +259,7 @@ private struct FeatureCard: View {
                             .foregroundStyle(.white)
                             .frame(width: 34, height: 34)
                             .background(.white.opacity(0.22), in: .circle)
+                            .frame(width: 44, height: 44)
                             .contentShape(.circle)
                     }
                     .menuStyle(.button)
@@ -323,9 +327,11 @@ private struct ListCard: View {
                             Text("Play")
                                 .font(.subheadline.weight(.semibold))
                                 .padding(.horizontal, 14)
-                                .frame(height: 28)
+                                .padding(.vertical, 5)
+                                .frame(minHeight: 28)
                                 .background(.quaternary, in: .capsule)
-                                .contentShape(.capsule)
+                                .frame(minHeight: 44)
+                                .contentShape(.rect)
                         }
                         .buttonStyle(.pressable)
                         .foregroundStyle(.tint)
@@ -376,7 +382,8 @@ private struct SongCard: View {
                 Text(song?.title ?? suggestion.artist.name)
                     .font(.title2.bold())
                     .foregroundStyle(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                 NavigationLink(value: PlayRoute.artist(suggestion.artist)) {
                     Text(song == nil ? String(localized: "Their best songs") : String(localized: "by \(suggestion.artist.name)"))
                         .font(.subheadline.weight(.medium))
@@ -474,12 +481,12 @@ private struct GenreCard: View {
         }
     }
 
-    /// "Ocean Tapes, Silver Lakes and 3 more".
+    /// "Ocean Tapes, Silver Lakes, and 3 more", joined as the language joins a list.
     private var names: String {
         let shown = artists.prefix(2).map(\.artist.name)
         let more = artists.count - shown.count
         guard more > 0 else { return shown.formatted(.list(type: .and)) }
-        return String(localized: "\(shown.joined(separator: ", ")) and \(more) more")
+        return (shown + [String(localized: "\(more) more", comment: "The last item of a list of artists, counting the ones not named")]).formatted(.list(type: .and))
     }
 
     /// Two of each one's best songs, shuffled together.

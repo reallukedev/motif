@@ -67,6 +67,9 @@ public final class CaptureCoordinator {
         var observation = observation
         if observation.stationName == nil { observation.stationName = currentStationName }
 
+        // Before the insert: this observation is also how long the last song kept playing.
+        followScrobbleWatch(observation, now: now)
+
         let policy = CapturePolicy(
             dedupe: settings.dedupePolicy,
             excludedStations: settings.excludedStations,
@@ -80,7 +83,9 @@ public final class CaptureCoordinator {
 
         // Drain on every observation, not just new captures, so a failed write is retried
         // within 10 seconds instead of waiting for the next song. Cheap when nothing is owed.
-        await drainPendingWrites()
+        // Not waited for: a drain can spend minutes on the catalog, and the observations
+        // queued behind it would be handled late, with their listening clocks started late.
+        startDrain()
         return decision
     }
 
@@ -106,14 +111,16 @@ public final class CaptureCoordinator {
         let session = capturable.kind == .radio
             ? try? store.openSession(stationName: capturable.stationName, policy: sessionPolicy, now: now)
             : nil
-        _ = try? store.insertCapture(
+        if let capture = try? store.insertCapture(
             songKey: songKey,
             catalogSongID: capturable.catalogSongID,
             observation: capturable.observation,
             kind: capturable.kind,
             session: session,
             now: now
-        )
+        ) {
+            watchScrobble(of: capture, songKey: songKey, duration: observation.duration, now: now)
+        }
         return decision
     }
 
@@ -121,16 +128,81 @@ public final class CaptureCoordinator {
     ///
     /// The clock starts when a song is first seen and resets when a different one arrives.
     private func timeStillOwed(songKey: String, duration: TimeInterval?, now: Date, force: Bool) -> CaptureDecision.Reason? {
-        let minimum = settings.minimumListen(forDuration: duration)
-        guard !force, minimum > 0 else { return nil }
-
+        // Kept even when nothing has to play first, for the scrobble watch.
         if pendingKey != songKey {
             pendingKey = songKey
             pendingSince = now
         }
+        let minimum = settings.minimumListen(forDuration: duration)
+        guard !force, minimum > 0 else { return nil }
+
         let playedFor = now.timeIntervalSince(pendingSince ?? now)
         guard playedFor < minimum else { return nil }
         return .tooShort(playedFor: playedFor, needs: minimum)
+    }
+
+    // MARK: - Scrobbling
+
+    /// The latest play kept before it had played long enough for Last.fm, and how much of it
+    /// has played since it was first seen.
+    private struct ScrobbleWatch {
+        let id: PersistentIdentifier
+        let songKey: String
+        let needs: TimeInterval
+        var played: TimeInterval
+        /// The last observation, and whether this song was playing at it.
+        var lastSeen: Date
+        var isPlaying: Bool
+    }
+
+    private var scrobbleWatch: ScrobbleWatch?
+
+    /// Holds a new play out of the scrobble queue until it has played long enough, by
+    /// ``ScrobblePolicy``. With a share of 0 every song is kept the moment it's seen, skips
+    /// and jingles included, and each of those used to be scrobbled.
+    private func watchScrobble(of capture: Capture, songKey: String, duration: TimeInterval?, now: Date) {
+        scrobbleWatch = nil
+        guard let needs = ScrobblePolicy().requiredPlayback(forDuration: duration) else {
+            capture.holdFromScrobbling(reason: ScrobblePolicy.tooShortReason)
+            try? store.context.save()
+            return
+        }
+        let played = pendingKey == songKey ? now.timeIntervalSince(pendingSince ?? now) : 0
+        guard played < needs else { return }
+        capture.holdFromScrobbling(reason: ScrobblePolicy.notPlayedEnoughReason)
+        try? store.context.save()
+        scrobbleWatch = ScrobbleWatch(
+            id: capture.persistentModelID,
+            songKey: songKey,
+            needs: needs,
+            played: played,
+            lastSeen: now,
+            isPlaying: true
+        )
+    }
+
+    /// Counts the time since the last observation toward the watched play if it was
+    /// playing, and lets it be scrobbled once that's enough. A different song playing ends
+    /// the watch: whatever the play reached by then is all it gets.
+    private func followScrobbleWatch(_ observation: NowPlayingObservation, now: Date) {
+        guard var watch = scrobbleWatch else { return }
+        if watch.isPlaying { watch.played += max(0, now.timeIntervalSince(watch.lastSeen)) }
+        watch.lastSeen = now
+
+        let isSameSong = observation.isIdentifiable
+            && (observation.catalogSongID ?? Self.metadataKey(for: observation)) == watch.songKey
+        watch.isPlaying = isSameSong && observation.playbackState == .playing
+
+        if watch.played >= watch.needs {
+            scrobbleWatch = nil
+            guard let capture = liveCapture(watch.id) else { return }
+            capture.releaseForScrobbling()
+            try? store.context.save()
+        } else if observation.isCapturable, !isSameSong {
+            scrobbleWatch = nil
+        } else {
+            scrobbleWatch = watch
+        }
     }
 
     /// Identity for a track with no catalog ID yet (macOS, before the search runs).
@@ -169,10 +241,15 @@ public final class CaptureCoordinator {
     /// If a drain is already running this waits for it, and that drain takes one more look
     /// before it finishes.
     public func drainPendingWrites() async {
+        await startDrain().value
+    }
+
+    /// Starts a drain, or asks the running one for one more look, without waiting for it.
+    @discardableResult
+    private func startDrain() -> Task<Void, Never> {
         if let runningDrain {
             wantsAnotherDrain = true
-            await runningDrain.value
-            return
+            return runningDrain
         }
         let task = Task {
             repeat {
@@ -184,7 +261,7 @@ public final class CaptureCoordinator {
             runningDrain = nil
         }
         runningDrain = task
-        await task.value
+        return task
     }
 
     private func drainOnce() async {

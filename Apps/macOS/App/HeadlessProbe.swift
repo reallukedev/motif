@@ -192,7 +192,7 @@ enum HeadlessProbe {
                 guard index < recent.count else { print("no capture \(index)"); return 1 }
                 let capture = recent[index]
                 let item = PlaybackItem(songID: capture.songID, title: capture.title, artistName: capture.artistName)
-                print("playing: \(item.title) — \(item.artistName) [\(item.songID)]")
+                print("playing: \(item.title) · \(item.artistName) [\(item.songID)]")
                 let service = PlatformPlaybackService.make()
                 do {
                     try await service.play([item])
@@ -202,7 +202,7 @@ enum HeadlessProbe {
                 }
                 try? await Task.sleep(for: .seconds(3))
                 let now = await ScriptingQueue.run { MusicLibraryPlayback.currentTrack() }
-                print("Music is playing: \(now.map { "\($0.name) — \($0.artist)" } ?? "nothing")")
+                print("Music is playing: \(now.map { "\($0.name) · \($0.artist)" } ?? "nothing")")
                 if now != nil { await service.pause() }
                 return 0
             } catch {
@@ -229,7 +229,7 @@ enum HeadlessProbe {
                     if MusicItemIdentity.isCatalogID(capture.songID) {
                         let request = MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: MusicItemID(capture.songID))
                         if let song = try? await request.response().items.first {
-                            fields.append(("catalog", "\(song.title) — \(song.artistName)"))
+                            fields.append(("catalog", "\(song.title) · \(song.artistName)"))
                             let catalogTrack = MusicLibraryPlayback.Track(name: song.title, artist: song.artistName)
                             let byCatalog = await ScriptingQueue.run {
                                 MusicLibraryPlayback.locate(catalogTrack, inPlaylist: playlist)
@@ -244,7 +244,7 @@ enum HeadlessProbe {
                         MusicLibraryPlayback.locate(captured, inPlaylist: playlist)
                     }
                     fields.append(("Music, captured name", String(describing: byCapture)))
-                    model.log.append(.environment, "\(capture.title) — \(capture.artistName) [\(capture.kind.rawValue)]", fields: fields)
+                    model.log.append(.environment, "\(capture.title) · \(capture.artistName) [\(capture.kind.rawValue)]", fields: fields)
                 }
                 // The popover's batch check, which should agree with the answers above.
                 let recent = try store.context.fetch(TracksStore.allCaptures(limit: 12))

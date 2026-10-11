@@ -18,6 +18,9 @@ public final class CaptureService {
 
     /// Where the pause is kept. Not a synced setting: pausing one device leaves the others.
     public nonisolated static let pausedKey = "historyPaused"
+    /// Set from a resume until Recently Played has been read, as the songs it shows then
+    /// include ones played while paused.
+    nonisolated static let anchorOwedKey = "historyResumeAnchorOwed"
 
     /// Whether history is paused, for code that doesn't hold the service: the player telling a
     /// music server what played, say.
@@ -50,6 +53,10 @@ public final class CaptureService {
     private var poll: Task<Void, Never>?
     private var recheck: Task<Void, Never>?
     private var artworkLookup: Task<Void, Never>?
+    /// The Last.fm send started after an observation, and whether another was asked for
+    /// while it ran.
+    private var scrobbling: Task<Void, Never>?
+    private var scrobbleAgain = false
     /// The song artwork was last looked up for, so a failed lookup is not retried every poll.
     private var artworkLookupKey: String?
     /// What that lookup found. Kept separately because `nowPlaying` is rebuilt from each
@@ -103,6 +110,18 @@ public final class CaptureService {
         )
     }
 
+    /// The service for ``TracksStore/shared()``, one per process for the app and its intents
+    /// alike: a second would drain the same scrobbles and playlist writes beside the first
+    /// and send each twice.
+    public static func shared() throws -> CaptureService {
+        if let sharedService { return sharedService }
+        let service = CaptureService(store: try TracksStore.shared())
+        sharedService = service
+        return service
+    }
+
+    private static var sharedService: CaptureService?
+
     /// Retries whatever is outstanding: unresolved ids, missing artwork, failed playlist
     /// writes, unsent scrobbles. Called at launch.
     public func catchUp() async {
@@ -125,8 +144,12 @@ public final class CaptureService {
     public func resume() async {
         isPaused = false
         UserDefaults.standard.set(false, forKey: Self.pausedKey)
+        // Owed until the list is read, here or by the next import, so a resume offline
+        // doesn't let the paused songs in later.
+        UserDefaults.standard.set(true, forKey: Self.anchorOwedKey)
         if let songs = try? await RecentlyPlayedSource().recentlyPlayed(limit: 30) {
             settings.recentlyPlayedAnchor = songs.map { HistoryImport.key(title: $0.title, artistName: $0.artistName) }
+            UserDefaults.standard.set(false, forKey: Self.anchorOwedKey)
         }
         // Paused again while the list was read.
         guard !isPaused else { return }
@@ -138,7 +161,14 @@ public final class CaptureService {
     @discardableResult
     public func importRecentlyPlayed() async -> Int {
         guard settings.importsRecentlyPlayed, !isPaused else { return 0 }
-        guard let songs = try? await RecentlyPlayedSource().recentlyPlayed(limit: 30) else { return 0 }
+        guard let songs = try? await RecentlyPlayedSource().recentlyPlayed(limit: 30), !isPaused else { return 0 }
+        // A resume that couldn't read the list: the songs played while paused can't be told
+        // from later ones, so this list only becomes where new songs are counted from.
+        if UserDefaults.standard.bool(forKey: Self.anchorOwedKey) {
+            settings.recentlyPlayedAnchor = songs.map { HistoryImport.key(title: $0.title, artistName: $0.artistName) }
+            UserDefaults.standard.set(false, forKey: Self.anchorOwedKey)
+            return 0
+        }
         let imported = (try? store.importPlayedSongs(songs)) ?? 0
         if imported > 0, lastCapture == nil {
             lastCapture = (try? store.context.fetch(TracksStore.allCaptures(limit: 1)))?
@@ -222,7 +252,7 @@ public final class CaptureService {
                 if Task.isCancelled { return }
                 let decision = await coordinator.handle(observation)
                 await MainActor.run { self.record(decision, observation: observation) }
-                if case .capture = decision { await self.scrobbler.drain() }
+                self.scrobbleSoon()
             }
         }
         #if os(macOS)
@@ -272,7 +302,7 @@ public final class CaptureService {
                 guard let observation, isPlaying else { continue }
                 let decision = await self.coordinator.handle(observation)
                 self.record(decision, observation: observation)
-                if case .capture = decision { await self.scrobbler.drain() }
+                self.scrobbleSoon()
             }
         }
     }
@@ -333,6 +363,24 @@ public final class CaptureService {
             else { return }
             let decision = await self.coordinator.handle(observation)
             self.record(decision, observation: observation)
+            self.scrobbleSoon()
+        }
+    }
+
+    /// Sends what's owed to Last.fm without holding up the next observation: a slow request
+    /// would otherwise start the next song's listening clock late. After every observation,
+    /// not only a capture, since one can release a play held until enough of it was heard.
+    private func scrobbleSoon() {
+        guard scrobbling == nil else {
+            scrobbleAgain = true
+            return
+        }
+        scrobbling = Task { [weak self] in
+            repeat {
+                self?.scrobbleAgain = false
+                await self?.scrobbler.drain()
+            } while self?.scrobbleAgain == true
+            self?.scrobbling = nil
         }
     }
 
@@ -460,6 +508,12 @@ public final class CaptureService {
         // The user asked for this song, so skip the minimum listening time.
         let decision = await coordinator.handle(observation, force: true)
         record(decision, observation: observation)
+        // Written and sent now: from the intent, the process is suspended soon after this
+        // returns, and handling no longer waits for the playlist write.
+        if case .capture = decision {
+            await coordinator.drainPendingWrites()
+            await scrobbler.drain()
+        }
         return decision
     }
 

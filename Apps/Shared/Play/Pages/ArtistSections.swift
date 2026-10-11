@@ -67,7 +67,7 @@ struct ArtistSectionTitle<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
             Text(title)
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)

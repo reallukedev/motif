@@ -11,6 +11,7 @@ struct NowPlayingCard: View {
     @AppStorage(LastFMSessionStore.usernameDefaultsKey, store: CaptureSettings.sharedDefaults)
     private var lastFMUsername: String?
     @Environment(PlayerModel.self) private var player
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let song = capture.nowPlaying {
@@ -37,7 +38,7 @@ struct NowPlayingCard: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            .transition(.move(edge: .top).combined(with: .opacity))
+            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
         }
     }
 
@@ -66,12 +67,13 @@ struct StoreWarningBanner: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if !model.isShowingSampleData, case .inMemory(let reason) = model.store?.backing {
+        // The reason is for diagnostics, in the backing's description, not for the banner.
+        if !model.isShowingSampleData, case .inMemory = model.store?.backing {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Your listening isn't being saved")
                         .font(.subheadline.weight(.semibold))
-                    Text(reason)
+                    Text("Tracks couldn't open its library, so what you play now will be lost when it quits. Quit and reopen Tracks to try again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -91,9 +93,9 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 24) {
             ContentUnavailableView {
-                Label("Your listening will show up here", systemImage: "waveform")
+                Label("No Listening Yet", systemImage: "waveform")
             } description: {
-                Text("Play something in Apple Music. Tracks keeps what you listen to, including radio, and turns it into charts and highlights.")
+                Text("Play something in Tracks or Apple Music. Tracks keeps every song you hear, radio included, and turns them into charts and highlights.")
             }
             // First run is when the reason for Apple Music access is easiest to see.
             MusicAccessCard()

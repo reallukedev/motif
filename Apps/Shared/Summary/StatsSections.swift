@@ -60,16 +60,19 @@ struct RhythmDetailsRow: View {
 /// Listening per weekday and per weekend day, under the week chart.
 struct DayTypeFootnotes: View {
     let summary: StatsSummary
+    /// Whether a weekday chart is above, whose weekend bars are lighter: then each figure
+    /// shows its bars' colour, so the lighter ones read as weekends rather than as less.
+    var keysWeekdayChart = false
 
     var body: some View {
         if summary.weekdayAverageSeconds != nil || summary.weekendAverageSeconds != nil {
             AdaptiveStack(spacing: 8) {
                 if let weekday = summary.weekdayAverageSeconds {
-                    StatFootnote(title: "Weekdays", value: Text("\(Format.listening(weekday)) a day"))
+                    StatFootnote(title: "Weekdays", value: Text("\(Format.listening(weekday)) a day"), swatch: keysWeekdayChart ? WeekdayChart.weekdayStyle : nil)
                     Spacer(minLength: 0)
                 }
                 if let weekend = summary.weekendAverageSeconds {
-                    StatFootnote(title: "Weekends", value: Text("\(Format.listening(weekend)) a day"))
+                    StatFootnote(title: "Weekends", value: Text("\(Format.listening(weekend)) a day"), swatch: keysWeekdayChart ? WeekdayChart.weekendStyle : nil)
                     Spacer(minLength: 0)
                 }
             }

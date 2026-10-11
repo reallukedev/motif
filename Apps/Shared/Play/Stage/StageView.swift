@@ -27,22 +27,25 @@ struct StageView: View {
     @State private var palette: [Color] = []
     @State private var showsControls = LaunchScene.opensStageControls
     @State private var customizing = LaunchScene.opensStageCustomizer
+    /// Counts what's done on Stage: the controls put themselves away a while after the last.
+    @State private var activity = 0
+    #if os(macOS)
+    @State private var isOverControls = false
+    @State private var pointer = PointerMoves()
+    #endif
     @FocusState private var isFocused: Bool
+    @Environment(\.isOnScreen) private var isOnScreen
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+
+    /// VoiceOver can't find controls that only a tap brings up, so they stay while it runs.
+    private var controlsShown: Bool { showsControls || voiceOver }
 
     var body: some View {
         ZStack {
-            StageBackdrop(
-                style: background,
-                cover: player.current?.cover,
-                tint: tint,
-                palette: palette,
-                levels: levels,
-                energy: songEnergy(player.current),
-                isPlaying: player.isPlaying
-            )
-                .overlay(Color.black.opacity(player.isPlaying ? 0 : 0.3))
-                .animation(.easeInOut(duration: 0.8), value: player.isPlaying)
-                .ignoresSafeArea()
             Group {
                 if let track = player.current {
                     GeometryReader { proxy in
@@ -60,11 +63,31 @@ struct StageView: View {
             }
             .foregroundStyle(.white)
             controls
-                .opacity(showsControls ? 1 : 0)
-                .allowsHitTesting(showsControls)
+                .opacity(controlsShown ? 1 : 0)
+                .allowsHitTesting(controlsShown)
+                // Put away, the scrubber stops ticking.
+                .environment(\.isOnScreen, isOnScreen && controlsShown)
             if showsHint {
                 hint.transition(.opacity)
             }
+        }
+        // Lit from wherever the layout puts the cover, for the backgrounds lit from behind it.
+        .backgroundPreferenceValue(BackdropFocusKey.self) { anchor in
+            GeometryReader { proxy in
+                StageBackdrop(
+                    style: background,
+                    cover: player.current?.cover,
+                    tint: tint,
+                    palette: palette,
+                    levels: levels,
+                    energy: songEnergy(player.current),
+                    isPlaying: player.isPlaying,
+                    focus: anchor.map { proxy[$0] }
+                )
+                .overlay(Color.black.opacity(player.isPlaying ? 0 : 0.3))
+                .animation(.easeInOut(duration: 0.8), value: player.isPlaying)
+            }
+            .ignoresSafeArea()
         }
         .environment(\.colorScheme, .dark)
         .coverTint(of: player.current?.cover, into: $tint)
@@ -73,13 +96,29 @@ struct StageView: View {
             let found = await CoverTint.palette(for: cover)
             if !Task.isCancelled { palette = found }
         }
-        .animation(.easeInOut(duration: 0.3), value: showsControls)
-        .animation(.smooth(duration: 0.5), value: layout)
-        .animation(.smooth(duration: 0.5), value: player.current?.id)
+        .animation(.easeInOut(duration: 0.3), value: controlsShown)
+        .animation(stageAnimation, value: layout)
+        .animation(stageAnimation, value: player.current?.id)
         .contentShape(.rect)
         .onTapGesture(perform: toggleControls)
+        #if os(macOS)
+        // As in the TV app: moving the pointer brings the controls up.
+        .onContinuousHover { phase in
+            if case .active = phase { pointerMoved() }
+        }
+        #endif
+        .task(id: IdleKey(activity: activity, isShown: showsControls, customizing: customizing)) {
+            await putControlsAwayWhenIdle()
+        }
+        .accessibilityActions {
+            // For Switch Control and Voice Control. Under VoiceOver the controls never go.
+            if !voiceOver {
+                Button(showsControls ? "Hide Controls" : "Show Controls", action: toggleControls)
+            }
+        }
+        .accessibilityAction(.escape, onClose)
         #if os(iOS)
-        .statusBarHidden(!showsControls)
+        .statusBarHidden(!controlsShown)
         .persistentSystemOverlays(.hidden)
         .onChange(of: keepsScreenOn, initial: true) { _, isOn in
             UIApplication.shared.isIdleTimerDisabled = isOn
@@ -106,10 +145,14 @@ struct StageView: View {
         .onExitCommand(perform: onClose)
         #endif
         .onAppear {
-            AudioLevelMeter.shared.startListening()
-            if !showsControls { showHintIfNew() }
+            if !controlsShown { showHintIfNew() }
         }
-        .onDisappear { AudioLevelMeter.shared.stopListening() }
+        .listensToAudio()
+    }
+
+    /// Under Reduce Motion, a new layout or song settles in a moment rather than gliding there.
+    private var stageAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.5)
     }
 
     // MARK: - The four layouts
@@ -135,10 +178,11 @@ struct StageView: View {
             layout {
                 ZStack {
                     if visualizer == .orb {
-                        visualizerView(track).frame(width: side * 1.7, height: side * 1.7)
+                        visualizerView(track, isBehindCover: true).frame(width: side * 1.7, height: side * 1.7)
                     }
                     CoverImage(cover: track.cover, size: side)
                         .shadow(color: .black.opacity(0.35), radius: 30, y: 16)
+                        .backdropFocus()
                 }
                 .frame(width: side, height: side)
                 details(track, alignment: wide ? .leading : .center, size: min(size.width * (wide ? 0.045 : 0.09), 64), eyebrow: player.context?.title)
@@ -146,7 +190,7 @@ struct StageView: View {
             }
             Spacer(minLength: 0)
             if visualizer == .bars || visualizer == .wave {
-                visualizerView(track).frame(height: max(size.height * 0.16, 64))
+                visualizerView(track).frame(height: max(size.height * 0.2, 72))
                     .padding(.bottom, 20)
             }
             footer(track)
@@ -217,6 +261,7 @@ struct StageView: View {
                     visualizerView(track)
                     CoverImage(cover: track.cover, size: side * 0.54, isCircle: true)
                         .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+                        .backdropFocus()
                 }
                 .frame(width: side, height: side)
             case .bars, .wave:
@@ -224,6 +269,7 @@ struct StageView: View {
             case .off:
                 CoverImage(cover: track.cover, size: side * 0.8)
                     .shadow(color: .black.opacity(0.35), radius: 30, y: 16)
+                    .backdropFocus()
             }
             Spacer(minLength: 0)
             details(track, alignment: .center, size: min(size.width * (size.width > size.height ? 0.05 : 0.085), 48))
@@ -238,12 +284,16 @@ struct StageView: View {
             Spacer(minLength: 0)
             TimelineView(.everyMinute) { context in
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: min(size.width * 0.24, size.height * 0.34), weight: .bold, design: .rounded))
+                    // As StandBy shows it: the hours and minutes alone, in the cover's light.
+                    Text(context.date, format: Self.time)
+                        .font(.system(size: min(size.width * 0.24, size.height * 0.36), weight: .semibold, design: .rounded))
                         .monospacedDigit()
+                        .foregroundStyle(clockColor)
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
                         .contentTransition(.numericText())
+                        // Halo lights the time, the cover here being small.
+                        .backdropFocus()
                     Text(context.date, format: .dateTime.weekday(.wide).month(.wide).day())
                         .font(.title2.weight(.semibold))
                         .opacity(0.7)
@@ -311,11 +361,18 @@ struct StageView: View {
 
     private func clock(size: CGFloat) -> some View {
         TimelineView(.everyMinute) { context in
-            Text(context.date, format: .dateTime.hour().minute())
+            Text(context.date, format: Self.time)
                 .font(.system(size: size, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .opacity(0.85)
+                .foregroundStyle(clockColor)
         }
+    }
+
+    private static let time = Date.FormatStyle.dateTime.hour(.defaultDigits(amPM: .omitted)).minute()
+
+    /// The cover's lightest colour, well lifted toward white, as StandBy tints its clock.
+    private var clockColor: Color {
+        (palette.last ?? .white).mix(with: .white, by: 0.6)
     }
 
     /// How far into the song, and what's next, along the bottom.
@@ -325,13 +382,17 @@ struct StageView: View {
         if showsProgress || next != nil || !player.isPlaying {
             VStack(alignment: .leading, spacing: 10) {
                 if showsProgress, let duration = track.duration, duration > 0 {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    TimelineView(.animation(minimumInterval: 1, paused: !player.isPlaying || !isOnScreen)) { _ in
                         let fraction = min(1, max(0, player.playbackTime / duration))
                         GeometryReader { proxy in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(.white.opacity(0.2))
-                                Capsule().fill(.white.opacity(0.75)).frame(width: proxy.size.width * fraction)
+                                // Slid along rather than resized, so each tick only redraws.
+                                Capsule()
+                                    .fill(.white.opacity(0.75))
+                                    .offset(x: -proxy.size.width * (1 - fraction))
                             }
+                            .clipShape(.capsule)
                         }
                         .frame(height: 4)
                     }
@@ -358,8 +419,8 @@ struct StageView: View {
         }
     }
 
-    private func visualizerView(_ track: PlayerTrack, style: StageVisualizer? = nil) -> some View {
-        StageVisualizerView(style: style ?? visualizer, palette: palette, energy: songEnergy(track), isPlaying: player.isPlaying, levels: levels)
+    private func visualizerView(_ track: PlayerTrack, style: StageVisualizer? = nil, isBehindCover: Bool = false) -> some View {
+        StageVisualizerView(style: style ?? visualizer, palette: palette, energy: songEnergy(track), isPlaying: player.isPlaying, levels: levels, isBehindCover: isBehindCover)
     }
 
     // MARK: - Controls
@@ -384,11 +445,14 @@ struct StageView: View {
                     }
                     #endif
             }
+            #if os(macOS)
+            .onHover { isOverControls = $0 }
+            #endif
             Spacer()
             if let track = player.current {
-                VStack(spacing: 18) {
+                VStack(spacing: isShort ? 8 : 18) {
                     if let duration = track.duration, duration > 0, !player.isLive, player.context?.isStation != true {
-                        Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track) { time in
+                        Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track, interval: Scrubber.platformInterval) { time in
                             player.seek(to: time)
                         }
                     } else {
@@ -397,22 +461,37 @@ struct StageView: View {
                     PlayerTransport()
                 }
                 .padding(.horizontal, 28)
-                .padding(.vertical, 22)
+                .padding(.vertical, isShort ? 12 : 22)
                 .frame(maxWidth: 560)
                 .glassEffect(.regular, in: .rect(cornerRadius: 34))
                 // A tap that just misses a button stays on the panel, rather than putting
                 // the controls away from under the finger.
                 .contentShape(.rect(cornerRadius: 34))
                 .onTapGesture {}
+                #if os(macOS)
+                .onHover { isOverControls = $0 }
+                #endif
             }
         }
+        // Anything done with the controls keeps them up a while longer.
+        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in activity += 1 })
         .foregroundStyle(.white)
         .padding(24)
         .background {
-            // A little shade top and bottom, so the controls read over any cover.
-            LinearGradient(colors: [.black.opacity(0.45), .clear, .clear, .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
+            // Shade over the song, deeper top and bottom, so the controls sit over it rather
+            // than among it.
+            LinearGradient(colors: [.black.opacity(0.5), .black.opacity(0.2), .black.opacity(0.2), .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         }
+    }
+
+    /// iPhone on its side: the panel keeps to its controls, with little room to spare.
+    private var isShort: Bool {
+        #if os(iOS)
+        verticalSizeClass == .compact
+        #else
+        false
+        #endif
     }
 
     private func controlButton(_ label: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
@@ -433,7 +512,7 @@ struct StageView: View {
             #if os(iOS)
             Text("Tap to show controls")
             #else
-            Text("Click to show controls")
+            Text("Move the pointer to show controls")
             #endif
         }
         .font(.callout.weight(.semibold))
@@ -465,24 +544,75 @@ struct StageView: View {
         guard !customizing else { return }
         showsHint = false
         showsControls.toggle()
+        activity += 1
         #if os(macOS)
         // Put away, they take the pointer with them until it's moved.
         if !showsControls { NSCursor.setHiddenUntilMouseMoves(true) }
         #endif
     }
+
+    /// What the idle timer restarts on.
+    private struct IdleKey: Hashable {
+        let activity: Int
+        let isShown: Bool
+        let customizing: Bool
+    }
+
+    /// Puts the controls away once nothing's been done with them for a few seconds, as a video
+    /// player does, so a Stage left on doesn't keep them over the song. Not while customizing,
+    /// under VoiceOver, or with the pointer resting on them.
+    private func putControlsAwayWhenIdle() async {
+        guard showsControls, !customizing, !LaunchScene.opensStageControls else { return }
+        #if os(macOS)
+        let wait = 3.0
+        #else
+        let wait = 5.0
+        #endif
+        try? await Task.sleep(for: .seconds(wait))
+        guard !Task.isCancelled, !voiceOver, !customizing else { return }
+        #if os(macOS)
+        guard !isOverControls else { return }
+        NSCursor.setHiddenUntilMouseMoves(true)
+        #endif
+        showsControls = false
+    }
+
+    #if os(macOS)
+    private func pointerMoved() {
+        // Each move restarts the wait, but not more than twice a second.
+        guard !showsControls || pointer.isDue else { return }
+        showsHint = false
+        showsControls = true
+        activity += 1
+    }
+    #endif
 }
+
+#if os(macOS)
+/// When the pointer last restarted Stage's idle wait. Not observed: a move redraws nothing.
+private final class PointerMoves {
+    private var last = Date.distantPast
+
+    var isDue: Bool {
+        guard Date.now.timeIntervalSince(last) > 0.5 else { return false }
+        last = .now
+        return true
+    }
+}
+#endif
 
 /// Moves what's on Stage a few points over the minutes, too slowly to see, so a screen kept on
 /// for hours doesn't keep the same picture burned in one place.
 private struct PixelShift: ViewModifier {
     let isOn: Bool
+    @Environment(\.isOnScreen) private var isOnScreen
 
     func body(content: Content) -> some View {
-        TimelineView(.periodic(from: .now, by: 20)) { context in
+        // Once a minute, a step of a point or two: nothing to animate, and nothing drawn between.
+        TimelineView(.animation(minimumInterval: 60, paused: !isOn || !isOnScreen)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
             content
                 .offset(x: isOn ? 8 * sin(time / 311) : 0, y: isOn ? 6 * cos(time / 409) : 0)
-                .animation(.easeInOut(duration: 20), value: time)
         }
     }
 }

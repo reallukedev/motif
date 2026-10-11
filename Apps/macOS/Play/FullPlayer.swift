@@ -6,13 +6,25 @@ import TracksCore
 /// or Your History, and the sleeve turns over to your history with the song. Escape, or the
 /// chevron, goes back to the window.
 struct FullPlayer: View {
+    /// Whether the sleeve is turned over and Up Next is out: the window's, so the Controls
+    /// menu's Show Up Next and Show Your History reach them.
+    let window: PlayerWindowState
     let close: () -> Void
     @Environment(PlayerModel.self) private var player
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openPlayRoute) private var openPlayRoute
-    @State private var showsBack = LaunchScene.opensSleeve
-    @State private var showsUpNext = false
+    @Environment(\.openRadioTuner) private var openRadioTuner
     @State private var tint: Color?
+
+    private var showsBack: Bool {
+        get { window.fullPlayerShowsHistory }
+        nonmutating set { window.fullPlayerShowsHistory = newValue }
+    }
+
+    private var showsUpNext: Bool {
+        get { window.fullPlayerShowsUpNext }
+        nonmutating set { window.fullPlayerShowsUpNext = newValue }
+    }
 
     var body: some View {
         ZStack {
@@ -85,13 +97,13 @@ struct FullPlayer: View {
                     .help("Exit Full Player (Esc)")
                 Spacer()
                 Menu("More", systemImage: "ellipsis") {
-                    NowPlayingMenuItems(track: track) { destination in
+                    NowPlayingMenuItems(track: track, onNavigate: { destination in
                         close()
                         switch destination {
                         case .play(let route): openPlayRoute(route)
                         case .stats(let route): openPlayRoute(.stats(route))
                         }
-                    }
+                    }, onTuneRadio: openRadioTuner.map { open in { open() } })
                 }
                 .labelStyle(.iconOnly)
                 .menuStyle(.button)
@@ -118,7 +130,7 @@ struct FullPlayer: View {
             }
             .buttonStyle(.plain)
             .help("Your History with This Song")
-            .accessibilityLabel("Your history with this song")
+            .accessibilityLabel("Your History with This Song")
         } back: {
             LinerNotes(track: track, fillsCard: true) {
                 close()
@@ -160,7 +172,8 @@ struct FullPlayer: View {
                 }
                 Text(track.artistName)
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    // Strong enough to read on the brightest moving backgrounds.
+                    .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
                 PlayCountLine(track: track)
                     .font(.title3)
@@ -171,15 +184,15 @@ struct FullPlayer: View {
             Spacer(minLength: 24)
 
             if let duration = track.duration, duration > 0 {
-                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track) { time in
+                Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track, interval: Scrubber.platformInterval) { time in
                     player.seek(to: time)
                 }
             } else {
                 LiveScrubber()
             }
 
-            PlayerTransport()
-                .padding(.top, 20)
+            FullPlayerTransport()
+                .padding(.top, 16)
 
             secondaryControls
                 .padding(.top, 24)
@@ -192,10 +205,12 @@ struct FullPlayer: View {
             if player.context?.isStation != true, !player.isLive {
                 Button("Shuffle", systemImage: "shuffle") { player.toggleShuffle() }
                     .buttonStyle(BarIconButtonStyle(diameter: 36, isOn: player.isShuffled))
-                    .help("Shuffle")
+                    .help(player.isShuffled ? "Turn Off Shuffle" : "Shuffle")
+                    .accessibilityValue(player.isShuffled ? Text("On") : Text("Off"))
                 Button("Repeat", systemImage: player.repeatMode == .one ? "repeat.1" : "repeat") { player.cycleRepeat() }
                     .buttonStyle(BarIconButtonStyle(diameter: 36, isOn: player.repeatMode != .off))
-                    .help("Repeat")
+                    .help(repeatHelp)
+                    .accessibilityValue(repeatHelp)
             }
             Menu("Sleep Timer", systemImage: player.sleepTimer == nil ? "moon.zzz" : "moon.zzz.fill") {
                 SleepTimerItems(player: player)
@@ -217,9 +232,17 @@ struct FullPlayer: View {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { showsUpNext.toggle() }
             }
             .buttonStyle(BarIconButtonStyle(diameter: 36, isOn: showsUpNext))
-            .help("Up Next")
+            .help("Up Next (⌥⌘U)")
         }
         .labelStyle(.iconOnly)
+    }
+
+    private var repeatHelp: String {
+        switch player.repeatMode {
+        case .off: String(localized: "Repeat")
+        case .all: String(localized: "Repeating All")
+        case .one: String(localized: "Repeating One Song")
+        }
     }
 
     private var upNext: some View {
@@ -241,5 +264,59 @@ struct FullPlayer: View {
                     openPlayRoute(route)
                 })
         }
+    }
+}
+
+/// Previous, play or pause, and next, at the Mac's size: a soft circle under the pointer, a
+/// little give under a click, and what each does in its help, with its shortcut.
+private struct FullPlayerTransport: View {
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var previousPresses = 0
+    @State private var nextPresses = 0
+
+    var body: some View {
+        HStack(spacing: 28) {
+            Button {
+                previousPresses += 1
+                player.skipToPrevious()
+            } label: {
+                SkipArrows(direction: .backward, height: 17, trigger: previousPresses)
+            }
+            .buttonStyle(BarIconButtonStyle(diameter: 44))
+            .disabled(player.context?.isStation == true)
+            .help("Previous (⌘←)")
+            .accessibilityLabel("Previous")
+
+            Button {
+                player.togglePlayPause()
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 30))
+                    .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace.magic(fallback: .replace.downUp)))
+                    .frame(width: 32)
+            }
+            .buttonStyle(BarIconButtonStyle(diameter: 56))
+            .overlay {
+                if player.isPlaying, player.status == .loading {
+                    TurningRing(diameter: 54, lineWidth: 2, color: .primary.opacity(0.5))
+                        .allowsHitTesting(false)
+                }
+            }
+            .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
+            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            .accessibilityValue(player.isPlaying && player.status == .loading ? Text("Loading") : Text(""))
+
+            Button {
+                nextPresses += 1
+                player.skipToNext()
+            } label: {
+                SkipArrows(direction: .forward, height: 17, trigger: nextPresses)
+            }
+            .buttonStyle(BarIconButtonStyle(diameter: 44))
+            .help("Next (⌘→)")
+            .accessibilityLabel("Next")
+        }
+        .frame(maxWidth: .infinity)
     }
 }

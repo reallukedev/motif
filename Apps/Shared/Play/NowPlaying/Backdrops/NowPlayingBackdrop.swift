@@ -210,7 +210,14 @@ struct NowPlayingBackdrop: View {
         switch change {
         case .crossfade: return .asymmetric(insertion: .opacity, removal: stays)
         case .slide: return .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
-        case .bloom: return .asymmetric(insertion: .scale(scale: 0.3).combined(with: .opacity), removal: stays)
+        case .bloom:
+            // Opening out from the cover, as light through a doorway, rather than a picture
+            // growing from a box in the middle.
+            let reveal = AnyTransition.modifier(
+                active: BloomReveal(progress: 0, origin: focus.map { CGPoint(x: $0.midX, y: $0.midY) }),
+                identity: BloomReveal(progress: 1, origin: focus.map { CGPoint(x: $0.midX, y: $0.midY) })
+            )
+            return .asymmetric(insertion: reveal, removal: stays)
         }
     }
 
@@ -228,8 +235,48 @@ struct NowPlayingBackdrop: View {
         switch change {
         case .crossfade: .easeInOut(duration: duration)
         case .slide: .smooth(duration: duration)
-        case .bloom: .spring(duration: duration, bounce: 0.08)
+        case .bloom: .smooth(duration: duration)
         }
+    }
+}
+
+/// A new background opening out in a widening circle from the cover, its edge soft, settling
+/// from a touch larger as it does.
+private struct BloomReveal: ViewModifier, Animatable {
+    var progress: Double
+    /// Where it opens from, in the view's space: the middle of the cover, or high and central.
+    let origin: CGPoint?
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 + 0.06 * (1 - progress))
+            .mask {
+                GeometryReader { proxy in
+                    let size = proxy.size
+                    let centre = origin ?? CGPoint(x: size.width / 2, y: size.height * 0.35)
+                    // Far enough to reach the farthest corner, with the soft edge past it.
+                    let reach = hypot(max(centre.x, size.width - centre.x), max(centre.y, size.height - centre.y)) * 1.3
+                    if progress < 1 {
+                        RadialGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: max(0, progress - 0.22)),
+                                .init(color: .clear, location: max(0.001, progress)),
+                            ],
+                            center: UnitPoint(x: centre.x / max(1, size.width), y: centre.y / max(1, size.height)),
+                            startRadius: 0,
+                            endRadius: reach
+                        )
+                    } else {
+                        Color.black
+                    }
+                }
+            }
     }
 }
 
@@ -286,9 +333,9 @@ struct NowPlayingBackdropPicker: View {
             withAnimation(.snappy) { chosen = style }
         } label: {
             VStack(spacing: 7) {
-                // Moving while the music plays, as the player would; still otherwise, so
-                // Settings left open doesn't keep six backgrounds drawing.
-                BackdropMiniature(style: style, cover: cover, isPlaying: player.isPlaying)
+                // Only the chosen one moves while the music plays, as the player would: six
+                // moving at once is noise, and Settings left open would keep them all drawing.
+                BackdropMiniature(style: style, cover: cover, isPlaying: player.isPlaying && isChosen)
                     .clipShape(.rect(cornerRadius: Self.radius, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Self.radius, style: .continuous)

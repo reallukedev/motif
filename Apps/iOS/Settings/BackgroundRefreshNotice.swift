@@ -28,15 +28,22 @@ struct BackgroundRefreshNotice: View {
                 }
             }
             .padding(.vertical, 2)
+        } else if let lastError {
+            // An unaccepted request is the more useful thing to say, since it means no
+            // wake-up is even pending. It's a sentence, so it goes under the label.
+            LabeledContent {
+                Text("Not Scheduled")
+            } label: {
+                Text("Last Background Check")
+                Text(lastError)
+            }
         } else {
             LabeledContent("Last Background Check", value: status)
         }
     }
 
-    /// When iOS last woke Tracks. An unaccepted request is the more useful thing to say, since
-    /// it means no wake-up is even pending.
+    /// When iOS last woke Tracks.
     private var status: String {
-        if let lastError { return lastError }
         guard let lastRun else { return String(localized: "Not Yet") }
         return Format.relativeTime(lastRun)
     }

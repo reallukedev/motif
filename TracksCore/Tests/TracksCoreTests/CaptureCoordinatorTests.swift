@@ -90,8 +90,10 @@ struct CaptureCoordinatorTests {
 
     @Test("a radio track is stored and added to the playlist")
     func capturesAndWrites() async throws {
-        let decision = await coordinator().handle(radio())
+        let subject = coordinator()
+        let decision = await subject.handle(radio())
         #expect(decision.isCapture)
+        await subject.drainPendingWrites()
 
         let captures = try store.context.fetch(TracksStore.radioCaptures())
         #expect(captures.count == 1)
@@ -109,6 +111,7 @@ struct CaptureCoordinatorTests {
         for offset in stride(from: 0, through: 64, by: 16) {
             await subject.handle(radio(), now: start.addingTimeInterval(Double(offset)))
         }
+        await subject.drainPendingWrites()
 
         let captures = try store.context.fetch(TracksStore.radioCaptures())
         #expect(captures.count == 1)
@@ -131,6 +134,7 @@ struct CaptureCoordinatorTests {
         let subject = coordinator()
         await subject.handle(radio(title: "One", id: "1"))
         await subject.handle(radio(title: "Two", id: "2"))
+        await subject.drainPendingWrites()
 
         #expect(writer.created.count == 1)
         #expect(writer.addedIDs == ["1", "2"])
@@ -141,7 +145,9 @@ struct CaptureCoordinatorTests {
     func ignoresOnDemand() async throws {
         var observation = radio()
         observation.rawFields["entry.id"] = "PRhKeIIy0::6ostOUDHU"
-        await coordinator().handle(observation)
+        let subject = coordinator()
+        await subject.handle(observation)
+        await subject.drainPendingWrites()
 
         #expect(try store.context.fetch(TracksStore.radioCaptures()).isEmpty)
         #expect(writer.added.isEmpty)
@@ -170,6 +176,7 @@ struct CaptureCoordinatorTests {
             playerPosition: 0
         )
         await subject.handle(observation)
+        await subject.drainPendingWrites()
 
         let captures = try store.context.fetch(TracksStore.radioCaptures())
         #expect(captures.first?.songID == "9999")
@@ -185,7 +192,10 @@ struct CaptureCoordinatorTests {
         let observation = NowPlayingObservation(
             title: "Nostalgia", artistName: "Lossapardo", catalogSongID: nil, playerPosition: 0
         )
-        for _ in 0..<maxCatalogLookupAttempts { await subject.handle(observation) }
+        for _ in 0..<maxCatalogLookupAttempts {
+            await subject.handle(observation)
+            await subject.drainPendingWrites()
+        }
 
         let captures = try store.context.fetch(TracksStore.radioCaptures())
         #expect(captures.count == 1)
@@ -204,7 +214,10 @@ struct CaptureCoordinatorTests {
         var failing = FakeCatalogResolver(result: nil)
         failing.searchFails = true
         let offline = coordinator(resolver: failing)
-        for _ in 0...maxCatalogLookupAttempts { await offline.handle(observation) }
+        for _ in 0...maxCatalogLookupAttempts {
+            await offline.handle(observation)
+            await offline.drainPendingWrites()
+        }
 
         let capture = try #require(try store.context.fetch(TracksStore.radioCaptures()).first)
         #expect(capture.catalogLookupAttempts == 0)
@@ -223,6 +236,7 @@ struct CaptureCoordinatorTests {
             )
         )
         await working.handle(observation)
+        await working.drainPendingWrites()
         #expect(capture.songID == "9999")
         #expect(capture.artworkURL == "https://example.test/art.jpg")
         #expect(capture.lastPlaylistWriteError == nil)
@@ -231,7 +245,9 @@ struct CaptureCoordinatorTests {
     @Test("a transient write failure leaves the capture pending")
     func transientFailureRetries() async throws {
         writer.addResult = .failure(PlaylistWriteError.transient(statusCode: 503, message: ""))
-        await coordinator().handle(radio())
+        let subject = coordinator()
+        await subject.handle(radio())
+        await subject.drainPendingWrites()
 
         let capture = try #require(try store.context.fetch(TracksStore.radioCaptures()).first)
         #expect(capture.needsPlaylistWrite)
@@ -246,7 +262,9 @@ struct CaptureCoordinatorTests {
         writer.addResult = .failure(
             PlaylistWriteError.permanent(statusCode: 400, message: "bad request")
         )
-        await coordinator().handle(radio())
+        let subject = coordinator()
+        await subject.handle(radio())
+        await subject.drainPendingWrites()
 
         let capture = try #require(try store.context.fetch(TracksStore.radioCaptures()).first)
         #expect(!capture.needsPlaylistWrite)
@@ -262,6 +280,7 @@ struct CaptureCoordinatorTests {
             )
         )
         await subject.handle(radio())
+        await subject.drainPendingWrites()
 
         let capture = try #require(try store.context.fetch(TracksStore.radioCaptures()).first)
         #expect(capture.artworkURL == "https://example.test/cover.jpg")
@@ -299,7 +318,9 @@ struct CaptureCoordinatorTests {
     @Test("turning off auto-add stores the capture without writing it")
     func autoAddOff() async throws {
         settings.autoAddToPlaylist = false
-        await coordinator().handle(radio())
+        let subject = coordinator()
+        await subject.handle(radio())
+        await subject.drainPendingWrites()
 
         #expect(try store.context.fetch(TracksStore.radioCaptures()).count == 1)
         #expect(writer.added.isEmpty)
@@ -312,6 +333,7 @@ struct CaptureCoordinatorTests {
         let subject = coordinator()
         await subject.handle(radio(title: "One", id: "1"))
         await subject.handle(radio(title: "Two", id: "2"))
+        await subject.drainPendingWrites()
 
         #expect(writer.addedIDs == ["1", "2"])
     }
@@ -456,5 +478,195 @@ struct MinimumListenTests {
         }
         #expect(played == 20)
         #expect(needs - played == 10)
+    }
+}
+
+/// A catalog that counts its searches and can be slow to answer them, as it is on a poor
+/// connection.
+final class SlowCatalogResolver: CatalogResolving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _searches = 0
+    private var _answered = 0
+    let delay: Duration
+
+    init(delay: Duration = .zero) {
+        self.delay = delay
+    }
+
+    var searches: Int { lock.withLock { _searches } }
+    var answered: Int { lock.withLock { _answered } }
+
+    func resolve(_ query: CatalogQuery) async throws -> CatalogCandidate? {
+        lock.withLock { _searches += 1 }
+        if delay > .zero { try? await Task.sleep(for: delay) }
+        lock.withLock { _answered += 1 }
+        return nil
+    }
+    func artworkURLs(forSongIDs ids: [String]) async throws -> [String: String] { [:] }
+    func mostRecentStationName() async throws -> String? { nil }
+}
+
+/// Capture can't wait on the catalog: an observation that sits behind a slow search starts
+/// its listening clock late, and the song after it can be missed.
+@MainActor
+@Suite("Capture and the write queue")
+struct CaptureDrainTests {
+    let store: TracksStore
+    let writer = FakePlaylistWriter()
+    private let scratch = ScratchDefaults()
+    let settings: CaptureSettings
+
+    init() throws {
+        store = try TracksStore(inMemory: true)
+        settings = scratch.settings
+        settings.minimumListenShare = 0
+    }
+
+    func unresolved(_ title: String) -> NowPlayingObservation {
+        NowPlayingObservation(title: title, artistName: "Lossapardo", catalogSongID: nil, playerPosition: 0)
+    }
+
+    @Test("an observation is handled without waiting for the catalog")
+    func handleDoesNotWaitForTheDrain() async throws {
+        let resolver = SlowCatalogResolver(delay: .milliseconds(300))
+        let subject = CaptureCoordinator(store: store, settings: settings, playlistWriter: writer, catalogResolver: resolver)
+
+        let first = await subject.handle(unresolved("Nostalgia"))
+        let second = await subject.handle(unresolved("Afterglow"))
+
+        #expect(first.isCapture)
+        #expect(second.isCapture)
+        #expect(resolver.answered == 0)
+        // The drain still runs, and picks up both rows.
+        await subject.drainPendingWrites()
+        let captures = try store.context.fetch(TracksStore.allCaptures())
+        #expect(captures.count == 2)
+        #expect(captures.allSatisfy { $0.catalogLookupAttempts > 0 })
+    }
+
+    /// A Mac that was offline for a day has a backlog, and one drain searching for all of it
+    /// held the playlist writes behind it for minutes.
+    @Test("a drain searches the catalog for one batch of a backlog")
+    func backlogIsSearchedInBatches() async throws {
+        let resolver = SlowCatalogResolver()
+        let subject = CaptureCoordinator(store: store, settings: settings, playlistWriter: writer, catalogResolver: resolver)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        for index in 0..<(TracksStore.catalogSearchBatch * 2 + 5) {
+            _ = try store.insertCapture(
+                songKey: "song \(index)",
+                catalogSongID: nil,
+                observation: unresolved("Song \(index)"),
+                session: nil,
+                now: start.addingTimeInterval(Double(index))
+            )
+        }
+
+        await subject.drainPendingWrites()
+        #expect(resolver.searches == TracksStore.catalogSearchBatch)
+    }
+}
+
+/// Last.fm counts a play once a track longer than 30 seconds has played for half its length
+/// or four minutes. With "Straight Away", a song is kept the moment it starts, so whether it
+/// is owed to Last.fm has to wait for that.
+@MainActor
+@Suite("Scrobbling follows Last.fm's rule")
+struct ScrobbleRuleTests {
+    let store: TracksStore
+    private let scratch = ScratchDefaults()
+    let settings: CaptureSettings
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+    init() throws {
+        store = try TracksStore(inMemory: true)
+        settings = scratch.settings
+        settings.minimumListenShare = 0
+        settings.autoAddToPlaylist = false
+    }
+
+    func coordinator() -> CaptureCoordinator {
+        CaptureCoordinator(store: store, settings: settings, playlistWriter: FakePlaylistWriter())
+    }
+
+    func song(_ title: String, duration: TimeInterval? = 180, state: PlaybackState = .playing) -> NowPlayingObservation {
+        NowPlayingObservation(
+            title: title,
+            artistName: "An Artist",
+            catalogSongID: title,
+            duration: duration,
+            playbackState: state,
+            rawFields: ["entry.id": "x::STREAM"]
+        )
+    }
+
+    func owed() throws -> [String] {
+        try store.context.fetch(TracksStore.pendingScrobbles(includingImported: true)).map(\.title)
+    }
+
+    func handle(_ subject: CaptureCoordinator, _ observation: NowPlayingObservation, after seconds: TimeInterval) async {
+        await subject.handle(observation, now: start.addingTimeInterval(seconds))
+    }
+
+    @Test("a song skipped after a few seconds is kept but not scrobbled")
+    func skipIsNotScrobbled() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Skipped"), after: 0)
+        await handle(subject, song("Next"), after: 20)
+
+        #expect(try store.context.fetch(TracksStore.allCaptures()).count == 2)
+        #expect(try owed() == [])
+    }
+
+    @Test("a song still playing at half its length is scrobbled")
+    func halfwayIsScrobbled() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Kept"), after: 0)
+        #expect(try owed().isEmpty)
+        await handle(subject, song("Kept"), after: 95)
+        #expect(try owed() == ["Kept"])
+    }
+
+    /// iPhone only hears about a song when the next one starts.
+    @Test("a song that played until the next one started is scrobbled")
+    func playedUntilTheNextSong() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Kept"), after: 0)
+        await handle(subject, song("Next"), after: 120)
+        #expect(try owed() == ["Kept"])
+    }
+
+    @Test("four minutes is enough for a long song")
+    func fourMinutesOfALongSong() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Epic", duration: 1_200), after: 0)
+        await handle(subject, song("Epic", duration: 1_200), after: 241)
+        #expect(try owed() == ["Epic"])
+    }
+
+    @Test("a track of 30 seconds or less is never scrobbled")
+    func shortTrackIsNeverScrobbled() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Jingle", duration: 25), after: 0)
+        await handle(subject, song("Next"), after: 26)
+        #expect(try owed() == [])
+    }
+
+    @Test("time paused doesn't count as listening")
+    func pausesDontCount() async throws {
+        let subject = coordinator()
+        await handle(subject, song("Paused"), after: 0)
+        await handle(subject, song("Paused", state: .paused), after: 30)
+        await handle(subject, song("Next"), after: 3_600)
+        #expect(try owed() == [])
+    }
+
+    /// With the default share a song is only kept at half, which is already enough.
+    @Test("a song kept at half its length is owed at once")
+    func keptAtHalfIsOwed() async throws {
+        settings.minimumListenShare = CaptureSettings.defaultMinimumListenShare
+        let subject = coordinator()
+        await handle(subject, song("Kept"), after: 0)
+        await handle(subject, song("Kept"), after: 91)
+        #expect(try owed() == ["Kept"])
     }
 }

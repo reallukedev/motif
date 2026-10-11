@@ -161,7 +161,7 @@ struct QueueView: View {
                         .lineLimit(1)
                     if let reason = player.pickReason(for: upcoming) {
                         PickReasonLabel(reason: reason)
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(.white.opacity(0.7))
                             .padding(.top, 1)
                     }
                 }

@@ -251,7 +251,8 @@ nonisolated enum FileScanner {
     }
 
     /// Copies songs into the Music folder: files as they are, folders with what's inside them,
-    /// their own folders kept. A song already there, the same size, is left alone.
+    /// their own folders kept. A song already there is left alone; a different one of the
+    /// same name is kept beside it.
     @concurrent
     static func importItems(_ urls: [URL]) async -> ImportResult {
         importNow(urls)
@@ -286,24 +287,32 @@ nonisolated enum FileScanner {
         return ["jpg", "jpeg", "png"].contains(ext) && ["cover", "folder", "front", "album", "albumart"].contains(stem)
     }
 
+    /// Songs are counted, not the covers that come with them.
     private static func copy(_ source: URL, to destination: URL, result: inout ImportResult) {
         let manager = FileManager.default
+        let isSong = AudioFormat.playableExtensions.contains(destination.pathExtension.lowercased())
         try? manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let destinationPath = destination.path(percentEncoded: false)
-        if manager.fileExists(atPath: destinationPath) {
-            let existing = (try? manager.attributesOfItem(atPath: destinationPath)[.size] as? Int64) ?? -1
-            let incoming = (try? manager.attributesOfItem(atPath: source.path(percentEncoded: false))[.size] as? Int64) ?? -2
-            if existing == incoming {
-                result.skipped += 1
+        let sourcePath = source.path(percentEncoded: false)
+        let folder = destination.deletingLastPathComponent()
+        let stem = destination.deletingPathExtension().lastPathComponent
+        let suffix = destination.pathExtension.isEmpty ? "" : "." + destination.pathExtension
+        var target = destination
+        var number = 1
+        while manager.fileExists(atPath: target.path(percentEncoded: false)) {
+            // This very file, brought in before.
+            if manager.contentsEqual(atPath: target.path(percentEncoded: false), andPath: sourcePath) {
+                if isSong { result.skipped += 1 }
                 return
             }
-            try? manager.removeItem(at: destination)
+            // Another file of the same name, from another album say: this one goes beside it.
+            number += 1
+            target = folder.appending(path: "\(stem) \(number)\(suffix)")
         }
         do {
-            try manager.copyItem(at: source, to: destination)
-            if AudioFormat.playableExtensions.contains(destination.pathExtension.lowercased()) { result.added += 1 }
+            try manager.copyItem(at: source, to: target)
+            if isSong { result.added += 1 }
         } catch {
-            result.skipped += 1
+            if isSong { result.skipped += 1 }
         }
     }
 }

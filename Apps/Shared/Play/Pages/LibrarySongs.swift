@@ -118,6 +118,21 @@ extension SongDrag {
     }
 }
 
+nonisolated extension SongDrag.Song {
+    /// An Apple Music song by its id: the catalog's, or the library's ("i." and the like).
+    init(appleMusicID id: String, title: String, artistName: String, albumTitle: String?) {
+        let isCatalog = id.allSatisfy(\.isNumber)
+        self.init(songID: isCatalog ? id : "", title: title, artistName: artistName, albumTitle: albumTitle, libraryID: isCatalog ? nil : id)
+    }
+}
+
+extension SongDrag {
+    /// An Apple Music song, dragged on its own.
+    init(_ song: MusicKit.Song) {
+        self.init(songs: [SongDrag.Song(appleMusicID: song.id.rawValue, title: song.title, artistName: song.artistName, albumTitle: song.albumTitle)])
+    }
+}
+
 /// "3:46", as a song's time reads in a table.
 enum LibraryTime {
     static func text(_ seconds: TimeInterval) -> String {

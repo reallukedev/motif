@@ -60,18 +60,7 @@ public final class PlaybackController {
         try? store.context.save()
         let songIDs = Set(playable.map(\.songID))
         let owed = ((try? store.playBackQueue()) ?? []).filter { songIDs.contains($0.songID) }
-        let marks = Self.marks(for: owed)
-
-        do {
-            try await service.play(playable)
-            isPlaying = true
-            followPlayback(marking: marks)
-        } catch PlaybackError.openedInMusic {
-            isPlaying = false
-        } catch {
-            isPlaying = false
-            lastError = Self.describe(error)
-        }
+        await start(Self.marks(for: owed)) { try await $0.play(playable) }
     }
 
     private func play(_ captures: [Capture]) async {
@@ -84,19 +73,36 @@ public final class PlaybackController {
 
         // Saved so the identities held below are the ones the rows keep.
         try? store.context.save()
-        let marks = Self.marks(for: captures)
+        let items = captures.map {
+            PlaybackItem(songID: $0.songID, title: $0.title, artistName: $0.artistName)
+        }
+        // Not marked yet: `followPlayback` marks each capture when playback reaches it, in
+        // case the queue never starts.
+        await start(Self.marks(for: captures)) { try await $0.play(items) }
+    }
 
+    /// Counts play requests, so one that finishes after a newer one leaves it alone.
+    private var latestRequest = 0
+
+    /// Hands the queue to the player and follows it, unless a newer request came in while
+    /// the player was starting this one. That one is what's playing, and following this
+    /// one instead would stop its songs being marked.
+    private func start(
+        _ marks: [String: [PersistentIdentifier]],
+        playing: (any PlaybackService) async throws -> Void
+    ) async {
+        latestRequest += 1
+        let request = latestRequest
         do {
-            try await service.play(captures.map {
-                PlaybackItem(songID: $0.songID, title: $0.title, artistName: $0.artistName)
-            })
+            try await playing(service)
+            guard request == latestRequest else { return }
             isPlaying = true
-            // Not marked yet: `followPlayback` marks each capture when playback reaches it,
-            // in case the queue never starts.
             followPlayback(marking: marks)
         } catch PlaybackError.openedInMusic {
+            guard request == latestRequest else { return }
             isPlaying = false
         } catch {
+            guard request == latestRequest else { return }
             isPlaying = false
             lastError = Self.describe(error)
         }
@@ -162,6 +168,8 @@ public final class PlaybackController {
     }
 
     public func pause() async {
+        // A request still starting is no longer the one to follow.
+        latestRequest += 1
         await service.pause()
         progressTask?.cancel()
         progressTask = nil
@@ -169,12 +177,17 @@ public final class PlaybackController {
         isPlaying = false
     }
 
+    /// What went wrong, in words. The error itself only goes to the log.
     static func describe(_ error: any Error) -> String {
-        guard let playbackError = error as? PlaybackError else { return String(describing: error) }
+        guard let playbackError = error as? PlaybackError else {
+            Log.playback.error("Playback failed: \(String(describing: error), privacy: .public)")
+            return PlaybackFailure(error).words
+        }
         return switch playbackError {
         case .nothingToPlay: "Those songs are no longer available in the catalog."
-        case .notSubscribed: "Playing songs needs an active Apple Music subscription."
-        case .failed(let detail): "Playback failed: \(detail)"
+        case .notSubscribed: PlaybackFailure.noSubscription.words
+        // The player has already said it plainly.
+        case .failed(let words): words
         case .openedInMusic: "Opened in Music."
         }
     }

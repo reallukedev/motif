@@ -91,7 +91,10 @@ extension StatsCalculator {
             byWeekday[facts.weekday, default: 0] += 1
         }
 
-        let onRepeat = repeats.max { ($0.value.count, $1.key.day) < ($1.value.count, $0.key.day) }
+        // Ties go to the earlier day, then the song, so the pick doesn't follow dictionary order.
+        let onRepeat = repeats.max {
+            ($0.value.count, $1.key.day, $1.key.song) < ($1.value.count, $0.key.day, $0.key.song)
+        }
         if let onRepeat, onRepeat.value.count >= 3 {
             insights.append(.onRepeat(
                 title: onRepeat.value.latest.title,
@@ -201,8 +204,10 @@ extension StatsCalculator {
             insights.append(.repeatedSong(title: top.title, artistName: top.artistName, count: top.count))
         }
 
-        if let longest = context.sessions.map({
-            max(0, $0.finishedAt.timeIntervalSince($0.startedAt))
+        // Only the part inside the range, as the listening totals count it.
+        if let longest = context.sessions.map({ session in
+            context.interval.map { overlap(of: session, with: $0) ?? 0 }
+                ?? max(0, session.finishedAt.timeIntervalSince(session.startedAt))
         }).max(), longest >= 600 {
             insights.append(.longestSession(minutes: Int(longest / 60)))
         }

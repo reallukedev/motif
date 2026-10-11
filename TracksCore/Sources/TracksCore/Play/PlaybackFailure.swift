@@ -47,6 +47,21 @@ public enum PlaybackFailure: Equatable, Sendable {
         self = .other
     }
 
+    /// What happened and what to do, for someone who asked for a song.
+    public var words: String {
+        switch self {
+        case .superseded: String(localized: "Something else started playing first. Try again.")
+        case .interrupted: String(localized: "Apple Music stopped before the song started. Try again.")
+        case .offline: String(localized: "You’re offline. Connect to the internet and try again.")
+        case .timedOut: String(localized: "Apple Music took too long to answer. Try again in a moment.")
+        case .unavailable: String(localized: "That song isn’t available in Apple Music here. Try another.")
+        case .accessDenied:
+            String(localized: "Tracks isn’t allowed to use Apple Music. Turn on Media & Apple Music for Tracks in Settings.")
+        case .noSubscription: String(localized: "Playing songs needs an active Apple Music subscription.")
+        case .other: String(localized: "Apple Music couldn’t play that. Try again.")
+        }
+    }
+
     /// Whether playing the same request again, once, might work.
     public var isWorthRetrying: Bool {
         switch self {

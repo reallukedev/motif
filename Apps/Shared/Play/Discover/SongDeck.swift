@@ -19,6 +19,7 @@ extension SongLens {
 /// The lenses, as coloured chips to scroll through: each its own colour, the chosen one full.
 struct LensChips: View {
     @Binding var selection: SongLens
+    @ScaledMetric(relativeTo: .subheadline) private var chipHeight: CGFloat = 34
     @State private var chosen = 0
 
     var body: some View {
@@ -58,9 +59,12 @@ struct LensChips: View {
             }
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 14)
-                .frame(height: 34)
+                .padding(.vertical, 6)
+                .frame(minHeight: chipHeight)
                 .background(isSelected ? AnyShapeStyle(lens.color) : AnyShapeStyle(lens.color.opacity(0.18)), in: .capsule)
-                .contentShape(.capsule)
+                // A finger's worth to tap, however slim the chip draws.
+                .frame(minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.pressable)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -83,6 +87,7 @@ struct SongDeck: View {
     @Environment(PlayerModel.self) private var player
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = SongDeck.baseTitleSize
     @State private var position = 0
     @State private var picks: [Suggestion] = []
     @State private var glow: Color?
@@ -221,7 +226,8 @@ struct SongDeck: View {
                     }
                     .accessibilityHidden(!isTop)
                     .accessibilityLabel(Text("\(suggestion.song.title), \(suggestion.song.artistName)"))
-                    .accessibilityHint("Plays it")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Plays this song.")
             }
         }
         .offset(x: -18)
@@ -264,7 +270,7 @@ struct SongDeck: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(song.title)
-                .font(.system(size: Self.titleSize, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold))
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
             Text(song.artistName)
@@ -370,11 +376,11 @@ struct SongDeck: View {
 
     #if os(macOS)
     private static let side: CGFloat = 300
-    private static let titleSize: CGFloat = 34
+    private static let baseTitleSize: CGFloat = 34
     private static let isWide = true
     #else
     private static let side: CGFloat = 200
-    private static let titleSize: CGFloat = 26
+    private static let baseTitleSize: CGFloat = 26
     private static let isWide = false
     #endif
 }

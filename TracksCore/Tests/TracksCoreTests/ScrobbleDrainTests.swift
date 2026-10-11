@@ -177,7 +177,8 @@ struct ScrobbleDrainTests {
         await service().drain()
 
         #expect(rows.map(\.scrobbleAttempts) == [1, 1])
-        #expect(rows.allSatisfy { $0.lastScrobbleError?.contains("Invalid parameters") == true })
+        // In Tracks' words, without Last.fm's code and message.
+        #expect(rows.allSatisfy { $0.lastScrobbleError == "Something went wrong with Last.fm. Try again." })
     }
 
     /// A server that's down shouldn't get a request from every ten-second poll.

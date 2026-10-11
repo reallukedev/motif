@@ -477,3 +477,90 @@ struct StatsChartTests {
         )
     }
 }
+
+/// Santiago changes its clocks at midnight, so 7 September 2025 starts at 1 AM and is 23
+/// hours long. Adding a day to it lands at 1 AM on the 8th, which isn't when the 8th starts.
+@Suite("Days the clocks change at midnight")
+struct MidnightClockChangeTests {
+    let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Santiago")!
+        calendar.firstWeekday = 1
+        return calendar
+    }()
+
+    func date(_ month: Int, _ day: Int, _ hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2025, month: month, day: day, hour: hour))!
+    }
+
+    func plays(onDays days: ClosedRange<Int>, month: Int = 9) -> [CaptureStat] {
+        days.map { capture("song \($0)", at: date(month, $0)) }
+    }
+
+    @Test("every day of the month has its own bar, after the change too")
+    func timelineStepsByCalendarDay() {
+        let summary = StatsCalculator.summary(
+            range: .month,
+            captures: plays(onDays: 1...30),
+            sessions: [],
+            calendar: calendar,
+            now: date(9, 30, 20)
+        )
+        #expect(summary.timeline.count == 30)
+        #expect(summary.timeline.map(\.count) == Array(repeating: 1, count: 30))
+        #expect(summary.timeline.map(\.start) == (1...30).map { calendar.startOfDay(for: date(9, $0)) })
+    }
+
+    @Test("weekly bars start each week where the calendar does")
+    func weeklyTimeline() {
+        let history = ListeningHistory((0..<6).map { capture("song \($0)", at: date(8, 20 + 7 * $0)) })
+        let span = DateInterval(start: date(8, 18), end: date(9, 27))
+        let buckets = StatsCalculator.timeline(
+            history.captures.indices, in: history, unit: .weekOfYear, span: span, calendar: calendar
+        )
+        #expect(buckets.map(\.count) == Array(repeating: 1, count: 6))
+        #expect(buckets.map(\.start) == buckets.map { calendar.dateInterval(of: .weekOfYear, for: $0.start)?.start })
+    }
+
+    @Test("the last seven days are seven calendar days")
+    func recentDays() {
+        let history = ListeningHistory(plays(onDays: 4...10))
+        let days = StatsCalculator.recentDays(7, history: history, calendar: calendar, now: date(9, 10, 20))
+        #expect(days.map(\.count) == Array(repeating: 1, count: 7))
+        #expect(days.map(\.start) == (4...10).map { calendar.startOfDay(for: date(9, $0)) })
+    }
+
+    @Test("a streak runs through the short day")
+    func streakSpansTheChange() {
+        let history = ListeningHistory(plays(onDays: 5...10))
+        let streak = StatsCalculator.streak(in: history, calendar: calendar, now: date(9, 10, 20))
+        #expect(streak.current == 6)
+        #expect(streak.longest == 6)
+        #expect(streak.currentStart == calendar.startOfDay(for: date(9, 5)))
+    }
+
+    /// The week starts on the short Sunday, at 1 AM.
+    @Test("the days so far count a week that starts on the short day")
+    func elapsedDaysCountTheShortDay() throws {
+        let interval = try #require(calendar.dateInterval(of: .weekOfYear, for: date(9, 10)))
+        let elapsed = StatsCalculator.elapsedDayCount(
+            range: .week, interval: interval, history: ListeningHistory([]), calendar: calendar, now: date(9, 10, 20)
+        )
+        #expect(elapsed == 4)
+    }
+
+    @Test("weekday and weekend averages share the listening over every day so far")
+    func dayTypeAveragesCountTheShortDay() throws {
+        // Monday 1 to Wednesday 10 September: eight weekdays and two weekend days, the
+        // Sunday the clocks changed on among them.
+        let history = ListeningHistory(plays(onDays: 1...10))
+        let interval = try #require(calendar.dateInterval(of: .month, for: date(9, 10)))
+        let averages = StatsCalculator.dayTypeAverages(
+            history.captures.indices, in: history, range: .month, interval: interval,
+            calendar: calendar, now: date(9, 10, 20)
+        )
+        let song = ListeningEstimate.typicalSongSeconds
+        #expect(averages.weekday == song * 8 / 8)
+        #expect(averages.weekend == song * 2 / 2)
+    }
+}

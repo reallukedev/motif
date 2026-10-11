@@ -205,9 +205,13 @@ final class ServerDiscovery {
                 guard !Task.isCancelled else { break }
                 fresh = await goOn(from: fresh, for: shelf, serverID: serverID, publishing: !replaces, want: SuggestionShelfPaging.rowsPerColumn)
             }
+            // Replaced by a load from other artists, which owns the shelf now.
+            guard !Task.isCancelled else { return }
             fresh.isFilling = false
             forYou[serverID] = fresh
         }
+        // From other artists: the old load stops, rather than finishing over this one.
+        forYouLoads[serverID]?.task.cancel()
         forYouLoads[serverID] = (seeds, task)
         await task.value
         if forYouLoads[serverID]?.seeds == seeds { forYouLoads[serverID] = nil }

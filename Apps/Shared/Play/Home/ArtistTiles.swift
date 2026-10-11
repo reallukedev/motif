@@ -22,7 +22,7 @@ struct FavoriteArtistTile: View {
             Button("Play Your Favorites", systemImage: "play") { playFavorites(shuffled: false) }
             Button("Shuffle Your Favorites", systemImage: "shuffle") { playFavorites(shuffled: true) }
             if !player.isDemo {
-                Button("Start Station", systemImage: "dot.radiowaves.left.and.right") {
+                Button("Create Station", systemImage: "dot.radiowaves.left.and.right") {
                     Task {
                         if let catalog = await model.playFeed.catalogArtist(named: artist.name) {
                             player.playStation(from: catalog)

@@ -38,13 +38,17 @@ struct TopChartView: View {
             .sourceScopeSubtitle(sources.scope)
             .toolbar { toolbar }
             .task(id: "\(kind.rawValue)|\(span.rawValue)|\(period.interval?.start.timeIntervalSinceReferenceDate ?? 0)|\(sources.scope.rawValue)|\(model.library.revision)") {
+                // Until the first read there's nothing to chart, and an empty chart would say
+                // "No Charts Yet" to someone with years of listening.
+                guard model.library.isLoaded else { return }
                 let (kind, period, scope, history) = (kind, period, sources.scope, model.library.history)
                 let next = await OffMainActor.run {
                     ChartSnapshot.make(kind: kind, period: period, scope: scope, history: history.scoped(to: scope))
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, next != snapshot else { return }
                 // New listening in the same chart rolls in; a different chart just appears.
-                LiveUpdate.apply(isLive: snapshot?.identity == next.identity, reduceMotion: reduceMotion) {
+                let isLive = snapshot?.identity == next.identity && snapshot?.playCount != next.playCount
+                LiveUpdate.apply(isLive: isLive, reduceMotion: reduceMotion) {
                     snapshot = next
                 }
             }
@@ -57,11 +61,20 @@ struct TopChartView: View {
         anchor = target.isCurrent() ? nil : target.interval?.start
     }
 
-    /// The steps wait for the chart they lead from, so a quick double press can't run past
-    /// the period it meant.
-    private var settled: ChartSnapshot? { snapshot?.period == period ? snapshot : nil }
-    private var canGoBack: Bool { settled?.earlier != nil }
-    private var canGoForward: Bool { settled?.later != nil }
+    /// The snapshot, only while it's the chart on screen. Between a switch and its new
+    /// snapshot the old one would put last week's songs under this week's title, or songs
+    /// in artist tiles.
+    ///
+    /// The steps wait for it too, so a quick double press can't run past the period it meant.
+    private var shown: ChartSnapshot? {
+        guard let snapshot, snapshot.kind == kind, snapshot.period == period, snapshot.scope == sources.scope else {
+            return nil
+        }
+        return snapshot
+    }
+    private var hasEntries: Bool { shown?.entries.isEmpty == false }
+    private var canGoBack: Bool { shown?.earlier != nil }
+    private var canGoForward: Bool { shown?.later != nil }
     private var isCurrent: Bool { period.isCurrent() }
 
     private var earlierHelp: Text {
@@ -143,7 +156,7 @@ struct TopChartView: View {
     }
 
     private var playButtons: some View {
-        let songs = playback.playable(snapshot?.songs ?? [])
+        let songs = playback.playable(shown?.songs ?? [])
         return HStack(spacing: 10) {
             Button {
                 playback.play(songs, title: playTitle)
@@ -203,20 +216,20 @@ struct TopChartView: View {
         // Calendar's controls, where Calendar has them: back, Today and forward together.
         ToolbarItem(placement: .primaryAction) {
             ControlGroup {
-                Button("Earlier", systemImage: "chevron.backward") { show(settled?.earlier) }
+                Button("Earlier", systemImage: "chevron.backward") { show(shown?.earlier) }
                     .disabled(!canGoBack)
-                    .help(Text("\(earlierHelp) (⌘[)"))
-                    // Back and Forward, as in any Mac window's history: here, through time.
-                    .keyboardShortcut("[", modifiers: .command)
+                    .help(Text("\(earlierHelp) (⌥⌘←)"))
+                    // Through time. ⌘[ and ⌘] are the window's Back and Forward.
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
                 Button(span.currentLabel) { anchor = nil }
                     .disabled(isCurrent)
                     .help(Text("Go to \(Text(span.currentLabel)) (⌘T)"))
                     // Calendar's Go to Today.
                     .keyboardShortcut("t", modifiers: .command)
-                Button("Later", systemImage: "chevron.forward") { show(settled?.later) }
+                Button("Later", systemImage: "chevron.forward") { show(shown?.later) }
                     .disabled(!canGoForward)
-                    .help(Text("\(laterHelp) (⌘])"))
-                    .keyboardShortcut("]", modifiers: .command)
+                    .help(Text("\(laterHelp) (⌥⌘→)"))
+                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
             }
             .controlGroupStyle(.navigation)
         }
@@ -257,7 +270,7 @@ struct TopChartView: View {
 
     /// An artist's or album's songs from the period, most played first.
     private func playSongs(of entry: ChartEntry) {
-        let songs = snapshot?.songs ?? []
+        let songs = shown?.songs ?? []
         let theirs: [MixSong] = switch kind {
         case .artists: songs.filter { StatsCalculator.folded($0.artistName) == entry.id }
         case .albums: songs.filter { $0.albumTitle == entry.title && $0.artistName == entry.subtitle }
@@ -279,8 +292,12 @@ struct TopChartView: View {
 
     @ViewBuilder
     private var activity: some View {
-        if let snapshot, snapshot.period == period {
-            ChartActivityCard(kind: kind, period: period, activity: snapshot.activity, entries: snapshot.entries, open: open)
+        if let shown {
+            // A period with nothing in it says so straight under its title: a card of zeros
+            // and an empty chart would push that below the fold.
+            if !shown.entries.isEmpty || shown.activity.plays > 0 {
+                ChartActivityCard(kind: kind, period: period, activity: shown.activity, entries: shown.entries, open: open)
+            }
         } else {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.cardFill)
@@ -290,7 +307,7 @@ struct TopChartView: View {
 
     @ViewBuilder
     private var chart: some View {
-        if let shown = snapshot {
+        if let shown {
             if shown.entries.isEmpty {
                 empty(shown)
                     .frame(maxWidth: .infinity)
@@ -328,7 +345,7 @@ struct TopChartView: View {
 
                 header
                 activity
-                if snapshot?.entries.isEmpty == false {
+                if hasEntries {
                     playButtons
                 }
                 chart
@@ -350,10 +367,10 @@ struct TopChartView: View {
 
             if span != .allTime {
                 HStack(spacing: 8) {
-                    Button("Earlier", systemImage: "chevron.backward") { show(settled?.earlier) }
+                    Button("Earlier", systemImage: "chevron.backward") { show(shown?.earlier) }
                         .disabled(!canGoBack)
                         .accessibilityHint(earlierHelp)
-                    Button("Later", systemImage: "chevron.forward") { show(settled?.later) }
+                    Button("Later", systemImage: "chevron.forward") { show(shown?.later) }
                         .disabled(!canGoForward)
                         .accessibilityHint(laterHelp)
                 }
@@ -377,7 +394,7 @@ struct TopChartView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             VStack(alignment: .leading, spacing: 14) {
                                 headerTitle
-                                if snapshot?.entries.isEmpty == false { playButtons }
+                                if hasEntries { playButtons }
                             }
                             activity
                         }
@@ -401,7 +418,7 @@ struct TopChartView: View {
                         HStack(alignment: .bottom, spacing: 16) {
                             headerTitle
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            if snapshot?.entries.isEmpty == false { playButtons }
+                            if hasEntries { playButtons }
                         }
                         activity
                         chart

@@ -247,7 +247,12 @@ final class PlayerModel {
             let picks = IndexSet(upNext.indices.filter { isAutoplayPick(upNext[$0]) })
             if !picks.isEmpty { engine.removeUpNext(at: picks) }
         }
+        userEnqueues += 1
         Task {
+            defer {
+                userEnqueues -= 1
+                topUpLiveIfNeeded()
+            }
             do {
                 let before = upNext.count
                 try await engine.enqueue(request, next: next)
@@ -258,6 +263,10 @@ final class PlayerModel {
             }
         }
     }
+
+    /// Play Next and Play Later under way, which Autoplay and a live mix wait for so their
+    /// picks don't land ahead of your songs.
+    @ObservationIgnored private var userEnqueues = 0
 
     /// On a live mix, songs added to the end play before the songs it has picked, as they do
     /// before Autoplay's, and it carries on picking after them. Only with your own music,
@@ -730,6 +739,10 @@ final class PlayerModel {
             // Nothing left to reach the end of.
             if sleepTimer == .endOfSong { sleepTimer = nil }
         }
+        // Moved on from a song skipped for itself or its artist: if it comes round again, on
+        // Repeat, it's skipped again.
+        if next?.id != explicitSkippedEntry { explicitSkippedEntry = nil }
+        if next?.id != blockedSkippedEntry { blockedSkippedEntry = nil }
         // Not straight after the sleep timer stopped the music: a skip would start it again.
         if !stoppedForSleep {
             skipIfNotAllowed(next)
@@ -876,7 +889,8 @@ final class PlayerModel {
             if track.song != nil { explicitSkipsInARow = 0 }
             return
         }
-        guard explicitSkippedEntry != track.id else { return }
+        // Skipped once: not again, nor again for its artist.
+        guard explicitSkippedEntry != track.id, blockedSkippedEntry != track.id else { return }
         explicitSkippedEntry = track.id
         explicitSkipsInARow += 1
         guard explicitSkipsInARow <= 5 else {
@@ -886,8 +900,20 @@ final class PlayerModel {
             problem = .onlyExplicit
             return
         }
+        autoSkip()
+    }
+
+    /// Skips the song on Tracks' own account, so the skip isn't taken for the person's.
+    private func autoSkip() {
         isAutoSkipping = true
-        Task { try? await engine.skipToNext() }
+        Task {
+            do {
+                try await engine.skipToNext()
+            } catch {
+                // It didn't skip, so the person's next skip mustn't be taken for Tracks'.
+                isAutoSkipping = false
+            }
+        }
     }
 
     /// Songs by blocked artists in a row skipped. After a few, or when there'd be nothing
@@ -905,7 +931,7 @@ final class PlayerModel {
             blockedSkipsInARow = 0
             return
         }
-        guard blockedSkippedEntry != track.id else { return }
+        guard blockedSkippedEntry != track.id, explicitSkippedEntry != track.id else { return }
         blockedSkippedEntry = track.id
         blockedSkipsInARow += 1
         // A station or a live mix always has a next song; anything else may not.
@@ -917,8 +943,7 @@ final class PlayerModel {
             problem = .blockedArtist(Self.blockedName(for: track, in: signals.blocked))
             return
         }
-        isAutoSkipping = true
-        Task { try? await engine.skipToNext() }
+        autoSkip()
     }
 
     /// The blocked artist a song is credited to, as they were named when blocked.
@@ -1128,6 +1153,10 @@ final class PlayerModel {
             setAutoplay(false)
             return
         }
+        // Songs you're adding land first; picking resumes once they have.
+        guard userEnqueues == 0 else { return }
+        // Nothing could be queued a moment ago: wait for the retry rather than spend picks.
+        guard pickAgain == nil else { return }
         if liveGetsReady, let radioDownloads, context?.kind == .endless {
             topUpReadyFirst(radioDownloads)
             return
@@ -1140,6 +1169,15 @@ final class PlayerModel {
         let engine = self.engine
         livePick = Task {
             defer { if livePickCount == pickID { livePick = nil } }
+            // Songs that couldn't be queued go back to be picked another time, once this
+            // round is over so it doesn't draw them again.
+            var unqueued: [String] = []
+            defer {
+                for identity in unqueued {
+                    self.live?.release(identity)
+                    autoplayPicked.remove(identity)
+                }
+            }
             // Only songs that can play right now: your own music's server may be out of reach.
             // One that still can't (gone, or explicit with those off) is passed over.
             for _ in 0..<5 {
@@ -1150,6 +1188,7 @@ final class PlayerModel {
                     lastLivePick = song.songIdentity
                     return
                 } catch {
+                    unqueued.append(song.songIdentity)
                     continue
                 }
             }
@@ -1225,6 +1264,7 @@ final class PlayerModel {
                         lastLivePick = song.songIdentity
                         playAhead(of: picks.first, song)
                     } catch {
+                        live?.release(song.songIdentity)
                         couldNotPick = true
                     }
                 } else if picks.isEmpty {
@@ -1234,6 +1274,7 @@ final class PlayerModel {
                             try await engine.enqueue(.history([HistorySong(song)]), next: false)
                             lastLivePick = song.songIdentity
                         } catch {
+                            live?.release(song.songIdentity)
                             couldNotPick = true
                         }
                     } else {

@@ -52,7 +52,7 @@ struct Shelf<Items: RandomAccessCollection, Tile: View, Trailing: View>: View wh
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
                 Text(title)
                     .font(.title3.bold())
                     .accessibilityAddTraits(.isHeader)

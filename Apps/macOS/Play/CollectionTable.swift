@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A song in a collection's table on the Mac, whichever kind of song it is underneath.
 struct CollectionTrack: Identifiable, Hashable {
@@ -21,6 +22,8 @@ struct CollectionTrack: Identifiable, Hashable {
     var status: String?
     /// The song's own cover, on a playlist or mix, where songs come from many albums.
     var artwork: CoverArt?
+    /// How to find the song again, for dragging it onto Up Next or into another app.
+    var drag: SongDrag.Song?
 }
 
 /// The Mac collection page: the header, and the songs under it, scrolling as one page as
@@ -113,6 +116,8 @@ struct CollectionTable<SongMenu: View>: View {
     @State private var selection = Set<CollectionTrack.ID>()
     /// Where a ⇧-click extends the selection from.
     @State private var anchor: CollectionTrack.ID?
+    /// The end of the selection ⇧ and an arrow moves, the other end from the anchor.
+    @State private var head: CollectionTrack.ID?
     @State private var removing: Set<CollectionTrack.ID>?
     @State private var width: CGFloat = 0
     @FocusState private var isFocused: Bool
@@ -143,8 +148,16 @@ struct CollectionTable<SongMenu: View>: View {
         .focusable()
         .focused($isFocused)
         .focusEffectDisabled()
-        .onKeyPress(.upArrow) { step(-1); return .handled }
-        .onKeyPress(.downArrow) { step(1); return .handled }
+        // ⇧ with an arrow extends the selection from where it started, as in Finder.
+        .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+            let by = press.key == .upArrow ? -1 : 1
+            if press.modifiers.contains(.shift) { extend(by) } else { step(by) }
+            return .handled
+        }
+        // Edit › Select All, ⌘A.
+        .onCommand(#selector(NSResponder.selectAll(_:))) {
+            selection = Set(tracks.map(\.id))
+        }
         .onKeyPress(.return) {
             if let first = tracks.first(where: { selection.contains($0.id) && $0.isPlayable }) { play(first.id) }
             return .handled
@@ -189,10 +202,20 @@ struct CollectionTable<SongMenu: View>: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded {
             if track.isPlayable { play(track.id) }
         })
+        // VoiceOver's press selects, as a click does; Play stays a named action on the row.
+        .accessibilityAction {
+            isFocused = true
+            selection = [track.id]
+            anchor = track.id
+        }
         .contextMenu {
             if selection.contains(track.id), selection.count > 1 {
                 selectionMenu(selection)
             } else {
+                // A click selects here, so Play leads the song's menu.
+                if track.isPlayable {
+                    Button("Play", systemImage: "play") { play(track.id) }
+                }
                 menu(track)
                 if removal != nil {
                     Divider()
@@ -200,10 +223,18 @@ struct CollectionTable<SongMenu: View>: View {
                 }
             }
         }
-        .modifier(RowReordering(track: track, index: index, move: move))
+        .draggable(drag(from: track))
+        .modifier(RowReordering(index: index, move: move))
         .onAppear {
             if track.id == tracks.last?.id { onReachEnd?() }
         }
+    }
+
+    /// The row dragged, with the rest of the selection when it's part of it, in the
+    /// collection's order.
+    private func drag(from track: CollectionTrack) -> CollectionRowDrag {
+        let dragged = selection.contains(track.id) ? tracks.filter { selection.contains($0.id) } : [track]
+        return CollectionRowDrag(ids: dragged.map(\.id), songs: SongDrag(songs: dragged.compactMap(\.drag)))
     }
 
     // MARK: Selecting
@@ -214,13 +245,16 @@ struct CollectionTable<SongMenu: View>: View {
         if flags.contains(.command) {
             if selection.contains(track.id) { selection.remove(track.id) } else { selection.insert(track.id) }
             anchor = track.id
+            head = track.id
         } else if flags.contains(.shift), let anchor,
                   let from = tracks.firstIndex(where: { $0.id == anchor }),
                   let to = tracks.firstIndex(where: { $0.id == track.id }) {
             selection = Set(tracks[min(from, to)...max(from, to)].map(\.id))
+            head = track.id
         } else {
             selection = [track.id]
             anchor = track.id
+            head = track.id
         }
     }
 
@@ -230,6 +264,18 @@ struct CollectionTable<SongMenu: View>: View {
         guard tracks.indices.contains(next) else { return }
         selection = [tracks[next].id]
         anchor = tracks[next].id
+        head = tracks[next].id
+    }
+
+    private func extend(_ by: Int) {
+        guard let anchor, let from = tracks.firstIndex(where: { $0.id == anchor }) else {
+            step(by)
+            return
+        }
+        let current = head.flatMap { head in tracks.firstIndex { $0.id == head } } ?? from
+        let next = min(max(0, current + by), tracks.count - 1)
+        head = tracks[next].id
+        selection = Set(tracks[min(from, next)...max(from, next)].map(\.id))
     }
 
     // MARK: Menus
@@ -254,18 +300,16 @@ struct CollectionTable<SongMenu: View>: View {
     }
 }
 
-/// Drags a row to a new place, for a playlist you order yourself.
+/// Takes rows dropped on a row to its place, for a playlist you order yourself.
 private struct RowReordering: ViewModifier {
-    let track: CollectionTrack
     let index: Int
     let move: ((_ ids: [CollectionTrack.ID], _ destination: Int) -> Void)?
 
     func body(content: Content) -> some View {
         if let move {
             content
-                .draggable(CollectionTableDrag.payload(track.id))
-                .dropDestination(for: String.self) { payloads, _ in
-                    let ids = payloads.compactMap(CollectionTableDrag.id(from:))
+                .dropDestination(for: CollectionRowDrag.self) { drops, _ in
+                    let ids = drops.flatMap(\.ids)
                     guard !ids.isEmpty else { return false }
                     move(ids, index)
                     return true
@@ -390,13 +434,20 @@ private struct CollectionSongRow: View {
     }
 }
 
-/// What a row carries when it's dragged to a new place in its playlist.
-enum CollectionTableDrag {
-    private static let prefix = "tracks-collection-row:"
+/// What a row carries when it's dragged: its place in the collection, for moving it within
+/// its playlist, and the songs themselves, for Up Next and other apps.
+nonisolated struct CollectionRowDrag: Codable, Transferable {
+    let ids: [String]
+    let songs: SongDrag
 
-    static func payload(_ id: CollectionTrack.ID) -> String { prefix + id }
-
-    static func id(from payload: String) -> CollectionTrack.ID? {
-        payload.hasPrefix(prefix) ? String(payload.dropFirst(prefix.count)) : nil
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .tracksCollectionRows)
+        ProxyRepresentation { (drag: CollectionRowDrag) in drag.songs }
+            .exportingCondition { !$0.songs.songs.isEmpty }
     }
+}
+
+extension UTType {
+    /// Rows dragged within one of Tracks’ collections. Declared in the Mac app's Info.plist.
+    nonisolated static let tracksCollectionRows = UTType(exportedAs: "com.luke.tracks.collection-rows")
 }

@@ -40,11 +40,22 @@ enum NearbyMac {
         }
         nearby.onJoin = { Task { await tell(model) } }
         nearby.start()
+        // The read loop runs only while a device is connected, so a Mac alone never wakes.
         Task {
-            while !Task.isCancelled {
-                if !nearby.devices.isEmpty { await tell(model) }
-                try? await Task.sleep(for: .seconds(3))
+            var polling: Task<Void, Never>?
+            var isPolling = false
+            for await isConnected in Observations({ !nearby.devices.isEmpty }) where isConnected != isPolling {
+                isPolling = isConnected
+                polling?.cancel()
+                polling = isConnected ? Task { await keepTelling(model) } : nil
             }
+        }
+    }
+
+    private static func keepTelling(_ model: AppModel) async {
+        while !Task.isCancelled {
+            await tell(model)
+            try? await Task.sleep(for: .seconds(3))
         }
     }
 
@@ -119,10 +130,13 @@ private struct NearbyMenuRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
+            // Always all three, so the row doesn't reflow as a station or queue end comes and goes.
             HStack(spacing: 4) {
-                if state.canSkipBack { control("Previous Track", "backward.fill", .previous) }
+                control("Previous", "backward.fill", .previous)
+                    .disabled(!state.canSkipBack)
                 control(state.isPlaying ? "Pause" : "Play", state.isPlaying ? "pause.fill" : "play.fill", .playPause)
-                if state.canSkipForward { control("Next Track", "forward.fill", .next) }
+                control("Next", "forward.fill", .next)
+                    .disabled(!state.canSkipForward)
             }
         }
         .accessibilityElement(children: .contain)

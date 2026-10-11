@@ -21,6 +21,7 @@ import TracksCore
 ///     -TracksMix onRepeat          open one of the Play tab's mixes by id (iPhone)
 ///     -TracksSampleAlbum YES       open an invented Apple Music album page (iPhone)
 ///     -TracksMood chill            open a mood's page (iPhone)
+///     -TracksGenre hip-hop         open a genre's page, by its key
 ///     -TracksParty YES             open Party, or "dinnerParty" to open it on that party
 ///     -TracksPartyDelay 60         with sample data, how long Party's playlists take to come
 ///     -TracksPage songs            open the Song Finder (or "songs.chill" for a lens), the
@@ -190,6 +191,11 @@ extension LaunchScene {
         if let name = value("TracksMood"), let mood = Mood(rawValue: name), !hasOpenedMix {
             hasOpenedMix = true
             show(.mood(mood), in: model)
+            return
+        }
+        if let name = value("TracksGenre"), let genre = MusicGenre.all.first(where: { $0.id == name }), !hasOpenedMix {
+            hasOpenedMix = true
+            show(.genre(genre), in: model)
             return
         }
         if let party = value("TracksParty"), !hasOpenedMix {

@@ -7,6 +7,7 @@ import TracksCore
 struct PartyHero: View {
     @Binding var vibe: PartyVibe
     let vibes: [PartyVibe]
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -17,7 +18,7 @@ struct PartyHero: View {
                     .frame(height: 34, alignment: .bottomLeading)
                     .accessibilityHidden(true)
                 Text("Party")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: titleSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                     .padding(.top, 8)

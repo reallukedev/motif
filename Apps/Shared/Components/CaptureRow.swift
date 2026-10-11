@@ -72,9 +72,15 @@ struct CaptureRow: View {
                         .monospacedDigit()
                     HStack(spacing: 4) {
                         if showsScrobbleState, capture.scrobbledAt == nil {
-                            let gaveUp = capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts
-                            Image(systemName: gaveUp ? "exclamationmark.circle" : "clock")
-                                .foregroundStyle(gaveUp ? .orange : .secondary)
+                            if capture.isHeldFromScrobbling {
+                                // Not a failure: too short for Last.fm to count, so quiet.
+                                Image(systemName: "minus.circle")
+                                    .foregroundStyle(.tertiary)
+                            } else {
+                                let gaveUp = capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts
+                                Image(systemName: gaveUp ? "exclamationmark.circle" : "clock")
+                                    .foregroundStyle(gaveUp ? .orange : .secondary)
+                            }
                         }
                         if !capture.kind.sourceIsKnown {
                             Image(systemName: capture.kind.symbol)
@@ -118,7 +124,13 @@ struct CaptureRow: View {
     private var accessibilityValue: String {
         var parts: [String] = []
         if showsScrobbleState {
-            parts.append(capture.scrobbledAt == nil ? String(localized: "Not scrobbled yet") : String(localized: "Scrobbled"))
+            if capture.scrobbledAt != nil {
+                parts.append(String(localized: "Scrobbled"))
+            } else if capture.isHeldFromScrobbling {
+                parts.append(String(localized: "Not long enough for Last.fm to count"))
+            } else {
+                parts.append(String(localized: "Not scrobbled yet"))
+            }
         }
         if capture.kind == .radio {
             if capture.addedToPlaylistAt != nil {

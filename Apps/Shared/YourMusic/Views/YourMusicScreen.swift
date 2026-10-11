@@ -12,6 +12,7 @@ struct YourMusicScreen: View {
     @Environment(PlayFeed.self) private var feed
     @Environment(PlayerModel.self) private var player
     @Environment(Lidarr.self) private var lidarr
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
@@ -68,7 +69,7 @@ struct YourMusicScreen: View {
             if let result = music.lastImport {
                 ImportBanner(result: result)
                     .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(.snappy, value: music.lastImport?.added)
@@ -116,6 +117,7 @@ struct YourMusicScreen: View {
         #endif
         .sheet(isPresented: $addsServer) { ServerForm() }
         .sheet(item: $signingIn) { server in ServerForm(editing: server) }
+        .refreshCommand()
         .refreshable {
             await music.scan()
             await music.servers.connectAll()

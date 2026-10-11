@@ -5,6 +5,7 @@ import TracksCore
 /// Handpicked's page: the station at the top, and under it the songs it's made from, to add
 /// to, start from, or take out. With none picked yet, the page asks for a few, in place.
 struct HandpickedView: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 44
     @Environment(AppModel.self) private var model
     @Environment(PlayerModel.self) private var player
     @State private var addsSongs = false
@@ -73,7 +74,7 @@ struct HandpickedView: View {
                     .frame(height: 34, alignment: .bottomLeading)
                     .accessibilityHidden(true)
                 Text(Handpicked.title)
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: titleSize, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                     .padding(.top, 8)

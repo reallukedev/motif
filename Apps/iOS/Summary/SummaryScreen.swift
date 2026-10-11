@@ -72,17 +72,20 @@ struct SummaryScreen: View {
             // and then animate the real week in as if it had just been heard.
             guard model.library.isLoaded else { return }
             let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
+            let includesStations = scope.includesStations
             let next = await OffMainActor.run {
                 StatsCalculator.summary(
                     range: range,
                     history: history.scoped(to: scope),
-                    sessions: scope.includesStations ? sessions : [],
+                    sessions: includesStations ? sessions : [],
                     periodOffset: offset,
                     topLimit: 5
                 )
             }
             guard !Task.isCancelled else { return }
+            // Only new plays animate: a revision from a lookup or a sync changes nothing to watch.
             let isLive = summary?.range == range && summary?.periodOffset == next.periodOffset
+                && summary?.captureCount != next.captureCount
             LiveUpdate.apply(isLive: isLive, reduceMotion: reduceMotion) {
                 summary = next
             }
@@ -125,7 +128,7 @@ struct SummaryContent: View {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionHeader(title: "Highlights") {
                         if summary.insights.count > 3 {
-                            NavigationLink("Show All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
+                            NavigationLink("See All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
                         }
                     }
                     EqualHeightRows(items: Array(summary.insights.prefix(3)), columns: 1) { insight in
@@ -182,7 +185,7 @@ struct SummaryContent: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-                                DayTypeFootnotes(summary: summary)
+                                DayTypeFootnotes(summary: summary, keysWeekdayChart: true)
                             }
                         }
                     }

@@ -69,7 +69,8 @@
     <array>
         <string>_tracks._tcp</string>
     </array>
-    <!-- Songs dragged inside Tracks, from a list to Up Next. See SongDrag. -->
+    <!-- Songs dragged inside Tracks, from a list to Up Next (see SongDrag), and a playlist's
+         rows dragged to a new place in it (see CollectionRowDrag). -->
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
@@ -77,6 +78,16 @@
             <string>com.luke.tracks.songs</string>
             <key>UTTypeDescription</key>
             <string>Songs from Tracks</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.luke.tracks.collection-rows</string>
+            <key>UTTypeDescription</key>
+            <string>Playlist Rows from Tracks</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>

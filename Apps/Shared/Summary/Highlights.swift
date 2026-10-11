@@ -78,7 +78,7 @@ struct HighlightSentence: View {
     }
 }
 
-/// Every highlight for a range, pushed from "Show All".
+/// Every highlight for a range, pushed from "See All".
 struct HighlightsList: View {
     let range: StatsRange
     var periodOffset = 0
@@ -102,11 +102,12 @@ struct HighlightsList: View {
         .sourceScopeSubtitle(sources.scope)
         .task(id: "\(sources.scope.rawValue)|\(model.library.revision)") {
             let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
+            let includesStations = scope.includesStations
             let next = await OffMainActor.run {
                 StatsCalculator.summary(
                     range: range,
                     history: history.scoped(to: scope),
-                    sessions: scope.includesStations ? sessions : [],
+                    sessions: includesStations ? sessions : [],
                     periodOffset: offset
                 ).insights
             }

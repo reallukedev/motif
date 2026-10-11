@@ -144,12 +144,16 @@ final class DemoPlayerEngine: PlayerEngine {
     }
 
     func removeUpNext(at offsets: IndexSet) {
-        queue.remove(atOffsets: IndexSet(offsets.map { $0 + index + 1 }))
+        let places = IndexSet(offsets.map { $0 + index + 1 }.filter(queue.indices.contains))
+        guard !places.isEmpty else { return }
+        queue.remove(atOffsets: places)
         onChange?()
     }
 
     func moveUpNext(from offsets: IndexSet, to destination: Int) {
-        queue.move(fromOffsets: IndexSet(offsets.map { $0 + index + 1 }), toOffset: destination + index + 1)
+        let places = IndexSet(offsets.map { $0 + index + 1 }.filter(queue.indices.contains))
+        guard !places.isEmpty else { return }
+        queue.move(fromOffsets: places, toOffset: min(max(destination + index + 1, index + 1), queue.count))
         onChange?()
     }
 

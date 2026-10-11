@@ -72,6 +72,10 @@ struct NowPlayingView: View {
 
     private func content(_ track: PlayerTrack) -> some View {
         GeometryReader { proxy in
+            // The bottom row sits down by the home indicator, as Music's does, and in the
+            // same place whether the cover or Up Next is up: a fixed inset into the safe area
+            // rather than wherever the content happened to overflow to.
+            let bottomInset = Self.bottomInset(proxy)
             VStack(spacing: 0) {
                 topBar
                     .onGeometryChange(for: CGFloat.self, of: \.size.height) { topBarHeight = $0 }
@@ -90,8 +94,15 @@ struct NowPlayingView: View {
                     .onGeometryChange(for: CGFloat.self, of: \.size.height) { controlsHeight = $0 }
             }
             .padding(.horizontal, 28)
-            .padding(.bottom, 8)
+            .padding(.bottom, bottomInset)
+            .frame(width: proxy.size.width, height: proxy.size.height + proxy.safeAreaInsets.bottom, alignment: .top)
         }
+    }
+
+    /// From the screen's foot to the bottom row: 14 points into the safe area, or 8 on a
+    /// screen without one.
+    private static func bottomInset(_ proxy: GeometryProxy) -> CGFloat {
+        max(8, proxy.safeAreaInsets.bottom - 14)
     }
 
     private var topBar: some View {
@@ -137,11 +148,10 @@ struct NowPlayingView: View {
         // Laid out once at no size at all as the player opens, then at the screen's. At the
         // larger text sizes the title and controls grow, and the cover gives them the room
         // rather than push the bottom row off the screen: what's left once they and the
-        // spaces between them (12, 20, 16 and the 8 below) have theirs. The bottom row may sit
-        // down by the home indicator, as it does at the default size, but no lower.
+        // spaces between them (12, 20 and 16) and the inset below have theirs.
         let share = verticalSizeClass == .compact ? 0.5 : 0.44
-        let room = available.height + proxy.safeAreaInsets.bottom
-            - topBarHeight - detailsHeight - controlsHeight - 56
+        let room = available.height + proxy.safeAreaInsets.bottom - Self.bottomInset(proxy)
+            - topBarHeight - detailsHeight - controlsHeight - 48
         let side = max(0, min(available.width - 56, available.height * share, room, 420))
         // Music's gesture: the cover sinks back while paused. Not while its back is up, which
         // is being read.
@@ -190,7 +200,8 @@ struct NowPlayingView: View {
                     .lineLimit(2)
                 Text(track.artistName)
                     .font(.title3)
-                    .foregroundStyle(.white.opacity(0.7))
+                    // Strong enough to read on the brightest moving backgrounds.
+                    .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
                 PlayCountLine(track: track)
                     .padding(.top, 4)

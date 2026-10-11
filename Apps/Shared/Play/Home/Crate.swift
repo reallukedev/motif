@@ -1105,7 +1105,12 @@ struct CrateRecord {
 
     /// What tapping the record in front does.
     var frontHint: String {
-        route == nil ? String(localized: "Plays it") : String(localized: "Opens it")
+        if route != nil { return String(localized: "Opens it.") }
+        return switch card {
+        case .station: String(localized: "Plays Tracks Radio.")
+        case .song: String(localized: "Plays this song.")
+        case .mix, .discover: String(localized: "Plays this mix.")
+        }
     }
 
     var isStation: Bool {

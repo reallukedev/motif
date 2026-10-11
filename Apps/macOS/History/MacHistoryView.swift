@@ -31,7 +31,6 @@ struct MacHistoryView: View {
 
 private struct MacHistoryTable: View {
     @Environment(AppModel.self) private var model
-    @Environment(PlaybackController.self) private var playback
     @Binding var filter: HistoryFilter
     @Binding var sortOrder: [SortDescriptor<Capture>]
     let source: SourceScope
@@ -52,6 +51,7 @@ private struct MacHistoryTable: View {
     /// Bumped by each save and each batch of synced changes, so the total follows them.
     @State private var storeChanges = 0
     @State private var isScrobbling = false
+    private var playback = CapturePlayback()
     /// Written last when Settings connects or disconnects Last.fm, so the column follows it.
     @AppStorage(LastFMSessionStore.usernameDefaultsKey, store: CaptureSettings.sharedDefaults)
     private var lastFMUsername: String?
@@ -78,7 +78,7 @@ private struct MacHistoryTable: View {
     }
 
     var body: some View {
-        Table(rows, selection: $selection, sortOrder: $sortOrder) {
+        Table(of: Capture.self, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Title", sortUsing: SortDescriptor(\Capture.title, comparator: .localizedStandard)) { capture in
                 HStack(spacing: 8) {
                     ArtworkView(url: capture.artworkURL, seed: capture.albumTitle ?? capture.title, size: 26)
@@ -90,56 +90,69 @@ private struct MacHistoryTable: View {
                     }
                 }
             }
-            .width(min: 160, ideal: 240)
+            .width(min: 110, ideal: 240)
 
             TableColumn("Artist", sortUsing: SortDescriptor(\Capture.artistName, comparator: .localizedStandard)) { capture in
                 Text(capture.artistName)
             }
-            .width(min: 110, ideal: 160)
+            .width(min: 70, ideal: 160)
 
             TableColumn("Album", sortUsing: SortDescriptor(\Capture.albumTitle, comparator: .localizedStandard)) { capture in
                 Text(capture.albumTitle ?? "")
             }
-            .width(min: 100, ideal: 150)
+            .width(min: 70, ideal: 150)
 
             TableColumn("Source", sortUsing: SortDescriptor(\Capture.kindRawValue)) { capture in
-                // A song you chose from your own music says so, rather than "On Demand".
-                if capture.kind == .onDemand, capture.source == .yourMusic {
-                    Label(SourceScope.yourMusic.title, systemImage: SourceScope.yourMusic.symbol)
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Label(capture.kind.label, systemImage: capture.kind.symbol)
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(capture.kind == .onDemand ? .secondary : capture.kind.tint)
-                        .lineLimit(1)
+                    // A song you chose from your own music says so, rather than "On Demand".
+                    if capture.kind == .onDemand, capture.source == .yourMusic {
+                        Label(SourceScope.yourMusic.title, systemImage: SourceScope.yourMusic.symbol)
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Label(capture.kind.label, systemImage: capture.kind.symbol)
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(capture.kind == .onDemand ? .secondary : capture.kind.tint)
+                            .lineLimit(1)
+                    }
                 }
-            }
-            .width(min: 118, ideal: 124)
-
+                .width(min: 96, ideal: 124)
+    
             TableColumn("Played", sortUsing: SortDescriptor(\Capture.capturedAt, order: .reverse)) { capture in
                 Text(Format.shortDateTime(capture.capturedAt))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .width(min: 120, ideal: 140)
+            // No wider than its longest date, so spare width goes to the names.
+            .width(min: 140, ideal: 150, max: 170)
 
-            TableColumn("Last.fm") { capture in
-                scrobbleState(capture)
+            // Only while Last.fm is connected: otherwise every row would be blank.
+            if isScrobbling {
+                TableColumn("Last.fm") { capture in
+                    scrobbleState(capture)
+                }
+                .width(56)
             }
-            .width(56)
+        } rows: {
+            ForEach(rows) { capture in
+                TableRow(capture)
+                    .draggable(drag(from: capture))
+            }
         }
+        // The columns are fixed once the table is made: AppKit's header falls out of step with
+        // the rows when they change under it. Connecting Last.fm makes the table afresh.
+        .id(isScrobbling)
         .contextMenu(forSelectionType: PersistentIdentifier.self) { ids in
             if let capture = single(ids) {
                 PlayActions(capture: capture, onDelete: { pendingDelete = capture })
-            } else if !ids.isEmpty, !model.isShowingSampleData {
-                Button("Delete ^[\(ids.count) Play](inflect: true)…", role: .destructive) {
-                    pendingBulkDelete = ids
-                }
+            } else if !ids.isEmpty {
+                selectionMenu(ids)
             }
         } primaryAction: { ids in
-            if single(ids) != nil { showsInspector = true }
+            // Double-click or Return plays, as in Music; ⌘I shows the inspector.
+            let chosen = ordered(ids)
+            if playback.canPlay(chosen) { playback.play(chosen) }
         }
         .onDeleteCommand {
             guard !model.isShowingSampleData else { return }
@@ -214,7 +227,8 @@ private struct MacHistoryTable: View {
                 Button("Inspector", systemImage: "sidebar.trailing") {
                     showsInspector.toggle()
                 }
-                .help("Show or hide the song inspector")
+                .keyboardShortcut("i", modifiers: .command)
+                .help("Show or hide the song inspector (⌘I)")
             }
         }
         .deleteConfirmation(for: $pendingDelete)
@@ -248,6 +262,38 @@ private struct MacHistoryTable: View {
         }
     }
 
+    /// The plays chosen, in the table's order.
+    private func ordered(_ ids: Set<PersistentIdentifier>) -> [Capture] {
+        rows.filter { ids.contains($0.persistentModelID) }
+    }
+
+    /// The row dragged, with the rest of the selection when it's part of it.
+    private func drag(from capture: Capture) -> SongDrag {
+        let dragged = selection.contains(capture.persistentModelID) ? ordered(selection) : [capture]
+        return SongDrag(dragged.map {
+            HistorySong(songID: $0.songID, title: $0.title, artistName: $0.artistName, albumTitle: $0.albumTitle, artworkURL: $0.artworkURL)
+        })
+    }
+
+    /// Several plays: play them or queue them in the table's order, or delete them.
+    @ViewBuilder
+    private func selectionMenu(_ ids: Set<PersistentIdentifier>) -> some View {
+        let chosen = ordered(ids)
+        if playback.canPlay(chosen) {
+            Button("Play", systemImage: "play") { playback.play(chosen) }
+            if playback.canQueue {
+                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") { playback.enqueue(chosen, next: true) }
+                Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") { playback.enqueue(chosen, next: false) }
+            }
+        }
+        if !model.isShowingSampleData {
+            if playback.canPlay(chosen) { Divider() }
+            Button("Delete ^[\(ids.count) Play](inflect: true)…", systemImage: "trash", role: .destructive) {
+                pendingBulkDelete = ids
+            }
+        }
+    }
+
     private func single(_ ids: Set<PersistentIdentifier>) -> Capture? {
         guard ids.count == 1, let id = ids.first else { return nil }
         return rows.first { $0.persistentModelID == id }
@@ -269,6 +315,12 @@ private struct MacHistoryTable: View {
                 .foregroundStyle(.secondary)
                 .help("Scrobbled")
                 .accessibilityLabel("Scrobbled")
+        } else if capture.isHeldFromScrobbling {
+            // Kept, but too short for Last.fm's rule: nothing went wrong, and nothing's waiting.
+            Image(systemName: "minus")
+                .foregroundStyle(.tertiary)
+                .help("Not long enough for Last.fm to count")
+                .accessibilityLabel("Not long enough for Last.fm to count")
         } else if capture.scrobbleAttempts >= TracksStore.maxScrobbleAttempts {
             Image(systemName: "exclamationmark.circle")
                 .foregroundStyle(.orange)

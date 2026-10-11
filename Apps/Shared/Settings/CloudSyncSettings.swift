@@ -1,6 +1,7 @@
 import SwiftUI
 import CloudKit
 import Observation
+import OSLog
 import TracksCore
 
 /// What Settings knows about iCloud sync: the switch, the account, and what the mirror
@@ -51,7 +52,26 @@ final class CloudSyncSettings {
             @unknown default: .unknown
             }
         } catch {
-            accountError = error.localizedDescription
+            Self.log.error("Couldn't read the iCloud account: \(error, privacy: .public)")
+            accountError = Self.message(for: error)
+        }
+    }
+
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Tracks", category: "iCloud")
+
+    /// What went wrong with iCloud, and what happens next, in place of CloudKit's own words.
+    nonisolated static func message(for error: any Error) -> String {
+        switch (error as? CKError)?.code {
+        case .networkUnavailable, .networkFailure:
+            String(localized: "iCloud isn’t reachable right now. Tracks will try again once you’re online.")
+        case .quotaExceeded:
+            String(localized: "Your iCloud storage is full. Free up some space to keep syncing.")
+        case .notAuthenticated, .accountTemporarilyUnavailable:
+            String(localized: "Check that you’re signed in to iCloud. Tracks will try again.")
+        case .serviceUnavailable, .requestRateLimited:
+            String(localized: "iCloud is busy right now. Tracks will try again shortly.")
+        default:
+            String(localized: "Couldn’t sync with iCloud. Tracks will try again.")
         }
     }
 }

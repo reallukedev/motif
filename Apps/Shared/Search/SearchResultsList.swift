@@ -6,6 +6,9 @@ struct SearchResultsList: View {
     let query: String
     @Environment(AppModel.self) private var model
     @State private var results = SearchResults.empty
+    /// The query `results` answer. "No Results" waits for the current query's answer, rather
+    /// than showing for the last one while typing pauses.
+    @State private var answeredQuery: String?
     @State private var suggestions: [ArtistTally] = []
     /// Built once per library change, so each letter typed only filters it.
     @State private var index: SearchIndex?
@@ -49,7 +52,7 @@ struct SearchResultsList: View {
             }
         }
         .overlay {
-            if !isBlank, results.isEmpty {
+            if !isBlank, answeredQuery == query, results.isEmpty {
                 ContentUnavailableView.search(text: query)
             }
         }
@@ -72,6 +75,7 @@ struct SearchResultsList: View {
             let next = await OffMainActor.run { index.search(query) }
             guard !Task.isCancelled else { return }
             results = next
+            answeredQuery = query
         }
     }
 

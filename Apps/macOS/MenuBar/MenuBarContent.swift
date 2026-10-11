@@ -29,7 +29,7 @@ struct MenuBarContent: View {
             ContentUnavailableView {
                 Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
-                Text(model.startupError ?? "The database couldn't be opened.")
+                Text("Quit Tracks and open it again. If that doesn’t help, restart your Mac.")
             }
             .frame(width: Self.width)
             .padding(.vertical)
@@ -48,6 +48,7 @@ private struct MenuBarBody: View {
     /// The day ``TodaySummary`` counts. Moved on at midnight and whenever the window opens,
     /// since the window's views can outlive the day they were made on.
     @State private var day = Calendar.current.startOfDay(for: .now)
+    @Environment(\.isOnScreen) private var isOnScreen
 
     static let recentLimit = 12
 
@@ -100,11 +101,18 @@ private struct MenuBarBody: View {
 
             MenuBarFooter()
         }
-        // Polling Music costs an Apple event, so only while the window is open.
-        .task { await monitor.follow() }
-        .onAppear(perform: moveToToday)
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+        // Polling Music costs an Apple event, so only while the window is open. The panel's
+        // views outlive its closing, so `.task` alone would keep polling after it.
+        .task(id: isOnScreen) {
+            guard isOnScreen else { return }
             moveToToday()
+            await monitor.follow()
+        }
+        // Posted on whichever thread noticed the change, so read on the main actor.
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .NSCalendarDayChanged) {
+                moveToToday()
+            }
         }
     }
 
@@ -138,7 +146,6 @@ private struct HistoryPausedNote: View {
 /// What Tracks itself is playing, with its controls, in the shape of Music's card below.
 private struct TracksPlayerHeader: View {
     @Environment(PlayerModel.self) private var player
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var previousPresses = 0
     @State private var nextPresses = 0
@@ -146,7 +153,7 @@ private struct TracksPlayerHeader: View {
     var body: some View {
         if let track = player.current {
             VStack(spacing: 12) {
-                HStack(spacing: 12) {
+                MenuBarSongButton(songIdentity: track.songIdentity) {
                     CoverImage(cover: track.cover, size: 58)
                     VStack(alignment: .leading, spacing: 2) {
                         Label {
@@ -168,9 +175,7 @@ private struct TracksPlayerHeader: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 0)
                 }
-                .accessibilityElement(children: .combine)
                 .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: track.id)
 
                 GlassEffectContainer(spacing: 18) {
@@ -225,7 +230,7 @@ private struct NowPlayingHeader: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 12) {
+            MenuBarSongButton(songIdentity: songIdentity) {
                 artwork
                     .opacity(isStale ? 0.55 : 1)
                 VStack(alignment: .leading, spacing: 2) {
@@ -239,11 +244,9 @@ private struct NowPlayingHeader: View {
                         .lineLimit(1)
                 }
                 .opacity(isStale ? 0.7 : 1)
-                Spacer(minLength: 0)
             }
             // The next song crossfades in rather than snapping.
             .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: title)
-            .accessibilityElement(children: .combine)
 
             TransportControls(monitor: monitor)
         }
@@ -255,6 +258,12 @@ private struct NowPlayingHeader: View {
     /// Nothing is audible, as far as we know. Before the first read we don't claim either way.
     private var isStale: Bool {
         monitor.hasRead && !monitor.music.isPlaying
+    }
+
+    /// The song shown, for its page in the main window. Nil before anything has played.
+    private var songIdentity: String? {
+        if let song = capture.nowPlaying { return HistoryImport.key(title: song.title, artistName: song.artistName) }
+        return latest.map { HistoryImport.key(title: $0.title, artistName: $0.artistName) }
     }
 
     private var title: String {
@@ -319,6 +328,43 @@ private struct NowPlayingHeader: View {
             return String(AttributedString(localized: "\(station) · ^[\(count) song](inflect: true)").characters)
         }
         return station
+    }
+}
+
+/// The song at the top of the menu: a click opens its page in the main window and closes the
+/// menu, as clicking the song in Music's mini player shows it. It highlights under the pointer
+/// as the rows below do.
+private struct MenuBarSongButton<Content: View>: View {
+    /// Nil before anything has played, when there's no page to open.
+    let songIdentity: String?
+    @ViewBuilder var content: Content
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            guard let songIdentity else { return }
+            model.pendingRoute = .song(songIdentity)
+            MainWindow.bringForward(openWindow: openWindow)
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                content
+                Spacer(minLength: 0)
+            }
+            .padding(6)
+            .contentShape(.rect)
+            .background(.quaternary.opacity(isHovered && songIdentity != nil ? 0.6 : 0), in: .rect(cornerRadius: 10))
+            .padding(-6)
+        }
+        .buttonStyle(.plain)
+        // Not disabled: that would grey out "Nothing Played Yet" too.
+        .allowsHitTesting(songIdentity != nil)
+        .onHover { isHovered = $0 }
+        .help("Show in Tracks")
+        .accessibilityHint("Opens the song in Tracks")
     }
 }
 
@@ -576,29 +622,32 @@ private struct RecentList: View {
         }
     }
 
-    @ViewBuilder
+    /// The song's menu, as everywhere else, with its pages opening in the main window.
     private func menu(for item: Capture) -> some View {
+        let song = MixSong(item)
+        let artist = StatsCalculator.folded(item.artistName)
+        var actions = SongActions(
+            stats: { show(.song(song.songIdentity)) },
+            share: .song(id: item.songID, title: item.title, artist: item.artistName),
+            suggestLess: song.songIdentity,
+            block: item.artistName
+        )
         if !item.songID.isEmpty {
             if opensInMusic(item) {
-                Button("Open in Music", systemImage: "arrow.up.forward.app") { activate(item) }
+                actions.reveal.append(SongMenuButton(title: "Show in Music", systemImage: "arrow.up.forward.app") { activate(item) })
             } else {
-                Button("Play", systemImage: "play") { activate(item) }
+                actions.play = { activate(item) }
+                // No API can take a song back out of a playlist, so point at the app that can.
+                actions.reveal.append(SongMenuButton(title: "Show in Music", systemImage: "arrow.up.forward.app") {
+                    MusicLibraryPlayback.openInMusic(songID: item.songID)
+                })
             }
         }
-        Button("View Song Stats", systemImage: "chart.bar") {
-            show(.song(HistoryImport.key(title: item.title, artistName: item.artistName)))
+        if let album = item.albumTitle.map(StatsCalculator.folded), !album.isEmpty {
+            actions.goToAlbum = { show(.album("\(album)\u{1F}\(artist)")) }
         }
-        Button("View Artist Stats", systemImage: "music.microphone") {
-            show(.artist(StatsCalculator.folded(item.artistName)))
-        }
-        // Already the first item for a song that isn't in the library.
-        if !item.songID.isEmpty, !opensInMusic(item) {
-            Divider()
-            // No API can take a song back out of a playlist, so point at the app that can.
-            Button("Show in Music", systemImage: "arrow.up.forward.app") {
-                MusicLibraryPlayback.openInMusic(songID: item.songID)
-            }
-        }
+        actions.goToArtist = { show(.artist(artist)) }
+        return SongMenuItems(actions)
     }
 
     /// Opens a page in the main window and closes this one.
@@ -721,7 +770,7 @@ struct MenuBarFooter: View {
     /// The window the `Settings` scene puts up.
     ///
     /// SwiftUI gives it no public identity; AppKit calls it `com_apple_SwiftUI_Settings_window`.
-    /// Matched loosely so a rename between releases doesn't quietly stop this working — no
+    /// Matched loosely so a rename between releases doesn't quietly stop this working. No
     /// other Tracks window has "Settings" in its identifier. A miss is harmless: the window
     /// may not exist yet, and activation alone usually brings it up.
     private static var settingsWindow: NSWindow? {

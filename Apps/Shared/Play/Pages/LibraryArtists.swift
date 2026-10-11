@@ -191,11 +191,9 @@ private struct LibraryAppleArtistDetail: View {
         }
     }
 
-    /// "3 albums · 212 plays".
+    /// "3 albums".
     private var facts: String {
-        var parts = [String(AttributedString(localized: "^[\(albums.count) album](inflect: true)").characters)]
-
-        return parts.joined(separator: " · ")
+        String(AttributedString(localized: "^[\(albums.count) album](inflect: true)").characters)
     }
 
     /// Their songs in your library, shuffled. The songs are read once for the whole library.

@@ -29,18 +29,26 @@ extension CarPlaySceneDelegate {
         request.sort(by: \.libraryAddedDate, ascending: false)
         request.limit = 12
         if let albums = try? await request.response().items, !albums.isEmpty {
-            let items = FeedItem.versions(albums.map(FeedItem.init(album:)))
-            var tiles: [CPListImageRowItemImageGridElement] = []
-            for item in items {
-                let image = await CarPlayImages.cover(for: item, side: CPListImageRowItemImageGridElement.maximumImageSize.height, scale: scale)
-                tiles.append(CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: item.title, accessorySymbolName: nil))
+            let items = Array(FeedItem.versions(albums.map(FeedItem.init(album:))).prefix(Int(CPMaximumNumberOfGridImages)))
+            let (side, scale) = (CPListImageRowItemImageGridElement.maximumImageSize.height, scale)
+            let late = CarPlayImages.Late()
+            let images = await CarPlayImages.batch(items.count, standIn: { index in
+                CarPlayImages.generated(seed: items[index].title, side: side, scale: scale)
+            }, late: { index, image in
+                late.set(index, image)
+            }) { index in
+                await CarPlayImages.cover(for: items[index], side: side, scale: scale)
             }
-            let row = CPListImageRowItem(text: nil, imageGridElements: tiles, allowsMultipleLines: true)
+            let tiles = zip(items, images).map { item, image in
+                CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: item.title, accessorySymbolName: nil)
+            }
+            late.attach(tiles)
+            let row = CPListImageRowItem(text: String(localized: "Recently Added"), imageGridElements: tiles, allowsMultipleLines: false)
             row.listImageRowHandler = { [weak self] _, index, completion in
                 guard items.indices.contains(index), case .album(let album) = items[index].content else { return completion() }
                 self?.open({ await self?.appleMusicAlbumPage(album) }, then: completion)
             }
-            sections.append(CPListSection(items: [row], header: String(localized: "Recently Added"), sectionIndexTitle: nil))
+            sections.append(CPListSection(items: [row]))
         }
         return sections
     }
@@ -255,10 +263,11 @@ extension CarPlaySceneDelegate {
             shuffle: { await player.start(.playlist(playlist), from: context, shuffled: true) }
         )
         var rows: [CPListItem] = []
-        for (index, song) in songs.prefix(Self.pageRowLimit).enumerated() {
-            let art = song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title)
-            let image = await CarPlayImages.cover(art, side: CPListItem.maximumImageSize.height, scale: scale, album: song.albumTitle.map { ($0, song.artistName) })
-            let row = CPListItem(text: song.title, detailText: song.artistName, image: image)
+        let listed = Array(songs.prefix(Self.pageRowLimit))
+        let side = CPListItem.maximumImageSize.height
+        let standIn = CarPlayImages.placeholder(symbol: "music.note", side: side, scale: scale)
+        for (index, song) in listed.enumerated() {
+            let row = CPListItem(text: song.title, detailText: song.artistName, image: standIn)
             row.isExplicitContent = song.contentRating == .explicit
             row.isPlaying = player.current?.song?.id == song.id
             row.handler = { [weak self] _, completion in
@@ -266,7 +275,15 @@ extension CarPlaySceneDelegate {
             }
             rows.append(row)
         }
-        return CPListTemplate(title: playlist.name, sections: [CPListSection(items: actions + rows)], assistantCellConfiguration: nil)
+        let scale = scale
+        fillImages(rows) { index in
+            let song = listed[index]
+            let art = song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: song.albumTitle ?? song.title)
+            return await CarPlayImages.cover(art, side: side, scale: scale, album: song.albumTitle.map { ($0, song.artistName) })
+        }
+        let page = CPListTemplate(title: playlist.name, sections: [CPListSection(items: actions + rows)], assistantCellConfiguration: nil)
+        page.emptyViewTitleVariants = [String(localized: "No Songs to Play")]
+        return page
     }
 
     // MARK: - Your music
@@ -293,19 +310,27 @@ extension CarPlaySceneDelegate {
         }
         var sections = [CPListSection(items: places)]
 
-        let recent = Array(music.index.recentlyAdded.prefix(12))
+        let recent = Array(music.index.recentlyAdded.prefix(Int(CPMaximumNumberOfGridImages)))
         if !recent.isEmpty {
-            var tiles: [CPListImageRowItemImageGridElement] = []
-            for album in recent {
-                let image = await localCover(album, side: CPListImageRowItemImageGridElement.maximumImageSize.height)
-                tiles.append(CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: album.displayTitle, accessorySymbolName: nil))
+            let (side, scale) = (CPListImageRowItemImageGridElement.maximumImageSize.height, scale)
+            let late = CarPlayImages.Late()
+            let images = await CarPlayImages.batch(recent.count, standIn: { index in
+                CarPlayImages.generated(seed: recent[index].title, side: side, scale: scale)
+            }, late: { index, image in
+                late.set(index, image)
+            }) { [weak self] index in
+                await self?.localCover(recent[index], side: side) ?? CarPlayImages.generated(seed: recent[index].title, side: side, scale: scale)
             }
-            let row = CPListImageRowItem(text: nil, imageGridElements: tiles, allowsMultipleLines: true)
+            let tiles = zip(recent, images).map { album, image in
+                CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: album.displayTitle, accessorySymbolName: nil)
+            }
+            late.attach(tiles)
+            let row = CPListImageRowItem(text: String(localized: "Recently Added"), imageGridElements: tiles, allowsMultipleLines: false)
             row.listImageRowHandler = { [weak self] _, index, completion in
                 guard recent.indices.contains(index) else { return completion() }
                 self?.open({ await self?.localAlbumPage(recent[index]) }, then: completion)
             }
-            sections.append(CPListSection(items: [row], header: String(localized: "Recently Added"), sectionIndexTitle: nil))
+            sections.append(CPListSection(items: [row]))
         }
         return sections
     }
@@ -314,17 +339,25 @@ extension CarPlaySceneDelegate {
         let music = model.yourMusic
         let facts = model.playFeed.facts
         var rows: [CPListItem] = []
-        for playlist in music.playlists.recent.prefix(Self.pageRowLimit) {
+        var firsts: [LocalTrack?] = []
+        let side = CPListItem.maximumImageSize.height
+        let standIn = CarPlayImages.placeholder(symbol: "music.note.list", side: side, scale: scale)
+        let playlists = Array(music.playlists.recent.prefix(Self.pageRowLimit))
+        for playlist in playlists {
             let songs = music.songs(in: playlist, facts: facts)
-            let first = songs.first { $0.artwork != nil } ?? songs.first
-            let image = await CarPlayImages.cover(url: music.artworkURL(first?.artwork)?.absoluteString, seed: first?.album ?? playlist.name, side: CPListItem.maximumImageSize.height, scale: scale)
+            firsts.append(songs.first { $0.artwork != nil } ?? songs.first)
             let count = String(AttributedString(localized: "^[\(songs.count) song](inflect: true)").characters)
-            let row = CPListItem(text: playlist.name, detailText: count, image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
+            let row = CPListItem(text: playlist.name, detailText: count, image: standIn, accessoryImage: nil, accessoryType: .disclosureIndicator)
             row.isPlaying = isPlaying(playlist.name)
             row.handler = { [weak self] _, completion in
                 self?.open({ await self?.localPlaylistPage(playlist) }, then: completion)
             }
             rows.append(row)
+        }
+        let scale = scale
+        fillImages(rows) { index in
+            let first = firsts[index]
+            return await CarPlayImages.cover(url: music.artworkURL(first?.artwork)?.absoluteString, seed: first?.album ?? playlists[index].name, side: side, scale: scale)
         }
         return page(String(localized: "Playlists"), [CPListSection(items: rows)], empty: String(localized: "No Playlists"))
     }
@@ -335,7 +368,6 @@ extension CarPlaySceneDelegate {
         let songs = music.songs(in: playlist, facts: model.playFeed.facts)
         let playable = songs.filter(music.isPlayable)
         let context = PlayContext(kind: .playlist, title: playlist.name)
-        let first = songs.first { $0.artwork != nil } ?? songs.first
         let actions = playRows(
             detail: String(AttributedString(localized: "^[\(songs.count) song](inflect: true)").characters),
             play: playable.isEmpty ? nil : { await player.start(.local(playable), from: context) },
@@ -348,17 +380,28 @@ extension CarPlaySceneDelegate {
     }
 
     private func localAlbumsPage(_ albums: [LocalAlbum], title: String) async -> CPListTemplate {
+        let listed = Array(albums.prefix(Self.pageRowLimit))
+        let rows = localAlbumRows(listed) { $0.artist }
+        return page(title, [CPListSection(items: rows)], empty: String(localized: "No Albums"))
+    }
+
+    /// Your albums as rows, their covers filling in once the page is open.
+    private func localAlbumRows(_ albums: [LocalAlbum], detail: (LocalAlbum) -> String?) -> [CPListItem] {
+        let side = CPListItem.maximumImageSize.height
+        let standIn = CarPlayImages.placeholder(symbol: "square.stack", side: side, scale: scale)
         var rows: [CPListItem] = []
-        for album in albums.prefix(Self.pageRowLimit) {
-            let image = await localCover(album, side: CPListItem.maximumImageSize.height)
-            let row = CPListItem(text: album.displayTitle, detailText: album.artist, image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
+        for album in albums {
+            let row = CPListItem(text: album.displayTitle, detailText: detail(album), image: standIn, accessoryImage: nil, accessoryType: .disclosureIndicator)
             row.isPlaying = isPlaying(album.title)
             row.handler = { [weak self] _, completion in
                 self?.open({ await self?.localAlbumPage(album) }, then: completion)
             }
             rows.append(row)
         }
-        return page(title, [CPListSection(items: rows)], empty: String(localized: "No Albums"))
+        fillImages(rows) { [weak self] index in
+            await self?.localCover(albums[index], side: side)
+        }
+        return rows
     }
 
     private func localArtistsPage() async -> CPListTemplate {
@@ -437,15 +480,7 @@ extension CarPlaySceneDelegate {
             play: tracks.isEmpty ? nil : { await player.start(.local(tracks), from: context) },
             shuffle: tracks.isEmpty ? nil : { await player.start(.local(tracks), from: context, shuffled: true) }
         )
-        var rows: [CPListItem] = []
-        for album in artist.albums.prefix(Self.pageRowLimit) {
-            let image = await localCover(album, side: CPListItem.maximumImageSize.height)
-            let row = CPListItem(text: album.displayTitle, detailText: album.year.map(String.init), image: image, accessoryImage: nil, accessoryType: .disclosureIndicator)
-            row.handler = { [weak self] _, completion in
-                self?.open({ await self?.localAlbumPage(album) }, then: completion)
-            }
-            rows.append(row)
-        }
+        let rows = localAlbumRows(Array(artist.albums.prefix(Self.pageRowLimit))) { $0.year.map(String.init) }
         return CPListTemplate(title: artist.name, sections: Self.section(actions) + (rows.isEmpty ? [] : [CPListSection(items: rows, header: String(localized: "Albums"), sectionIndexTitle: nil)]), assistantCellConfiguration: nil)
     }
 
@@ -494,24 +529,28 @@ extension CarPlaySceneDelegate {
     ///
     /// Stops once the page has gone (popped, another tab, or the car disconnected), or if it
     /// never shows up.
-    func fillImages(_ rows: [CPListItem], _ load: @escaping @MainActor @Sendable (Int) async -> UIImage?) {
+    func fillImages(_ rows: [CPListItem], _ load: @escaping @MainActor (Int) async -> UIImage?) {
         guard let first = rows.first else { return }
         let started = Date.now
         Task { [weak self] in
             var wasShown = false
-            for start in stride(from: 0, to: rows.count, by: 4) {
+            for start in stride(from: 0, to: rows.count, by: 6) {
                 guard let self else { return }
                 if isShown(first) {
                     wasShown = true
                 } else if wasShown || Date.now.timeIntervalSince(started) > 15 {
                     return
                 }
-                // Four at once: each waits on its picture, not on the others.
-                let loads = (start..<min(start + 4, rows.count)).map { index in
-                    (index, Task { await load(index) })
+                // Six side by side: each waits on its picture, not on the others. One that's
+                // slow arrives on its own, without holding up the rest.
+                let count = min(6, rows.count - start)
+                let found = await CarPlayImages.gather(count, wait: .seconds(4), late: { index, image in
+                    rows[start + index].setImage(image)
+                }) { index in
+                    await load(start + index)
                 }
-                for (index, load) in loads {
-                    if let image = await load.value { rows[index].setImage(image) }
+                for (index, image) in found {
+                    rows[start + index].setImage(image)
                 }
             }
         }
@@ -534,8 +573,8 @@ extension CarPlaySceneDelegate {
     /// Pushes a page once it's built. The row keeps its spinner until then.
     func open(_ make: @escaping () async -> CPListTemplate?, then completion: @escaping () -> Void) {
         Task { [weak self] in
-            guard let page = await make(), let interface = self?.interface else { return completion() }
-            interface.pushTemplate(page, animated: true) { _, _ in completion() }
+            guard let page = await make(), let self else { return completion() }
+            push(page, completion: completion)
         }
     }
 

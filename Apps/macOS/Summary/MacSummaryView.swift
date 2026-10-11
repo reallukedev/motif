@@ -39,7 +39,8 @@ struct MacSummaryView: View {
                     }
                 }
                 .padding(24)
-                .frame(maxWidth: 1180)
+                // Room for a dashboard on a big display, short of stretching every chart.
+                .frame(maxWidth: 1480)
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: summary != nil) {
@@ -75,17 +76,20 @@ struct MacSummaryView: View {
             // and then animate the real week in as if it had just been heard.
             guard model.library.isLoaded else { return }
             let (range, offset, scope, history, sessions) = (range, periodOffset, sources.scope, model.library.history, model.library.sessions)
+            let includesStations = scope.includesStations
             let next = await OffMainActor.run {
                 StatsCalculator.summary(
                     range: range,
                     history: history.scoped(to: scope),
-                    sessions: scope.includesStations ? sessions : [],
+                    sessions: includesStations ? sessions : [],
                     periodOffset: offset,
                     topLimit: 8
                 )
             }
             guard !Task.isCancelled else { return }
+            // Only new plays animate: a revision from a lookup or a sync changes nothing to watch.
             let isLive = summary?.range == range && summary?.periodOffset == next.periodOffset
+                && summary?.captureCount != next.captureCount
             LiveUpdate.apply(isLive: isLive, reduceMotion: reduceMotion) {
                 summary = next
             }
@@ -119,10 +123,15 @@ private struct Dashboard: View {
     /// For "See All", which selects the matching Top Charts row rather than pushing a second
     /// copy of the list and leaving the sidebar on Summary.
     @Environment(AppModel.self) private var model
+    /// Three albums to a row, or four once the card is wide enough to keep them a good size.
+    @State private var albumColumns = 3
+    /// The dashboard's width, which picks each row's arrangement. Measured rather than left to
+    /// `ViewThatFits`, which would build and measure both arrangements on every layout.
+    @State private var width: CGFloat = 1000
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
-            ViewThatFits(in: .horizontal) {
+            if width >= 836 {
                 HStack(alignment: .top, spacing: 16) {
                     // The tiles set the row's height at their natural size and the chart
                     // takes up the rest, so neither side has empty space at the bottom.
@@ -132,6 +141,7 @@ private struct Dashboard: View {
                         .frame(width: 260)
                 }
                 .fixedSize(horizontal: false, vertical: true)
+            } else {
                 VStack(spacing: 16) {
                     ListeningCard(summary: summary, chartHeight: 190)
                     GlanceGrid(summary: summary, columns: 4)
@@ -142,7 +152,7 @@ private struct Dashboard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionHeader(title: "Highlights") {
                         if summary.insights.count > 3 {
-                            NavigationLink("Show All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
+                            NavigationLink("See All", value: Route.highlights(summary.range, periodOffset: summary.periodOffset))
                         }
                     }
                     EqualHeightRows(items: Array(summary.insights.prefix(6)), columns: 3, spacing: 14) { insight in
@@ -162,11 +172,12 @@ private struct Dashboard: View {
                 .id("artists")
             }
 
-            ViewThatFits(in: .horizontal) {
+            if width >= 856 {
                 HStack(alignment: .top, spacing: 16) {
                     songs.frame(minWidth: 420)
                     albums.frame(minWidth: 420)
                 }
+            } else {
                 VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                     songs
                     albums
@@ -179,16 +190,13 @@ private struct Dashboard: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionHeader("Listening Rhythm")
                 VStack(spacing: Metrics.cardSpacing) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: Metrics.cardSpacing) {
-                            Card { ListeningClockCard(hourly: summary.hourly) }
-                                .frame(width: 320)
-                            weekCard
-                        }
-                        VStack(spacing: Metrics.cardSpacing) {
-                            Card { ListeningClockCard(hourly: summary.hourly) }
-                            weekCard
-                        }
+                    let rhythm = width >= 760
+                        ? AnyLayout(HStackLayout(alignment: .top, spacing: Metrics.cardSpacing))
+                        : AnyLayout(VStackLayout(spacing: Metrics.cardSpacing))
+                    rhythm {
+                        Card { ListeningClockCard(hourly: summary.hourly) }
+                            .frame(width: width >= 760 ? 320 : nil)
+                        weekCard
                     }
                     RhythmDetailsRow(summary: summary)
                 }
@@ -204,6 +212,7 @@ private struct Dashboard: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
     private var songs: some View {
@@ -211,7 +220,8 @@ private struct Dashboard: View {
             SectionHeader(title: "Top Songs") {
                 Button("See All") { model.sidebarSelection = SidebarItem(chart: .songs) }
             }
-            TopSongsCard(songs: summary.topSongs, limit: 6)
+            // Eight beside four albums across, so the two cards end together.
+            TopSongsCard(songs: summary.topSongs, limit: albumColumns == 4 ? 8 : 6)
         }
     }
 
@@ -221,8 +231,9 @@ private struct Dashboard: View {
                 Button("See All") { model.sidebarSelection = SidebarItem(chart: .albums) }
             }
             Card {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 14, alignment: .top)], spacing: 14) {
-                    ForEach(summary.topAlbums.prefix(6)) { album in
+                // Two whole rows, three across or four in a wide window, never a row with gaps.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: albumColumns), spacing: 14) {
+                    ForEach(summary.topAlbums.prefix(albumColumns * 2)) { album in
                         NavigationLink(value: Route.album(album.id)) {
                             VStack(alignment: .leading, spacing: 5) {
                                 ArtworkView(url: album.artworkURL, seed: album.title, size: nil)
@@ -240,6 +251,7 @@ private struct Dashboard: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .onGeometryChange(for: Int.self) { $0.size.width >= 600 ? 4 : 3 } action: { albumColumns = $0 }
             }
         }
     }
@@ -260,7 +272,7 @@ private struct Dashboard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                DayTypeFootnotes(summary: summary)
+                DayTypeFootnotes(summary: summary, keysWeekdayChart: !summary.heatMapIsInformative)
             }
         }
     }

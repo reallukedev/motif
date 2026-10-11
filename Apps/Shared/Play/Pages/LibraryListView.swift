@@ -413,7 +413,7 @@ struct LibraryArtistMenu: View {
 
     var body: some View {
         if let artist, model.musicSource == .appleMusic, !player.isDemo {
-            Button("Start Station", systemImage: "dot.radiowaves.left.and.right") { player.playStation(from: artist) }
+            Button("Create Station", systemImage: "dot.radiowaves.left.and.right") { player.playStation(from: artist) }
             Divider()
         }
         Button("Your Stats", systemImage: "chart.bar.xaxis") {

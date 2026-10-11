@@ -65,9 +65,16 @@ with the app in the background, so your history no longer depends on having Trac
   full player
 - Up Next and Your History rise from the bar (⌥⌘U, ⌥⌘Y). Reorder, remove, or double-click
   a song to play it now
-- A Controls menu with Music's shortcuts: Space to play and pause, ⌘→ and ⌘← to skip, ⇧⌘F
-  for the full player, ⇧⌘M for the Mini Player, ⌥⌘R for Tracks Radio and ⌥⌘N to play
-  something new
+- A Controls menu with Music's shortcuts: Space to play and pause, ⌘→ and ⌘← to skip, ⌘.
+  to stop, ⇧⌘F for the full player, ⌥⌘R for Tracks Radio and ⌥⌘N to play something new.
+  ⇧⌘M switches to the Mini Player and back, ⌥⌘M opens it alongside
+- A Song menu for what's playing: Favorite, Add to Library, Go to Album or Artist, Your
+  Stats (⌥⌘I), Share and Create Station. Go › Back and Forward (⌘[ and ⌘]), ⌘F to search,
+  and View › Refresh (⌘R)
+- Drag songs, albums and playlists anywhere: onto Up Next, or out to Messages, Notes or
+  Finder. Every song has the same menu wherever it appears, Add to Playlist included
+- Tiles lift under the pointer with Play and More, the charts and song lists work from the
+  keyboard, and History plays a song on double-click or Return, with its details on ⌘I
 - The Mini Player: the cover in a small window that stays in front, with the controls on it
   while the pointer is there
 - The menu bar and the Dock show and control what Tracks is playing. Starting music in Tracks
@@ -212,6 +219,13 @@ with the app in the background, so your history no longer depends on having Trac
   far left
 - Play on a song or album page plays it in Tracks, so the play is kept. Settings can send
   them to Apple Music instead
+- Summary's charts: tap a bar to read it and swipe sideways for the week or month before,
+  and the page still scrolls from a chart. Charts compares your listening with the same
+  point last week, month or year
+- Summary on the Mac uses the room on a big display, and Top Albums always fills its rows
+- Steadier and lighter: fixes for missed songs, settings sync, daylight saving in charts and
+  streaks, playlist merging, downloads and CarPlay, and moving backgrounds that draw only
+  as often as they need to
 
 ## Motif 1.0
 

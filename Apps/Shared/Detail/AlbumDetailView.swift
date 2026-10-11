@@ -11,6 +11,9 @@ struct AlbumDetailView: View {
     @Environment(\.playSongs) private var playSongs
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: AlbumProfile?
+    /// The id whose profile was last worked out from a loaded library, so "No Plays" waits
+    /// for the answer instead of showing while the first one is still on its way.
+    @State private var loadedID: String?
     @State private var showsAllSongs = false
 
     var body: some View {
@@ -20,7 +23,7 @@ struct AlbumDetailView: View {
                     .padding()
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
-            } else if model.library.isLoaded {
+            } else if loadedID == albumID {
                 ContentUnavailableView("No Plays", systemImage: "square.stack")
             }
         }
@@ -30,12 +33,16 @@ struct AlbumDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: "\(albumID)|\(model.library.revision)") {
-            let (id, history) = (albumID, model.library.history)
+            let (id, history, isLoaded) = (albumID, model.library.history, model.library.isLoaded)
             let next = await OffMainActor.run { StatsCalculator.albumProfile(id: id, history: history) }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: profile?.album.id == albumID, reduceMotion: reduceMotion) {
-                profile = next
+            // A lookup that changed nothing on this page doesn't redraw it.
+            if next != profile {
+                LiveUpdate.apply(isLive: profile?.album.id == albumID, reduceMotion: reduceMotion) {
+                    profile = next
+                }
             }
+            if isLoaded { loadedID = id }
         }
     }
 

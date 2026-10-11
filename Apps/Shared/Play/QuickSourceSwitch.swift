@@ -31,6 +31,7 @@ extension View {
 private struct QuickSourceSwitch: ViewModifier {
     @Environment(AppModel.self) private var model
     @Environment(YourMusic.self) private var music
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(QuickSwitch.storageKey) private var isOn = false
 
     func body(content: Content) -> some View {
@@ -56,7 +57,7 @@ private struct QuickSourceSwitch: ViewModifier {
                     if let suggestion {
                         SwitchSuggestion(suggestion: suggestion) { model.switchSource(to: suggestion.source) }
                             .padding(.bottom, 8)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .animation(.snappy, value: suggestion?.source)

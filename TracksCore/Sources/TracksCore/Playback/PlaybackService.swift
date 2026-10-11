@@ -42,6 +42,8 @@ public struct PlaybackItem: Sendable, Equatable {
 public enum PlaybackError: Error, Sendable, Equatable {
     case nothingToPlay
     case notSubscribed
+    /// With what happened in words for the person, as ``PlaybackFailure/words`` puts it.
+    /// The error behind it goes to the log, not here.
     case failed(String)
     /// The player couldn't start the song, so it opened it in Music for the person to play.
     /// Not a failure to report: it did what the person asked as far as it could.

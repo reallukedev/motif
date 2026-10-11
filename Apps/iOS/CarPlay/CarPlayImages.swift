@@ -4,6 +4,7 @@ import MediaPlayer
 import CoreImage.CIFilterBuiltins
 import MusicKit
 import TracksCore
+import CarPlay
 
 /// Pictures for CarPlay's templates, which take finished `UIImage`s rather than views. Covers
 /// are fetched and drawn at the car screen's scale, and everything Tracks draws itself (a mix's
@@ -18,9 +19,97 @@ enum CarPlayImages {
     private static func cached(_ key: String, _ make: () async -> UIImage) async -> UIImage {
         if let image = cache[key] { return image }
         let image = await make()
-        if cache.count > 400 { cache.removeAll() }
+        if cache.count > 400 {
+            cache.removeAll()
+            tints.removeAll()
+        }
         cache[key] = image
         return image
+    }
+
+    // MARK: - Many at once
+
+    /// Pictures for a row of tiles or a list, fetched side by side rather than one after another.
+    /// What isn't ready within `wait` gets its stand-in, so a slow connection never holds a tab
+    /// up, and arrives through `late` once it is.
+    static func batch(
+        _ count: Int,
+        wait: Duration = .milliseconds(1200),
+        standIn: (Int) -> UIImage,
+        late: @escaping @MainActor (Int, UIImage) -> Void = { _, _ in },
+        _ load: @escaping @MainActor (Int) async -> UIImage
+    ) async -> [UIImage] {
+        let found = await gather(count, wait: wait, late: late, load)
+        return (0..<count).map { found[$0] ?? standIn($0) }
+    }
+
+    /// The pictures that arrived within `wait`, by index; the rest come through `late`.
+    static func gather(
+        _ count: Int,
+        wait: Duration,
+        late: @escaping @MainActor (Int, UIImage) -> Void,
+        _ load: @escaping @MainActor (Int) async -> UIImage?
+    ) async -> [Int: UIImage] {
+        guard count > 0 else { return [:] }
+        let batch = Batch(remaining: count)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            batch.continuation = continuation
+            for index in 0..<count {
+                Task { @MainActor in
+                    let image = await load(index)
+                    if batch.isOpen {
+                        if let image { batch.images[index] = image }
+                        batch.remaining -= 1
+                        if batch.remaining == 0 { batch.finish() }
+                    } else if let image {
+                        late(index, image)
+                    }
+                }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: wait)
+                batch.finish()
+            }
+        }
+        return batch.images
+    }
+
+    /// Where pictures that arrive late go: the tiles or rows they belong to, once those are made.
+    @MainActor
+    final class Late {
+        private var setters: [(UIImage) -> Void] = []
+
+        func attach(_ elements: [CPListImageRowItemElement]) {
+            setters = elements.map { element in { element.image = $0 } }
+        }
+
+        func attach(_ rows: [CPListItem]) {
+            setters = rows.map { row in { row.setImage($0) } }
+        }
+
+        func set(_ index: Int, _ image: UIImage) {
+            guard setters.indices.contains(index) else { return }
+            setters[index](image)
+        }
+    }
+
+    @MainActor
+    private final class Batch {
+        var images: [Int: UIImage] = [:]
+        var remaining: Int
+        var isOpen = true
+        var continuation: CheckedContinuation<Void, Never>?
+
+        init(remaining: Int) {
+            self.remaining = remaining
+        }
+
+        func finish() {
+            guard isOpen else { return }
+            isOpen = false
+            continuation?.resume()
+            continuation = nil
+        }
     }
 
     // MARK: - Covers
@@ -108,11 +197,13 @@ enum CarPlayImages {
                 let single = await cover(url: covers.first?.url, seed: covers.first?.seed ?? mix.id, side: side, scale: scale)
                 return drawMosaic([single], symbol: symbol, side: side, scale: scale)
             }
-            var tiles: [UIImage] = []
-            for tile in covers.prefix(4) {
-                tiles.append(await cover(url: tile.url, seed: tile.seed, side: side / 2, scale: scale))
-            }
-            return drawMosaic(tiles, symbol: symbol, side: side, scale: scale)
+            // Side by side: four fetches one after another made a mix the slowest card.
+            let four = Array(covers.prefix(4))
+            async let first = cover(url: four[0].url, seed: four[0].seed, side: side / 2, scale: scale)
+            async let second = cover(url: four[1].url, seed: four[1].seed, side: side / 2, scale: scale)
+            async let third = cover(url: four[2].url, seed: four[2].seed, side: side / 2, scale: scale)
+            async let fourth = cover(url: four[3].url, seed: four[3].seed, side: side / 2, scale: scale)
+            return drawMosaic(await [first, second, third, fourth], symbol: symbol, side: side, scale: scale)
         }
     }
 
@@ -133,13 +224,26 @@ enum CarPlayImages {
     /// A card's colour from its own picture: the picture's average, made rich and deep enough
     /// for white type, as Apple Music colours its cards. Grey pictures stay grey.
     static func tint(of image: UIImage) -> UIColor {
+        let id = ObjectIdentifier(image)
+        if let known = tints[id] { return known.color }
+        let color = averageTint(of: image)
+        // Kept with the image, so the identifier can't be taken by another picture.
+        tints[id] = (image, color)
+        return color
+    }
+
+    private static var tints: [ObjectIdentifier: (image: UIImage, color: UIColor)] = [:]
+    /// One for every tint: a context is costly to make.
+    private static let averaging = CIContext(options: [.workingColorSpace: NSNull()])
+
+    private static func averageTint(of image: UIImage) -> UIColor {
         guard let source = image.cgImage.map(CIImage.init(cgImage:)) else { return .darkGray }
         let filter = CIFilter.areaAverage()
         filter.inputImage = source
         filter.extent = source.extent
         guard let output = filter.outputImage else { return .darkGray }
         var pixel = [UInt8](repeating: 0, count: 4)
-        CIContext(options: [.workingColorSpace: NSNull()]).render(
+        averaging.render(
             output, toBitmap: &pixel, rowBytes: 4,
             bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil
         )
@@ -160,6 +264,14 @@ enum CarPlayImages {
     static func mood(_ mood: Mood, side: CGFloat, scale: CGFloat) async -> UIImage {
         await cached("mood|\(mood.rawValue)|\(side)|\(scale)") {
             render(CarMoodTile(mood: mood, side: side), scale: scale)
+        }
+    }
+
+    /// A genre as the phone's tile draws it: its colour, and its symbol whole in the middle,
+    /// as a mood's, since the car sets the name under it.
+    static func genre(_ genre: MusicGenre, side: CGFloat, scale: CGFloat) async -> UIImage {
+        await cached("genre|\(genre.id)|\(side)|\(scale)") {
+            render(CarGenreTile(genre: genre, side: side), scale: scale)
         }
     }
 
@@ -393,6 +505,23 @@ private struct CarMoodTile: View {
     }
 }
 
+/// A genre for the car: its colour lit from the top, and its symbol whole in the middle.
+private struct CarGenreTile: View {
+    let genre: MusicGenre
+    let side: CGFloat
+
+    var body: some View {
+        ZStack {
+            HueField(color: genre.color)
+            Image(systemName: genre.symbol)
+                .font(.system(size: side * 0.34, weight: .semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.18), radius: side * 0.03, y: side * 0.01)
+        }
+        .frame(width: side, height: side)
+    }
+}
+
 /// Covers for your Apple Music library, which MusicKit only hands its own views: the same
 /// albums and playlists, looked up in the phone's media library by name.
 @MainActor
@@ -433,8 +562,6 @@ enum LibraryArtwork {
 }
 
 #if DEBUG
-import CarPlay
-
 extension CarPlayImages {
     /// `-TracksCarPlayArt YES`: draws the car's artwork on one sheet in the app's temporary
     /// folder, CarPlayArt.png, to check it without a car. Debug builds only.

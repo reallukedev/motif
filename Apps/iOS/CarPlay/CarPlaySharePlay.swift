@@ -30,7 +30,7 @@ extension CarPlaySceneDelegate {
     }
 
     func showSharePlay() {
-        guard let interface, sharePlayPage == nil else { return }
+        guard interface != nil, sharePlayPage == nil else { return }
         let sharePlay = SharePlayController.shared
         sharePlay.start(model: model)
         sharePlay.showCode(on: .car)
@@ -41,11 +41,11 @@ extension CarPlaySceneDelegate {
         watchSharePlay()
         // CarPlay takes five screens at most: this deep, the page starts a fresh trail from Now
         // Playing, which it goes back to.
-        if interface.templates.count >= 5 {
-            interface.popToRootTemplate(animated: false, completion: nil)
-            interface.pushTemplate(CPNowPlayingTemplate.shared, animated: false, completion: nil)
+        push(page) { [weak self] in
+            // Didn't make it on screen (another move under way): let it go, code and all.
+            guard let self, sharePlayPage === page, interface?.templates.contains(where: { $0 === page }) != true else { return }
+            sharePlayPageGone()
         }
-        interface.pushTemplate(page, animated: true, completion: nil)
     }
 
     /// Keeps the page current: the code, who's joined, what they've added. Closes it once
@@ -228,14 +228,14 @@ extension CarPlaySceneDelegate {
         let sheet = CPActionSheetTemplate(title: String(localized: "End SharePlay?"), message: message, actions: [
             CPAlertAction(title: String(localized: "End SharePlay"), style: .destructive) { [weak self] _ in
                 // Once the sheet has gone, so the page can close under nothing.
-                self?.interface?.dismissTemplate(animated: true) { _, _ in
+                self?.dismissSheet {
                     SharePlayController.shared.endHosting()
                 }
             },
             CPAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in
-                self?.interface?.dismissTemplate(animated: true, completion: nil)
+                self?.dismissSheet()
             },
         ])
-        interface?.presentTemplate(sheet, animated: true, completion: nil)
+        present(sheet)
     }
 }

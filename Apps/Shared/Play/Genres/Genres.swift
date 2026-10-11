@@ -209,16 +209,17 @@ private struct GenreKey: Equatable {
     let songs: Int
 }
 
-/// A genre's tile: its colour, and the covers of what you play in it fanned at the top, or
-/// its symbol, large and faint, when you play none of it.
+/// A genre's tile: its page's field and its name in its page's type, with the covers of what
+/// you play in it fanned at the top, or its symbol, large and faint, when you play none of it.
 struct GenreTile: View {
     let item: GenreTileItem
     let height: CGFloat
 
     var body: some View {
+        let style = item.genre.style
         NavigationLink(value: PlayRoute.genre(item.genre)) {
             ZStack(alignment: .bottomLeading) {
-                HueField(color: item.genre.color)
+                RoomTileField(style: style)
                 if item.covers.isEmpty {
                     Image(systemName: item.genre.symbol)
                         .font(.system(size: height * 0.62, weight: .bold))
@@ -235,10 +236,11 @@ struct GenreTile: View {
                         .accessibilityHidden(true)
                 }
                 Text(item.genre.title)
-                    .font(.headline)
+                    .font(style.title.font(size: MoodTile.nameSize))
+                    .tracking(style.title.tracking * 0.5)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.7)
                     .padding(12)
             }
             .frame(width: height * 1.75, height: height)

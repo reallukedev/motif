@@ -73,7 +73,7 @@ struct GeneralSettingsPane: View {
 
     private var loginDetail: Text {
         if let error = behaviour.launchAtLoginError {
-            return Text("Couldn’t change Open at Login: \(error)").foregroundStyle(.ink(.red))
+            return Text(error).foregroundStyle(.ink(.red))
         }
         if behaviour.launchAtLoginNeedsApproval {
             return Text("Waiting for you to allow it in System Settings ▸ General ▸ Login Items.")

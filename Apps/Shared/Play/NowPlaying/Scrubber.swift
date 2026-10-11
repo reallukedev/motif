@@ -9,6 +9,8 @@ struct Scrubber: View {
     let time: () -> TimeInterval
     /// The song, whose audio quality shows between the times as Music shows Lossless.
     var track: PlayerTrack? = nil
+    /// How often it moves on while playing.
+    var interval: TimeInterval = 0.25
     let onSeek: (TimeInterval) -> Void
 
     @State private var dragFraction: Double?
@@ -16,7 +18,7 @@ struct Scrubber: View {
     @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.25, paused: !isPlaying || dragFraction != nil || !isOnScreen)) { _ in
+        TimelineView(.animation(minimumInterval: interval, paused: !isPlaying || dragFraction != nil || !isOnScreen)) { _ in
             let fraction = dragFraction ?? (duration > 0 ? min(1, max(0, time() / duration)) : 0)
             let elapsed = fraction * duration
             VStack(spacing: 8) {
@@ -65,7 +67,7 @@ struct Scrubber: View {
             }
         }
         // Its own element after the position, since it opens its details, and outside the
-        // timeline, which redraws four times a second. Centred on the times' line: a hidden
+        // timeline, which redraws as the song plays. Centred on the times' line: a hidden
         // line of the times' type is its anchor at every text size.
         .overlay(alignment: .bottom) {
             if let track {
@@ -75,6 +77,16 @@ struct Scrubber: View {
                     .overlay { AudioQualityBadge(track: track).fixedSize() }
             }
         }
+    }
+
+    /// Four times a second on the iPhone; once on the Mac, where each tick lays the whole
+    /// window out again.
+    static var platformInterval: TimeInterval {
+        #if os(macOS)
+        1
+        #else
+        0.25
+        #endif
     }
 
     /// "3:07", or "1:02:07" past an hour.

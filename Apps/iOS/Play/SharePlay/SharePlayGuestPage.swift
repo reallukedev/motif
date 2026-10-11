@@ -245,7 +245,7 @@ struct SharePlayGuestPage: View {
                     SearchSectionTitle("Up Next")
                     Spacer()
                     if snapshot.upNext.count > 5 {
-                        NavigationLink("Show All", value: UpNextPage())
+                        NavigationLink("See All", value: UpNextPage())
                             .font(.body)
                     }
                 }
@@ -652,7 +652,7 @@ private struct SharePlayAddGlyph: View {
     }
 }
 
-/// All of their Up Next that's been sent, from "Show All".
+/// All of their Up Next that’s been sent, from "See All".
 private struct SharePlayUpNextPage: View {
     private var sharePlay = SharePlayController.shared
 

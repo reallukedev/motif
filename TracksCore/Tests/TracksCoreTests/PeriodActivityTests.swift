@@ -105,4 +105,34 @@ struct PeriodActivityTests {
         let quiet = ChartPeriod.containing(date(2026, 9, 1), span: .week, calendar: calendar)
         #expect(history.activity(in: quiet, now: now, calendar: calendar).change == nil)
     }
+
+    /// Thursday evening against all of last week made every week look like a slump until
+    /// Saturday. And three one-minute songs aren't more listening than two whole ones.
+    @Test("a week under way is compared in listening time with last week up to the same point")
+    func changeComparesListeningSoFar() throws {
+        let monday = date(2026, 9, 14)
+        let history = ListeningHistory([
+            // Last week: three songs a minute apart, so 60, 60 and a typical song's seconds.
+            play("A", at: monday),
+            play("B", at: monday.addingTimeInterval(60)),
+            play("C", at: monday.addingTimeInterval(120)),
+            // Friday, later in the week than this one has reached.
+            play("D", at: date(2026, 9, 18)),
+            // This week: two whole songs.
+            play("E", at: date(2026, 9, 22)),
+            play("F", at: date(2026, 9, 23)),
+        ])
+        let period = ChartPeriod.containing(now, span: .week, calendar: calendar)
+        let activity = history.activity(in: period, now: now, calendar: calendar)
+        let song = ListeningEstimate.typicalSongSeconds
+        #expect(activity.previousPlays == 3)
+        #expect(activity.previousSeconds == 120 + song)
+        let change = try #require(activity.change)
+        #expect(abs(change - (2 * song - (120 + song)) / (120 + song)) < 0.000_1)
+
+        // Once the week is over, it's compared with the whole week before it.
+        let later = history.activity(in: period, now: date(2026, 10, 1), calendar: calendar)
+        #expect(later.previousPlays == 4)
+        #expect(later.previousSeconds == 120 + 2 * song)
+    }
 }

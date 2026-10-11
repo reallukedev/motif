@@ -3,43 +3,57 @@ import CarPlay
 import MusicKit
 import TracksCore
 
-/// Radio: everything that plays on its own once started. Tracks Radio heads the tab as a
-/// station of its own, every mood sits under it as a tile with Driving first, and Apple's live
-/// stations follow.
+/// Radio: everything that plays on its own once started, each a tap from playing. Tracks Radio
+/// heads the tab as a station of its own, every mood and your genres sit under it as tiles,
+/// Driving first, and Apple's live stations follow.
 extension CarPlaySceneDelegate {
     func radioSections() async -> [CPListSection] {
         let feed = model.playFeed
         let player = model.player
         let model = self.model
-        var sections: [CPListSection] = []
+        var sections = accessSection()
 
         radioRowState = radioState.rawValue
         if let row = await tracksRadioRow() {
             sections.append(CPListSection(items: [row]))
         }
 
-        // Every mood, as the phone's tiles, a tap from playing. Driving first: it's the car.
+        // Every mood, as the phone's tiles. Drawn, never fetched, so the tab is never empty.
         let moods = [Mood.drive] + Mood.allCases.filter { $0 != .drive }
-        var tiles: [CPListImageRowItemImageGridElement] = []
+        let side = CPListImageRowItemImageGridElement.maximumImageSize.height
+        var moodTiles: [CPListImageRowItemImageGridElement] = []
         for mood in moods {
-            let image = await CarPlayImages.mood(mood, side: CPListImageRowItemImageGridElement.maximumImageSize.height, scale: scale)
-            let tile = CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: mood.title, accessorySymbolName: nil)
-            tiles.append(tile)
+            let image = await CarPlayImages.mood(mood, side: side, scale: scale)
+            moodTiles.append(CPListImageRowItemImageGridElement(image: image, imageShape: .roundedRectangle, title: mood.title, accessorySymbolName: nil))
         }
-        let row = CPListImageRowItem(text: nil, imageGridElements: tiles, allowsMultipleLines: true)
-        row.listImageRowHandler = { [weak self] _, index, completion in
+        // On as many lines as they need: CarPlay draws every one, past its usual eight.
+        let moodRow = CPListImageRowItem(text: String(localized: "Moods"), imageGridElements: moodTiles, allowsMultipleLines: true)
+        moodRow.listImageRowHandler = { [weak self] _, index, completion in
             guard moods.indices.contains(index) else { return completion() }
             let mood = moods[index]
             self?.play({ await MoodPlayback.start(mood, model: model) }, completion: completion)
         }
-        sections.append(CPListSection(items: [row], header: String(localized: "Find Your Mood"), sectionIndexTitle: nil))
+        sections.append(CPListSection(items: [moodRow]))
+
+        if let genres = await genreSection() {
+            sections.append(genres)
+        }
 
         // Apple's stations only play from Apple Music. The cover's LIVE tag says what they
         // are, so a row only has a line when the station has something of its own to say.
         if model.musicSource == .appleMusic, !feed.liveStations.isEmpty {
+            let stations = Array(feed.liveStations.prefix(12))
+            let rowSide = CPListItem.maximumImageSize.height
             var items: [CPListItem] = []
-            for station in feed.liveStations {
-                let cover = await CarPlayImages.cover(for: station, side: CPListItem.maximumImageSize.height, scale: scale)
+            let late = CarPlayImages.Late()
+            let covers = await CarPlayImages.batch(stations.count, standIn: { _ in
+                CarPlayImages.placeholder(symbol: "dot.radiowaves.left.and.right", side: rowSide, scale: self.scale)
+            }, late: { index, image in
+                late.set(index, stations[index].isLive ? CarPlayImages.live(image) : image)
+            }) { [scale] index in
+                await CarPlayImages.cover(for: stations[index], side: rowSide, scale: scale)
+            }
+            for (station, cover) in zip(stations, covers) {
                 let line = station.subtitle.flatMap { $0.isEmpty ? nil : $0 }
                 let item = CPListItem(text: station.title, detailText: line, image: station.isLive ? CarPlayImages.live(cover) : cover)
                 item.isPlaying = isPlaying(station.title)
@@ -48,6 +62,7 @@ extension CarPlaySceneDelegate {
                 }
                 items.append(item)
             }
+            late.attach(items)
             sections.append(CPListSection(items: items, header: String(localized: "Live Radio"), sectionIndexTitle: nil))
         }
         return sections
@@ -107,12 +122,12 @@ extension CarPlaySceneDelegate {
         let player = model.player
         switch radioState {
         case .playing:
-            showNowPlaying()
             completion()
+            showNowPlaying()
         case .paused:
             player.togglePlayPause()
-            showNowPlaying()
             completion()
+            showNowPlaying()
         case .idle, .off:
             play({ await player.startTracksRadio() }, completion: completion)
         }

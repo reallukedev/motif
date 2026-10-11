@@ -53,8 +53,10 @@ struct TracksApp: App {
         }
         .defaultSize(width: 1180, height: 800)
         .commands {
+            // One main window, as Music has: Window > Tracks brings it back once closed.
+            CommandGroup(replacing: .newItem) {}
             TracksCommands(model: model)
-            ControlsCommands(player: model.player)
+            ControlsCommands(model: model)
         }
         .onChange(of: scenePhase) { _, phase in
             // A Mac window can sit closed for days with the app still running, so coming
@@ -79,6 +81,8 @@ struct TracksApp: App {
 
         Settings {
             MacSettingsView(model: model)
+                // Its moving background previews rest while Settings is hidden or covered.
+                .tracksOnScreen()
                 .modelContainer(for: model.store)
                 .environment(behaviour)
         }
@@ -119,6 +123,7 @@ struct TracksApp: App {
 struct TracksCommands: Commands {
     @Bindable var model: AppModel
     @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
+    @FocusedValue(\.refreshPage) private var refreshPage
 
     var body: some Commands {
         CommandGroup(before: .toolbar) {
@@ -131,29 +136,19 @@ struct TracksCommands: Commands {
                 .labelStyle(.titleAndIcon)
             }
             Divider()
+            // The page's own pull to refresh, where it has one.
+            Button("Refresh", systemImage: "arrow.clockwise") { refreshPage?() }
+                .keyboardShortcut("r", modifiers: .command)
+                .labelStyle(.titleAndIcon)
+                .disabled(refreshPage == nil)
+            Divider()
         }
 
         CommandGroup(after: .newItem) {
+            // No shortcut: ⌘R is View > Refresh.
             Button("Check for Missed Songs", systemImage: "arrow.clockwise") {
                 Task { await model.capture?.catchUp() }
             }
-            .keyboardShortcut("r", modifiers: .command)
-            .labelStyle(.titleAndIcon)
-            .disabled(model.isShowingSampleData)
-
-            Divider()
-
-            Button("Play Back Today", systemImage: "play.circle") {
-                Task { await model.playback?.playBackToday() }
-            }
-            .keyboardShortcut("p", modifiers: [.command, .shift])
-            .labelStyle(.titleAndIcon)
-            .disabled(model.isShowingSampleData)
-
-            Button("Save Current Radio Song", systemImage: "plus.circle") {
-                Task { await model.capture?.captureCurrentSong() }
-            }
-            .keyboardShortcut("s", modifiers: [.command, .shift])
             .labelStyle(.titleAndIcon)
             .disabled(model.isShowingSampleData)
         }

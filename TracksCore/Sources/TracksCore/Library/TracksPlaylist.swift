@@ -51,13 +51,24 @@ public struct TracksPlaylist: Codable, Sendable, Hashable, Identifiable {
         /// Songs, by identity, that couldn't be found for this playlist, so a merge doesn't look
         /// for them every time Tracks opens.
         public var notFound: [String]
+        /// Songs here, by identity, that Apple Music knows by another name, with that name.
+        /// `nil` on a link merged before these were kept, whose `seen` has both names mixed.
+        public var matched: [String: String]?
         public var mergedAt: Date?
 
-        public init(playlistID: String, name: String, seen: [String] = [], notFound: [String] = [], mergedAt: Date? = nil) {
+        public init(
+            playlistID: String,
+            name: String,
+            seen: [String] = [],
+            notFound: [String] = [],
+            matched: [String: String]? = [:],
+            mergedAt: Date? = nil
+        ) {
             self.playlistID = playlistID
             self.name = name
             self.seen = seen
             self.notFound = notFound
+            self.matched = matched
             self.mergedAt = mergedAt
         }
     }

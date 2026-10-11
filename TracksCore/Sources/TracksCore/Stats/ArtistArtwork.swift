@@ -2,28 +2,54 @@ import Foundation
 
 /// Artist pictures from Apple Music, by ``CaptureStat/artistIdentity``.
 ///
-/// Kept in the App Group's defaults rather than the store. The pictures are derived, each
-/// device can look them up again, and a new synced field would need the CloudKit schema
-/// deployed again.
+/// Kept in a file rather than the store. The pictures are derived, each device can look them
+/// up again, and a new synced field would need the CloudKit schema deployed again. Not in the
+/// App Group's defaults either, where they used to be: one entry for every artist ever played
+/// grew without end there, and every widget and the menu bar load those defaults whole to
+/// read a setting.
 public struct ArtistArtworkCache: Sendable {
-    public static let defaultsKey = "TracksArtistArtwork"
+    /// Where the pictures used to be kept, read once to move them.
+    public static let legacyDefaultsKey = "TracksArtistArtwork"
 
+    private let url: URL?
     /// The suite name, not the `UserDefaults`, which isn't `Sendable`.
-    private let suiteName: String?
+    private let legacySuiteName: String?
 
-    /// Falls back to standard defaults without an App Group (previews, tests).
-    public init(suiteName: String? = AppGroup.identifier) {
-        self.suiteName = suiteName
+    /// Application Support by default. Nil keeps nothing, for previews and tests.
+    public init(url: URL? = Self.defaultURL, legacySuiteName: String? = AppGroup.identifier) {
+        self.url = url
+        self.legacySuiteName = legacySuiteName
     }
 
-    private var defaults: UserDefaults {
-        suiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
+    public static var defaultURL: URL? {
+        URL.applicationSupportDirectory.appending(path: "ArtistArtwork.json")
     }
 
     /// Every lookup so far. An empty string means Apple Music had no picture, so the artist
     /// isn't asked about again.
     private var stored: [String: String] {
-        defaults.dictionary(forKey: Self.defaultsKey) as? [String: String] ?? [:]
+        guard let url else { return [:] }
+        if let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            return decoded
+        }
+        return movedFromDefaults()
+    }
+
+    /// The lookups kept in the App Group's defaults before, written to the file and taken out
+    /// of the defaults.
+    private func movedFromDefaults() -> [String: String] {
+        let defaults = legacySuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
+        guard let legacy = defaults.dictionary(forKey: Self.legacyDefaultsKey) as? [String: String] else { return [:] }
+        if save(legacy) { defaults.removeObject(forKey: Self.legacyDefaultsKey) }
+        return legacy
+    }
+
+    @discardableResult
+    private func save(_ lookups: [String: String]) -> Bool {
+        guard let url, let data = try? JSONEncoder().encode(lookups) else { return false }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return (try? data.write(to: url, options: .atomic)) != nil
     }
 
     /// Artists already looked up, with or without a picture.
@@ -37,7 +63,7 @@ public struct ArtistArtworkCache: Sendable {
     public func record(found: [String: String], asked: some Sequence<String>) {
         var updated = stored
         for identity in asked { updated[identity] = found[identity] ?? "" }
-        defaults.set(updated, forKey: Self.defaultsKey)
+        save(updated)
     }
 
     /// Forgets the artists Apple Music had no picture for, so they're asked about again.
@@ -48,10 +74,11 @@ public struct ArtistArtworkCache: Sendable {
     /// - Returns: how many artists will be asked about again.
     @discardableResult
     public func forgetMissing() -> Int {
-        let kept = urls
-        let forgotten = stored.count - kept.count
+        let all = stored
+        let kept = all.filter { !$0.value.isEmpty }
+        let forgotten = all.count - kept.count
         guard forgotten > 0 else { return 0 }
-        defaults.set(kept, forKey: Self.defaultsKey)
+        save(kept)
         return forgotten
     }
 }

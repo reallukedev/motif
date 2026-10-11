@@ -39,30 +39,37 @@ struct ChartPlayback: DynamicProperty {
     }
 }
 
-/// A chart entry's menu: play a song, queue it, or open its stats where the row itself doesn't.
+/// A chart entry's menu: a song's own menu, with Play first; an artist's or album's stats.
 struct ChartEntryMenu: View {
     let entry: ChartEntry
-    /// Your Stats, on the Mac, where a click only selects the row.
+    /// Your Stats, where a click doesn't already open them.
     var openStats: (() -> Void)?
     private var playback = ChartPlayback()
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.openPlayRoute) private var openPlayRoute
+
+    init(entry: ChartEntry, openStats: (() -> Void)? = nil) {
+        self.entry = entry
+        self.openStats = openStats
+    }
 
     var body: some View {
-        if let song = entry.song, !playback.playable([song]).isEmpty {
-            Button("Play", systemImage: "play") {
-                playback.play([song], title: song.title)
-            }
-            if playback.canQueue {
-                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                    playback.enqueue(song, next: true)
-                }
-                Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") {
-                    playback.enqueue(song, next: false)
-                }
-            }
-            if openStats != nil { Divider() }
-        }
-        if let openStats {
+        if let song = entry.song {
+            SongMenuItems(actions(for: song))
+        } else if let openStats {
             Button("Your Stats", systemImage: "chart.bar.xaxis", action: openStats)
         }
+    }
+
+    private func actions(for song: MixSong) -> SongActions {
+        let canPlay = !playback.playable([song]).isEmpty
+        var actions = SongActions.history(song, player: player, go: openPlayRoute.ifPushes)
+        actions.play = canPlay ? { playback.play([song], title: song.title) } : nil
+        if !canPlay || !playback.canQueue {
+            actions.playNext = nil
+            actions.playLast = nil
+        }
+        if let openStats { actions.stats = openStats }
+        return actions
     }
 }

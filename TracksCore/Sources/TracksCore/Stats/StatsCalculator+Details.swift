@@ -91,7 +91,8 @@ extension StatsCalculator {
         let lastDay = calendar.startOfDay(for: last)
         while cursor <= lastDay {
             if calendar.isDateInWeekend(cursor) { weekendDays += 1 } else { weekdayDays += 1 }
-            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            // The day's end, not a day added: see `timeline`.
+            guard let next = calendar.dateInterval(of: .day, for: cursor)?.end, next > cursor else { break }
             cursor = next
         }
 
@@ -186,8 +187,12 @@ extension StatsCalculator {
     /// saves asking the calendar for the hour, minute and second of every play. On the two
     /// days a year they do change, the calendar is asked.
     static func clockSeconds(of date: Date, in day: DateInterval, calendar: Calendar) -> Int {
-        let zone = calendar.timeZone
-        if zone.secondsFromGMT(for: day.start) == zone.secondsFromGMT(for: day.end.addingTimeInterval(-1)) {
+        clockSeconds(of: date, in: day, isSteady: DayClock.isSteady(day, calendar: calendar), calendar: calendar)
+    }
+
+    /// The same, with ``DayClock/isSteady(_:calendar:)`` already worked out for `day`.
+    static func clockSeconds(of date: Date, in day: DateInterval, isSteady: Bool, calendar: Calendar) -> Int {
+        if isSteady {
             return Int(date.timeIntervalSince(day.start))
         }
         let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
@@ -213,10 +218,14 @@ extension StatsCalculator {
         var earliest: (offset: Int, date: Date)?
 
         var dayCursor = CalendarUnitCursor(calendar: calendar, unit: .day)
+        var steadyDay: (start: Date, isSteady: Bool)?
         for index in indices {
             let capture = history.captures[index]
             guard let day = dayCursor.interval(containing: capture.capturedAt) else { continue }
             let dayStart = day.start
+            if steadyDay?.start != dayStart {
+                steadyDay = (dayStart, DayClock.isSteady(day, calendar: calendar))
+            }
             days[dayStart, default: Day()].seconds += history.seconds[index]
             days[dayStart, default: Day()].songs += 1
             if !capture.artistIdentity.isEmpty {
@@ -227,7 +236,9 @@ extension StatsCalculator {
 
             // Recovered songs carry the time Tracks found them, not when they played.
             guard capture.kind.timeIsKnown else { continue }
-            let sinceMidnight = clockSeconds(of: capture.capturedAt, in: day, calendar: calendar)
+            let sinceMidnight = clockSeconds(
+                of: capture.capturedAt, in: day, isSteady: steadyDay?.isSteady ?? false, calendar: calendar
+            )
             let offset = (sinceMidnight - 5 * 3_600 + 86_400) % 86_400
             // `>=` and `<=` so ties go to the most recent.
             if latest.map({ offset >= $0.offset }) ?? true { latest = (offset, capture.capturedAt) }

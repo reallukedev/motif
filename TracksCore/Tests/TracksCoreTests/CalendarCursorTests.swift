@@ -8,8 +8,9 @@ import Testing
 struct CalendarCursorTests {
 
     /// New York changes its clocks on 8 March and 1 November 2026. Sydney changes the other
-    /// way, and Kathmandu is off by a quarter hour with no changes at all.
-    static let zones = ["America/New_York", "Australia/Sydney", "Asia/Kathmandu", "UTC"]
+    /// way, and Kathmandu is off by a quarter hour with no changes at all. Santiago changes at
+    /// midnight, so on 7 September 2025 the day starts at 1 AM.
+    static let zones = ["America/New_York", "Australia/Sydney", "Asia/Kathmandu", "America/Santiago", "UTC"]
 
     private static func calendar(_ zone: String) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -25,6 +26,8 @@ struct CalendarCursorTests {
             (1_772_755_200, 5), // 6 March 2026
             (1_775_001_600, 7), // 1 April 2026, Sydney's change on the 5th
             (1_793_145_600, 5), // 30 October 2026
+            (1_743_724_800, 4), // 4 April 2025, Santiago's change on the 6th
+            (1_757_030_400, 4), // 5 September 2025, Santiago's change on the 7th
         ]
         return windows.flatMap { window in
             stride(from: 0, to: window.days * 86_400, by: 17 * 60).map {

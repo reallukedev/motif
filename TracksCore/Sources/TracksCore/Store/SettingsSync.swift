@@ -11,8 +11,8 @@ import Foundation
 /// The key-value store is sized for exactly this: a kilobyte per key, a megabyte overall,
 /// against the couple of dozen small values in ``SyncedSetting/all``.
 ///
-/// Both directions are idempotent — a pull writes the local copy only when it differs, and a
-/// push compares against what it last saw — so the two devices settle instead of handing one
+/// Both directions are idempotent: a pull writes the local copy only when it differs, and a
+/// push compares against what it last saw, so the two devices settle instead of handing one
 /// change back and forth.
 @MainActor
 public final class SettingsSync {
@@ -44,6 +44,8 @@ public final class SettingsSync {
     /// `UserDefaults` saying which key moved.
     private var snapshot: [String: Any] = [:]
     private var observers: [NSObjectProtocol] = []
+    /// Set while ``pull(keys:)`` writes iCloud's values into the defaults.
+    private var isPulling = false
 
     /// The mirror for this process, or nil when there is nothing to mirror to.
     ///
@@ -148,6 +150,11 @@ public final class SettingsSync {
     /// - Returns: the keys whose local value changed.
     @discardableResult
     func pull(keys: [String]) -> [String] {
+        // Each write below fires the defaults' change observer before the snapshot and stamp
+        // have caught up, and the push it runs would send the pulled value back up as a
+        // change made here, now.
+        isPulling = true
+        defer { isPulling = false }
         var changed: [String] = []
         var stamps = localModifiedAt
 
@@ -179,7 +186,7 @@ public final class SettingsSync {
                 changed.append(key)
 
             case .unionBoth:
-                let merged = Self.union(localValue, remoteValue)
+                let merged = Self.union(localValue, remoteValue, forKey: key)
                 let stamp = max(
                     stamps[key] ?? 0,
                     remoteModifiedAt?.timeIntervalSince1970 ?? 0
@@ -208,6 +215,7 @@ public final class SettingsSync {
     /// Driven by `UserDefaults.didChangeNotification`, which fires for any key in the suite
     /// and doesn't say which, so the work is the diff rather than the notification.
     func pushLocalChanges() {
+        guard !isPulling else { return }
         let current = Self.read(settings, from: defaults)
         let moved = settings.filter { !Self.isEqual(current[$0.key], snapshot[$0.key]) }
         guard !moved.isEmpty else { return }
@@ -225,7 +233,7 @@ public final class SettingsSync {
                 // A union key's local copy may be missing entries another device added and
                 // this one hasn't pulled yet, so push the union rather than the local set.
                 let remote = (cloud.object(forKey: key) as? [String: Any])?[Self.valueField]
-                value = Self.union(current[key], remote)
+                value = Self.union(current[key], remote, forKey: key)
             }
             stamps[key] = now
             write(value, forKey: key, modifiedAt: now)
@@ -242,7 +250,7 @@ public final class SettingsSync {
     /// to make: its settings were chosen long ago and have been sitting in `UserDefaults`
     /// ever since. Without this, an upgraded device puts nothing into iCloud until the user
     /// happens to change a setting, and a second device would find the store empty and keep
-    /// its own defaults — which looks exactly like sync not working.
+    /// its own defaults, which looks exactly like sync not working.
     ///
     /// Seeded values are dated 1970, so a real change made on any device at any time beats
     /// them. Where two devices both seed a key, the first to run the new build wins it; the
@@ -316,9 +324,16 @@ public final class SettingsSync {
 
     /// Both sides of a ``SyncedSetting/Merge/union`` key, sorted so every device stores the
     /// same array and neither sees the other's copy as a change.
-    static func union(_ lhs: Any?, _ rhs: Any?) -> [String] {
+    ///
+    /// A list that trims itself is trimmed again here. Each device only trims its own copy,
+    /// and the union would otherwise put back everything the other device still had.
+    static func union(_ lhs: Any?, _ rhs: Any?, forKey key: String, now: Date = .now) -> [String] {
         let left = lhs as? [String] ?? []
         let right = rhs as? [String] ?? []
-        return Set(left).union(right).sorted()
+        let joined = Set(left).union(right).sorted()
+        guard key == CaptureSettings.passedOverSongsKey else { return joined }
+        var passedOver = PassedOverSongs(joined)
+        passedOver.trim(now: now)
+        return passedOver.entries
     }
 }

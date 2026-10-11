@@ -6,10 +6,10 @@ import TracksCore
 /// Tracks in the car: four tabs made for a glance and one tap, as Music has them, built from
 /// CarPlay's own templates so they look and work like the rest of the car.
 ///
-/// - Listen Now leads with large cards (where you left off, the mix for right now, Tracks
-///   Radio), then what you played last, your mixes, and your week.
-/// - Radio opens on Tracks Radio's own header, then every mood as a tile, then Apple's live
-///   stations.
+/// - Listen Now leads with large cards (where you left off, Tracks Radio, the mix for right
+///   now), then what you played last, your mixes, and your week.
+/// - Radio opens on Tracks Radio, then every mood and your genres as tiles, each a tap from
+///   playing, then Apple's live stations.
 /// - Library opens Playlists, Artists, Albums, Songs and Downloaded as pages, an album or
 ///   playlist with Play and Shuffle at the top, as Music's do.
 /// - Search is Siri, since CarPlay gives music apps a voice rather than a keyboard, and your
@@ -32,6 +32,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// UserDefaults, where nothing observable says they changed.
     private var settingsObserver: NSObjectProtocol?
     private var shownSettings: (radio: Bool, autoplay: Bool)?
+    private var showsAccessProblem = false
     /// What each tab was last built from, so a tab only reloads when something on it changed.
     /// A reload while someone's scrolling moves the list under their finger.
     private var builtFrom: [ObjectIdentifier: Int] = [:]
@@ -52,6 +53,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var sharePlayPage: CPListTemplate?
     var sharePlayWatch: Task<Void, Never>?
     var sharePlayCode: (invite: SharePlayInvite, image: UIImage)?
+    /// A push, pop or sheet under way, so a second tap can't start another inside it.
+    var isMoving = false
+    var moveID = 0
+    /// Whether Now Playing is on screen, for the ring's ticker, which only runs while it is.
+    var isNowPlayingShown = false
+    /// Your genres as last worked out, and what from, since it walks the whole history.
+    var genres: (key: String, items: [GenreTileItem])?
+    private var listenRefresh: Task<Void, Never>?
+    private var libraryRefresh: Task<Void, Never>?
 
     lazy var listenNow = tab(String(localized: "Listen Now"), symbol: "play.circle.fill")
     lazy var radio = tab(String(localized: "Radio"), symbol: "dot.radiowaves.left.and.right")
@@ -80,7 +90,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
         let tabs = CPTabBarTemplate(templates: hasSearch ? [listenNow, radio, library, search] : [listenNow, radio, library])
         tabs.delegate = self
-        interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
+        interfaceController.setRootTemplate(tabs, animated: false) { _, error in
+            if let error { Self.log.error("CarPlay couldn't show its tabs: \(error.localizedDescription, privacy: .public)") }
+        }
+        // Radio's moods are drawn here, not fetched, so it's never a blank tab while the rest loads.
+        refreshRadioList()
 
         // The car can start Tracks with no phone window, so nothing else has started capture,
         // or listened for SharePlay.
@@ -88,12 +102,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         SharePlayController.shared.start(model: model)
         Task {
             await model.prepareForPlaying()
-            rebuild()
+            rebuild(after: .zero)
             await model.playFeed.loadAppleMusic()
             await model.playFeed.loadFromYourArtists()
             rebuild()
         }
         shownSettings = (PlayPreferences.isTracksRadioOn, PlayPreferences.autoplay)
+        showsAccessProblem = needsAppleMusicAccess
         settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.settingsMayHaveChanged() }
         }
@@ -125,15 +140,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         watch?.cancel()
         refresh?.cancel()
+        listenRefresh?.cancel()
+        libraryRefresh?.cancel()
         radioRefresh?.cancel()
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
         settingsObserver = nil
         nowPlayingWatch?.cancel()
         keepTicker?.cancel()
+        keepTicker = nil
         CPNowPlayingTemplate.shared.remove(self)
         if sharePlayPage != nil { sharePlayPageGone() }
         sharePlayCode = nil
         interface = nil
+        isMoving = false
+        isNowPlayingShown = false
         queue = nil
         isQueueShown = false
         radioRowState = nil
@@ -151,13 +171,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     // MARK: - Screens coming and going
 
     /// SharePlay's code works while its page is on screen: covered by another screen or popped,
-    /// it's hidden, and back on top, shown again.
+    /// it's hidden, and back on top, shown again. Now Playing's ring only ticks while it's shown.
     func templateWillAppear(_ aTemplate: CPTemplate, animated: Bool) {
+        if aTemplate === CPNowPlayingTemplate.shared {
+            isNowPlayingShown = true
+            updateNowPlayingButtons()
+            updateKeepTicker()
+        }
         guard let page = sharePlayPage, aTemplate === page else { return }
         SharePlayController.shared.showCode(on: .car)
     }
 
     func templateDidDisappear(_ aTemplate: CPTemplate, animated: Bool) {
+        if aTemplate === CPNowPlayingTemplate.shared {
+            isNowPlayingShown = false
+            updateKeepTicker()
+        }
         guard let page = sharePlayPage, aTemplate === page else { return }
         if interface?.templates.contains(where: { $0 === page }) == true {
             SharePlayController.shared.hideCode(on: .car)
@@ -188,34 +217,39 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         template.tabTitle = title
         template.tabImage = UIImage(systemName: symbol)
         template.emptyViewTitleVariants = [String(localized: "Loading…")]
+        template.showsSpinnerWhileEmpty = true
         return template
     }
 
     /// Rebuilds the tabs a moment after the last change, since a capture changes the history,
-    /// the mixes and the stats one after another. A tab whose rows came out the same is left
-    /// alone.
-    private func rebuild() {
+    /// the mixes and the stats one after another. Each tab on its own, so one waiting on covers
+    /// doesn't hold up the others. A tab whose rows came out the same is left alone.
+    private func rebuild(after delay: Duration = .milliseconds(500)) {
         refresh?.cancel()
         refresh = Task {
-            try? await Task.sleep(for: .milliseconds(500))
+            if delay > .zero { try? await Task.sleep(for: delay) }
             guard !Task.isCancelled else { return }
-            let listen = await listenNowSections()
-            guard !Task.isCancelled else { return }
-            update(listenNow, listen)
-            let stations = await radioSections()
-            guard !Task.isCancelled else { return }
-            update(radio, stations)
             // The recent searches are the source's own.
             update(search, searchSections())
+            refreshRadioList()
+            listenRefresh?.cancel()
+            listenRefresh = Task {
+                let sections = await listenNowSections()
+                guard !Task.isCancelled else { return }
+                update(listenNow, sections)
+            }
             // The library doesn't change with a capture: once, and again if the source,
             // access, or your own music changes.
             let music = model.yourMusic
             let key = model.musicSource == .yourMusic
                 ? "yourMusic.\(music.index.albums.count).\(music.playlists.all.count).\(music.downloads.items.isEmpty)"
                 : "appleMusic.\(MusicAuthorization.currentStatus)"
-            if libraryBuiltFor != key {
+            guard libraryBuiltFor != key else { return }
+            libraryRefresh?.cancel()
+            libraryRefresh = Task {
                 let shelves = model.musicSource == .yourMusic ? await yourMusicLibrarySections() : await appleMusicLibrarySections()
                 guard !Task.isCancelled else { return }
+                library.showsSpinnerWhileEmpty = false
                 library.updateSections(shelves)
                 libraryBuiltFor = key
             }
@@ -225,6 +259,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Redraws what shows a setting when one the car shows has changed: any change to
     /// UserDefaults lands here, most of them nothing to do with the car.
     private func settingsMayHaveChanged() {
+        // Apple Music access, turned on in Settings, says nothing either.
+        if needsAppleMusicAccess != showsAccessProblem {
+            showsAccessProblem = needsAppleMusicAccess
+            rebuild()
+        }
         let now = (radio: PlayPreferences.isTracksRadioOn, autoplay: PlayPreferences.autoplay)
         guard let shown = shownSettings, shown != now else { return }
         shownSettings = now
@@ -242,11 +281,31 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
-    private func update(_ template: CPListTemplate, _ sections: [CPListSection]) {
+    func update(_ template: CPListTemplate, _ sections: [CPListSection]) {
+        // Built once: from here an empty tab says why, rather than spinning.
+        template.showsSpinnerWhileEmpty = false
+        let sections = Self.capped(sections)
         let signature = Self.signature(of: sections)
         guard builtFrom[ObjectIdentifier(template)] != signature else { return }
         builtFrom[ObjectIdentifier(template)] = signature
         template.updateSections(sections)
+    }
+
+    /// Sections cut to what CarPlay takes: past its limits it shows only the first anyway, and
+    /// the rows a list drops shouldn't be counted on by its handlers.
+    static func capped(_ sections: [CPListSection]) -> [CPListSection] {
+        var room = Int(CPListTemplate.maximumItemCount)
+        var kept: [CPListSection] = []
+        for section in sections.prefix(Int(CPListTemplate.maximumSectionCount)) where room > 0 {
+            guard section.items.count > room else {
+                kept.append(section)
+                room -= section.items.count
+                continue
+            }
+            kept.append(CPListSection(items: Array(section.items.prefix(room)), header: section.header, sectionIndexTitle: section.sectionIndexTitle))
+            room = 0
+        }
+        return kept
     }
 
     /// What a row plays, as a number for its `userInfo`, so a row that reads the same but plays
@@ -303,6 +362,25 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         PlayPreferences.isTracksRadioOn && model.library.history.captures.count >= 20
     }
 
+    /// Whether Apple Music is the source but Tracks can't play from it: asked for from the car,
+    /// the prompt would land on a phone no one is looking at.
+    var needsAppleMusicAccess: Bool {
+        !model.isDemoLaunch && model.musicSource == .appleMusic && MusicAuthorization.currentStatus != .authorized
+    }
+
+    /// Said at the top of a tab when nothing from Apple Music can play, rather than on every
+    /// tap: what's wrong, and what fixes it.
+    func accessSection() -> [CPListSection] {
+        guard needsAppleMusicAccess else { return [] }
+        let problem = PlayerProblem.accessDenied
+        let row = CPListItem(text: problem.title, detailText: problem.message, image: CarPlayImages.symbol("exclamationmark.triangle.fill", side: CPListItem.maximumImageSize.height, scale: scale))
+        row.handler = { [weak self] _, completion in
+            completion()
+            self?.show(problem)
+        }
+        return [CPListSection(items: [row])]
+    }
+
     /// Whether what's playing came from here: a mix, mood or station by its name.
     func isPlaying(_ title: String) -> Bool {
         model.player.hasQueue && model.player.context?.title == title
@@ -316,8 +394,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Asking for Apple Music access from the car would put a prompt on a phone no one is
         // looking at, and leave the row spinning. Decided here, not from a problem left over
         // from the phone, which would otherwise stop every row playing.
-        let needsAccess = !model.isDemoLaunch && model.musicSource == .appleMusic
-            && MusicAuthorization.currentStatus != .authorized
+        let needsAccess = needsAppleMusicAccess
         model.player.problem = needsAccess ? .accessDenied : nil
         Task { [weak self] in
             if !needsAccess { await action() }
@@ -332,38 +409,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
-    /// Brings Now Playing up: back to it when it's already open under a page (an album opened
-    /// from it), since CarPlay won't take the same screen twice.
-    func showNowPlaying() {
-        guard let interface else { return }
-        let nowPlaying = CPNowPlayingTemplate.shared
-        if interface.topTemplate === nowPlaying { return }
-        if interface.templates.contains(where: { $0 === nowPlaying }) {
-            interface.pop(to: nowPlaying, animated: true, completion: nil)
-            return
-        }
-        // CarPlay takes five screens at most, and Now Playing needs room above it for Up Next
-        // and the album. Played from deep in a tab, it starts a fresh trail from the tab.
-        if interface.templates.count >= Self.deepestBeforeNowPlaying {
-            interface.popToRootTemplate(animated: false, completion: nil)
-        }
-        interface.pushTemplate(nowPlaying, animated: true, completion: nil)
-    }
-
-    /// How many screens can sit under Now Playing and still leave one above it.
-    static let deepestBeforeNowPlaying = 4
-
     /// A problem in a sheet with what went wrong and what to do, since the car's alert only
     /// has room for a title.
-    private func show(_ problem: PlayerProblem) {
-        let sheet = CPActionSheetTemplate(
-            title: problem.title,
-            message: problem.message,
-            actions: [CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak self] _ in
-                self?.interface?.dismissTemplate(animated: true, completion: nil)
-            }]
-        )
-        interface?.presentTemplate(sheet, animated: true, completion: nil)
+    func show(_ problem: PlayerProblem) {
+        present(CPActionSheetTemplate(title: problem.title, message: problem.message, actions: [okAction()]))
     }
 }
-

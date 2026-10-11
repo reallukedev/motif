@@ -19,6 +19,49 @@ final class PlayerWindowState {
     var showsPanel = LaunchScene.opensQueue
     var panelPage = PlayerPanelPage.upNext
     var showsFullPlayer = LaunchScene.opensNowPlaying
+    /// The full player's own Up Next, in place of the song's details.
+    var fullPlayerShowsUpNext = false
+    /// The full player's sleeve turned over to your history with the song.
+    var fullPlayerShowsHistory = LaunchScene.opensSleeve
+    /// The window's pages in the order they appeared, the one in front last. A page pushed
+    /// over another doesn't make it disappear, so this is how the one under knows.
+    private(set) var pages: [UUID] = []
+
+    func pageAppeared(_ page: UUID) {
+        pages.removeAll { $0 == page }
+        pages.append(page)
+    }
+
+    func pageDisappeared(_ page: UUID) {
+        pages.removeAll { $0 == page }
+    }
+
+    /// Whether `page` is showing, in the full player while it's up or the bar's popover.
+    func isShowing(_ page: PlayerPanelPage, inFullPlayer: Bool) -> Bool {
+        guard inFullPlayer else { return showsPanel && panelPage == page }
+        switch page {
+        case .upNext: return fullPlayerShowsUpNext
+        case .history: return fullPlayerShowsHistory
+        }
+    }
+
+    /// Shows `page`, or hides it if it's showing: in the full player while it's up, since it
+    /// covers the bar the popover rises from.
+    func toggle(_ page: PlayerPanelPage, inFullPlayer: Bool) {
+        guard inFullPlayer else {
+            if showsPanel, panelPage == page {
+                showsPanel = false
+            } else {
+                panelPage = page
+                showsPanel = true
+            }
+            return
+        }
+        switch page {
+        case .upNext: fullPlayerShowsUpNext.toggle()
+        case .history: fullPlayerShowsHistory.toggle()
+        }
+    }
 }
 
 /// Every page of the main window wears the bar itself: a page pushed onto the window's stack
@@ -28,6 +71,8 @@ private struct NowPlayingBarPlacement: ViewModifier {
     @Environment(AppModel.self) private var model
     @Environment(PlayerWindowState.self) private var window: PlayerWindowState?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isOnScreen) private var isOnScreen
+    @State private var page = UUID()
 
     func body(content: Content) -> some View {
         if let window {
@@ -39,6 +84,9 @@ private struct NowPlayingBarPlacement: ViewModifier {
 
     private func placed(_ content: Content, window: PlayerWindowState) -> some View {
         @Bindable var window = window
+        // A page with another pushed over it stays, hidden, with its bar: it and everything
+        // on it rest until it's in front again.
+        let isInFront = window.pages.last.map { $0 == page } ?? true
         let remote = model.controlledDevice
         let isPresented = player.hasQueue || remote != nil
         let showsPanel = $window.showsPanel
@@ -61,7 +109,9 @@ private struct NowPlayingBarPlacement: ViewModifier {
             }
             .animation(reduceMotion ? nil : PlayMotion.panel, value: isPresented)
             .animation(reduceMotion ? nil : PlayMotion.panel, value: remote?.id)
-
+            .environment(\.isOnScreen, isOnScreen && isInFront)
+            .onAppear { window.pageAppeared(page) }
+            .onDisappear { window.pageDisappeared(page) }
     }
 }
 
@@ -147,7 +197,9 @@ struct NowPlayingBar: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.openFullPlayer) private var openFullPlayer
     @Environment(YourMusic.self) private var music
+    @Environment(\.openRadioTuner) private var openRadioTuner
     @State private var isDropTarget = false
+    @State private var room = Room()
 
     static let margin: CGFloat = 14
     static let height: CGFloat = 64
@@ -156,31 +208,21 @@ struct NowPlayingBar: View {
 
     var body: some View {
         if let track = player.current {
-            // Four widths, chosen by what fits: everything, then without shuffle and repeat,
-            // then without the times, then the song and play alone for a narrow window.
-            // Fixed tiers, never a measured width.
-            ViewThatFits(in: .horizontal) {
-                bar(track, tier: .full)
-                bar(track, tier: .medium)
-                bar(track, tier: .compact)
-                miniBar(track)
-            }
-            // One AirPlay button, over whichever width shows. ViewThatFits builds every width to
-            // measure it, and a new AVRoutePickerView each time can make the one on screen
-            // refresh, which lays the window out and measures again: every frame, for good.
-            .overlayPreferenceValue(AirPlaySlot.self) { slot in
-                GeometryReader { proxy in
-                    if let slot {
-                        let rect = proxy[slot]
-                        RoutePickerButton()
-                            .frame(width: rect.width, height: rect.height)
-                            .help("AirPlay")
-                            .position(x: rect.midX, y: rect.midY)
-                    }
+            let tier = player.sleepTimer == nil ? room.tier : room.tierWithTimer
+            Group {
+                if tier == .mini {
+                    miniBar(track)
+                } else {
+                    bar(track, tier: tier)
                 }
             }
+            // Its width comes from the page, never from what's in it, so the tier it measures
+            // can't change the width it was measured at.
+            .frame(minWidth: 0, maxWidth: Self.maxWidth)
             .frame(height: Self.height)
-            .frame(maxWidth: Self.maxWidth)
+            .onGeometryChange(for: Room.self) { proxy in
+                Room(width: proxy.size.width)
+            } action: { room = $0 }
             .glassEffect(.regular, in: .capsule)
             .overlay {
                 if isDropTarget {
@@ -207,12 +249,38 @@ struct NowPlayingBar: View {
             .animation(PlayMotion.hover, value: isDropTarget)
             .frame(maxWidth: .infinity)
             .contextMenu {
-                NowPlayingMenuItems(track: track)
+                NowPlayingMenuItems(track: track, onTuneRadio: openRadioTuner.map { open in { open() } })
             }
         }
     }
 
-    private enum Tier { case full, medium, compact }
+    /// Four widths: everything, then without shuffle and repeat, then without the times, then
+    /// the song and play alone for a narrow window. Only the one with room is built, since each
+    /// carries a ticking progress line.
+    private nonisolated enum Tier { case full, medium, compact, mini }
+
+    /// The tiers the bar's width has room for, with and without the sleep timer's time beside
+    /// the panel buttons. The same across most widths, so resizing seldom redraws the bar.
+    private nonisolated struct Room: Equatable {
+        var tier = Tier.full
+        var tierWithTimer = Tier.full
+
+        init() {}
+
+        /// From the columns' fixed widths: the sides (250, or 190 below full), the progress line
+        /// (300, or 200 compact) and the padding round them.
+        init(width: CGFloat) {
+            tier = Self.tier(for: width, timer: 0)
+            tierWithTimer = Self.tier(for: width, timer: 40)
+        }
+
+        private static func tier(for width: CGFloat, timer: CGFloat) -> Tier {
+            if width >= 840 { return .full }
+            if width >= 720 + timer { return .medium }
+            if width >= 620 { return .compact }
+            return .mini
+        }
+    }
 
     private func miniBar(_ track: PlayerTrack) -> some View {
         HStack(spacing: 6) {
@@ -259,9 +327,9 @@ struct NowPlayingBar: View {
                 PanelToggle(page: .upNext, systemImage: "list.bullet", title: "Up Next", shortcut: "⌥⌘U", showsPanel: $showsPanel, current: $panelPage)
                 if tier != .compact {
                     StageBarButton()
-                    Color.clear
+                    RoutePickerButton()
                         .frame(width: 30, height: 30)
-                        .anchorPreference(key: AirPlaySlot.self, value: .bounds) { $0 }
+                        .help("AirPlay")
                 }
             }
             .padding(.trailing, 8)
@@ -449,7 +517,7 @@ private struct BarTransport: View {
             }
             .buttonStyle(BarIconButtonStyle(diameter: 38))
             .overlay {
-                if player.isPlaying, player.status == .loading {
+                if player.isPlaying, player.status == .loading || Self.showsLoading {
                     TurningRing(diameter: 36, lineWidth: 2)
                         .allowsHitTesting(false)
                 }
@@ -468,6 +536,14 @@ private struct BarTransport: View {
             .accessibilityLabel("Next")
         }
     }
+
+    #if DEBUG
+    /// `-TracksDemoLoading YES` keeps the ring turning, since sample songs never buffer: for
+    /// measuring what it costs.
+    private static let showsLoading = UserDefaults.standard.bool(forKey: "TracksDemoLoading")
+    #else
+    private static let showsLoading = false
+    #endif
 }
 
 /// The song's progress: the time gone, a thin track that thickens under the pointer and can
@@ -582,34 +658,71 @@ private struct BarSleepTimer: View {
     @Environment(\.isOnScreen) private var isOnScreen
 
     var body: some View {
+        // The menu's label never changes while the timer runs: it holds the room for the
+        // longest time, and the ticking time is drawn over it. A menu whose label changes is
+        // rebuilt by AppKit every second.
         Menu {
             SleepTimerItems(player: player)
         } label: {
-            TimelineView(.animation(minimumInterval: 1, paused: !isOnScreen || player.sleepTimer == .endOfSong)) { context in
-                let label = label(at: context.date)
-                Label {
-                    // Sized by its digits as zeros with the ticking time drawn over it, so the
-                    // bar's widths aren't all measured again every second.
-                    Text(verbatim: label.replacing(/\d/, with: "0"))
-                        .hidden()
-                        .overlay(alignment: .leading) { Text(verbatim: label) }
-                        .monospacedDigit()
-                } icon: {
-                    Image(systemName: "moon.zzz.fill")
-                }
-                .font(.caption.weight(.semibold))
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz.fill")
+                time(longest).hidden()
             }
         }
         .menuStyle(.button)
-        .buttonStyle(.accessoryBar)
+        .buttonStyle(SleepTimerButtonStyle())
+        .menuIndicator(.hidden)
         .fixedSize()
+        .overlay(alignment: .trailing) {
+            TimelineView(.animation(minimumInterval: 1, paused: !isOnScreen || player.sleepTimer == .endOfSong)) { context in
+                time(longest)
+                    .hidden()
+                    .overlay(alignment: .leading) { time(label(at: context.date)) }
+            }
+            .padding(.trailing, SleepTimerButtonStyle.padding)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .help("Sleep Timer")
         .accessibilityLabel("Sleep Timer")
+    }
+
+    private func time(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+    }
+
+    /// The widest the time gets: its digits as zeros, from the hour or minutes it started at.
+    private var longest: String {
+        label(at: .now).replacing(/\d/, with: "0")
     }
 
     private func label(at date: Date) -> String {
         if player.sleepTimer == .endOfSong { return String(localized: "End of Song") }
         return player.sleepRemaining(at: date).map(Scrubber.format) ?? ""
+    }
+}
+
+/// The sleep timer's pill in the bar: a soft capsule under the pointer, as the bar's round
+/// buttons have.
+private struct SleepTimerButtonStyle: ButtonStyle {
+    static let padding: CGFloat = 8
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, Self.padding)
+            .frame(height: 26)
+            .background {
+                Capsule()
+                    .fill(.primary.opacity(configuration.isPressed ? 0.16 : isHovering ? 0.1 : 0.06))
+            }
+            .contentShape(.capsule)
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.13), value: isHovering)
     }
 }
 
@@ -672,15 +785,6 @@ struct BarIconButtonStyle: ButtonStyle {
             .onHover { isHovering = $0 }
             .animation(.easeOut(duration: 0.13), value: isHovering)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
-    }
-}
-
-/// Where the bar's AirPlay button goes, in the width that shows.
-private struct AirPlaySlot: PreferenceKey {
-    static let defaultValue: Anchor<CGRect>? = nil
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = value ?? nextValue()
     }
 }
 

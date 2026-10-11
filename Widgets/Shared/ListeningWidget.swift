@@ -144,7 +144,7 @@ struct ListeningWidgetView: View {
         Group {
             switch family {
             case .accessoryInline:
-                Label(Self.duration(entry.todaySeconds) + " " + String(localized: "today"), systemImage: "headphones")
+                Label("\(Self.duration(entry.todaySeconds)) today", systemImage: "headphones")
                     .privacySensitive()
             case .accessoryCircular:
                 circular
@@ -257,7 +257,7 @@ struct ListeningWidgetView: View {
             // Lock Screen accessories are the likeliest to be seen by someone else, so the
             // numbers are redacted when the device is locked and that's asked for. The label
             // above stays, so the widget still says what it is.
-            Text(Self.duration(entry.todaySeconds) + " " + String(localized: "today"))
+            Text("\(Self.duration(entry.todaySeconds)) today")
                 .font(.headline)
                 .privacySensitive()
             Text(entry.streak > 1 ? "^[\(entry.streak) day](inflect: true) in a row" : "^[\(entry.todaySongs) song](inflect: true)")

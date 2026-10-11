@@ -46,7 +46,7 @@ struct HaloBackdrop: View {
         let energy = songEnergy(player?.current)
         GeometryReader { proxy in
             let light = Light(focus: focus, in: proxy.size)
-            TimelineView(.animation(minimumInterval: 1 / 60, paused: reduceMotion || isSettled || !isOnScreen)) { context in
+            TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: false), paused: reduceMotion || isSettled || !isOnScreen)) { context in
                 let now = context.date
                 let bands = reduceMotion
                     ? [Float](repeating: 0.3, count: AudioLevelMeter.bandCount)
@@ -86,15 +86,52 @@ struct HaloBackdrop: View {
             guard !Task.isCancelled else { return }
             isSettled = true
         }
-        // Your own music is heard only while something's watching it.
-        .onAppear { AudioLevelMeter.shared.startListening() }
-        .onDisappear { AudioLevelMeter.shared.stopListening() }
+        .listensToAudio()
     }
 
     private var colors: [Color] {
         if art.deep.count >= 4 { return art.deep }
         let base = art.field
         return [base, base.mix(with: .white, by: 0.25), base.mix(with: .black, by: 0.2), base.mix(with: .white, by: 0.1)]
+    }
+}
+
+extension View {
+    /// Has ``AudioLevelMeter`` hear your own music while this is shown and on screen, and
+    /// stop when it goes, or when its window or the app does.
+    func listensToAudio() -> some View {
+        modifier(AudioListening())
+    }
+}
+
+private struct AudioListening: ViewModifier {
+    @Environment(\.isOnScreen) private var isOnScreen
+    @State private var isShown = false
+    /// Whether this has asked the meter to listen, so every start has its one stop.
+    @State private var isListening = false
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                isShown = true
+                update()
+            }
+            .onDisappear {
+                isShown = false
+                update()
+            }
+            .onChange(of: isOnScreen) { update() }
+    }
+
+    private func update() {
+        let wants = isShown && isOnScreen
+        guard wants != isListening else { return }
+        isListening = wants
+        if wants {
+            AudioLevelMeter.shared.startListening()
+        } else {
+            AudioLevelMeter.shared.stopListening()
+        }
     }
 }
 

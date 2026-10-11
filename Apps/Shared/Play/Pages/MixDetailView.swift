@@ -128,7 +128,8 @@ struct MixDetailView: View {
                         duration: 0,
                         isCurrent: player.current?.songIdentity == song.songIdentity,
                         isPlayable: player.canPlay(songID: song.songID),
-                        artwork: .url(song.artworkURL, seed: song.albumTitle ?? song.title)
+                        artwork: .url(song.artworkURL, seed: song.albumTitle ?? song.title),
+                        drag: SongDrag([HistorySong(song)]).songs.first
                     )
                 },
                 play: { id in
@@ -203,10 +204,9 @@ struct MixDetailView: View {
     }
 
     private func footer(_ mix: Mix, missing: Int) -> String {
-        var text = String(localized: "Changes as you listen; songs you skip or suggest less drop out.")
-        if missing > 0 {
-            text += " " + String(AttributedString(localized: "^[\(missing) song](inflect: true) couldn't be found in Apple Music.").characters)
+        guard missing > 0 else {
+            return String(localized: "Changes as you listen; songs you skip or suggest less drop out.")
         }
-        return text
+        return String(AttributedString(localized: "Changes as you listen; songs you skip or suggest less drop out. ^[\(missing) song](inflect: true) couldn't be found in Apple Music.").characters)
     }
 }

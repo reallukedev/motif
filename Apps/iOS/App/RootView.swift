@@ -105,7 +105,7 @@ struct RootView: View {
                 guard !model.isDemoLaunch else { return }
                 model.nearby.start()
             }
-            .onChange(of: "\(player.current?.id ?? "").\(player.isPlaying)") { model.tellNearby() }
+            .onPlayingChange(of: player) { model.tellNearby() }
             // Playlists merged with Apple Music, once your servers have had a moment to answer.
             .task {
                 guard !model.isDemoLaunch else { return }
@@ -135,7 +135,7 @@ struct RootView: View {
             ContentUnavailableView {
                 Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
-                Text(model.startupError ?? "The database couldn't be opened.")
+                Text("Close Tracks and open it again. If that doesn’t help, restart your iPhone.")
             }
         }
     }

@@ -38,7 +38,8 @@ public struct MusicKitPlaybackService: PlaybackService {
         do {
             try await player.play()
         } catch {
-            throw PlaybackError.failed(String(describing: error))
+            Log.playback.error("MusicKit couldn't start playback: \(String(describing: error), privacy: .public)")
+            throw PlaybackError.failed(PlaybackFailure(error).words)
         }
     }
 

@@ -1,7 +1,6 @@
 import SwiftUI
 import Combine
 import SwiftData
-import CoreData
 import Observation
 import TracksCore
 import TracksMusic
@@ -43,12 +42,17 @@ final class Library {
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     /// A change arrived while a refresh was already running, so another is owed.
     @ObservationIgnored private var needsAnotherRefresh = false
+    /// Failed attempts at the first read, which is tried again a few times on its own.
+    @ObservationIgnored private var failedFirstReads = 0
 
     private static let lookupPublishInterval: Duration = .seconds(2)
 
     /// How long to let a burst of saves settle before reading. A Mac capture saves the row,
     /// then its id and cover, then the playlist write and scrobble, within seconds.
     private static let settle: Duration = .milliseconds(400)
+
+    /// How many times a failed first read is tried again before waiting for the store to change.
+    private static let firstReadRetries = 5
 
     /// Sample data brings its own genres and years: its made-up songs mustn't reach Apple
     /// Music or the caches.
@@ -90,12 +94,19 @@ final class Library {
                         let (history, sessions) = await Self.build(snapshot)
                         publish(history, sessions: sessions)
                     }
+                    if !isLoaded {
+                        isLoaded = true
+                        revision += 1
+                    }
                 } catch {
-                    // Keep showing what was there. The next change reads again.
-                }
-                if !isLoaded {
-                    isLoaded = true
-                    revision += 1
+                    // Keep showing what was there; the next change reads again. Until a first
+                    // read works there's nothing to show, and calling it loaded would greet
+                    // someone with years of listening as new, so that one is retried, backing off.
+                    if !isLoaded, failedFirstReads < Self.firstReadRetries {
+                        failedFirstReads += 1
+                        try? await Task.sleep(for: .seconds(1 << failedFirstReads))
+                        needsAnotherRefresh = true
+                    }
                 }
             } while needsAnotherRefresh
         }
@@ -249,33 +260,6 @@ final class Library {
     }
 }
 
-/// Keeps `Library` in step with the store. Put it once at the root of each scene.
-struct LibraryObserver: ViewModifier {
-    let library: Library
-
-    // Every one of these can be posted from a background thread (a merge's own context, the
-    // CloudKit mirror, the day rolling over), so each is moved to the main thread before it
-    // touches the main-actor library.
-
-    func body(content: Content) -> some View {
-        content
-            // Any context's save, not just the main one: merges and repairs save on their own.
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
-                library.refresh()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification).receive(on: DispatchQueue.main)) { _ in
-                library.refresh()
-            }
-            // Synced rows arrive without a save of any context in this process.
-            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: DispatchQueue.main)) { _ in
-                library.refresh()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in
-                library.invalidate()
-            }
-    }
-}
-
 extension Capture {
     var stat: CaptureStat {
         CaptureStat(
@@ -322,9 +306,5 @@ extension View {
         .onReceive(NotificationCenter.default.publisher(for: SyncReconciler.didReconcileNotification).receive(on: DispatchQueue.main)) { _ in
             action()
         }
-    }
-
-    func observesLibrary(_ library: Library) -> some View {
-        modifier(LibraryObserver(library: library))
     }
 }

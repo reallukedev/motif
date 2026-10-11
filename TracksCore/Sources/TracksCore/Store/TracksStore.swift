@@ -87,7 +87,7 @@ public final class TracksStore {
                     // Sync can fail for ordinary reasons (no iCloud account, a container
                     // the profile doesn't grant, a schema CloudKit rejects). Open the local
                     // store without sync; falling back to in-memory would hide the history.
-                    pendingSyncFailure = error.localizedDescription
+                    pendingSyncFailure = CloudSyncMonitor.startFailure(for: error)
                 }
             }
 
@@ -426,17 +426,25 @@ public final class TracksStore {
     /// rows need one too. The playlist write checks the kind, not the ID. A Last.fm history
     /// can be a hundred thousand plays, and searching the catalog for each would hold up
     /// every playlist write behind it; those rows keep Last.fm's cover.
-    public static func awaitingCatalogID() -> FetchDescriptor<Capture> {
+    ///
+    /// One batch, oldest first, so a backlog is searched a drain at a time rather than all at
+    /// once, which held up every playlist write behind it.
+    public static func awaitingCatalogID(limit: Int = catalogSearchBatch) -> FetchDescriptor<Capture> {
         let maxAttempts = maxCatalogLookupAttempts
         let lastFM = CaptureKind.lastFM.rawValue
-        return FetchDescriptor<Capture>(
+        var descriptor = FetchDescriptor<Capture>(
             predicate: #Predicate {
                 $0.songID.isEmpty && $0.catalogLookupAttempts < maxAttempts
                     && $0.kindRawValue != lastFM
             },
             sortBy: [SortDescriptor(\.capturedAt, order: .forward)]
         )
+        descriptor.fetchLimit = limit
+        return descriptor
     }
+
+    /// How many rows one drain searches the catalog for.
+    public static let catalogSearchBatch = 25
 
     private func mostRecentCaptureDate(songID: String, kind: CaptureKind) throws -> Date? {
         let raw = kind.rawValue

@@ -209,7 +209,7 @@ struct PlaySettingsPane: View {
     /// Downloads live in the main window's sidebar, under Your Music.
     private func showDownloads() {
         model.sidebarSelection = .downloads
-        openWindow(id: "main")
+        MainWindow.bringForward(openWindow: openWindow)
     }
 
     // MARK: - Tracks Radio

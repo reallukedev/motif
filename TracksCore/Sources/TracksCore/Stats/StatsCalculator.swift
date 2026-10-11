@@ -225,12 +225,19 @@ public enum StatsCalculator {
         guard let start = interval?.start ?? history.first?.capturedAt else { return 0 }
         let end = min(now, interval?.end.addingTimeInterval(-1) ?? now)
         guard end >= start else { return 0 }
-        let days = calendar.dateComponents(
-            [.day],
-            from: calendar.startOfDay(for: start),
-            to: calendar.startOfDay(for: end)
-        ).day ?? 0
-        return days + 1
+        return daysBetween(start, end, calendar: calendar) + 1
+    }
+
+    /// Whole calendar days from the day `start` is in to the day `end` is in.
+    ///
+    /// Counted between the two days' noons. From midnight to midnight, a day that starts at
+    /// 1 AM because the clocks changed at midnight is 23 hours, and the calendar doesn't count
+    /// it as a day.
+    static func daysBetween(_ start: Date, _ end: Date, calendar: Calendar) -> Int {
+        guard let from = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: start),
+              let to = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: end)
+        else { return 0 }
+        return calendar.dateComponents([.day], from: from, to: to).day ?? 0
     }
 
     // MARK: - Charts over time
@@ -280,7 +287,9 @@ public enum StatsCalculator {
         while cursor <= limit {
             let entry = counts[cursor]
             buckets.append(TimeBucket(start: cursor, count: entry?.count ?? 0, seconds: entry?.seconds ?? 0))
-            guard let next = calendar.date(byAdding: unit, value: 1, to: cursor) else { break }
+            // The unit's end rather than adding one: after a day that started at 1 AM, adding
+            // a day lands at 1 AM, not when the next day starts.
+            guard let next = calendar.dateInterval(of: unit, for: cursor)?.end, next > cursor else { break }
             cursor = next
         }
         return Array(buckets.suffix(maximumColumns))
@@ -294,9 +303,8 @@ public enum StatsCalculator {
         now: Date = .now
     ) -> [TimeBucket] {
         let today = calendar.startOfDay(for: now)
-        guard let start = calendar.date(byAdding: .day, value: -(count - 1), to: today),
-              let end = calendar.date(byAdding: .day, value: 1, to: today)
-        else { return [] }
+        guard count > 0, let end = calendar.dateInterval(of: .day, for: today)?.end else { return [] }
+        let start = (1..<count).reduce(today) { day, _ in dayBefore(day, calendar: calendar) }
         let span = DateInterval(start: start, end: end)
         return timeline(history.indices(in: span), in: history, unit: .day, span: span, calendar: calendar)
     }
@@ -369,7 +377,9 @@ public enum StatsCalculator {
         var run = 0
         var previous: Date?
         for day in sortedDays {
-            if let previous, calendar.dateComponents([.day], from: previous, to: day).day == 1 {
+            // Next to each other when one ends where the other starts. A count of days between
+            // their starts is 0 across a day that started at 1 AM.
+            if let previous, calendar.dateInterval(of: .day, for: previous)?.end == day {
                 run += 1
             } else {
                 run = 1
@@ -379,9 +389,7 @@ public enum StatsCalculator {
         }
 
         let today = calendar.startOfDay(for: now)
-        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else {
-            return Streak(current: 0, longest: longest, currentStart: nil)
-        }
+        let yesterday = Self.dayBefore(today, calendar: calendar)
         guard var cursor = days.contains(today) ? today : (days.contains(yesterday) ? yesterday : nil)
         else { return Streak(current: 0, longest: longest, currentStart: nil) }
 
@@ -390,10 +398,15 @@ public enum StatsCalculator {
         while days.contains(cursor) {
             current += 1
             start = cursor
-            guard let before = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = before
+            cursor = Self.dayBefore(cursor, calendar: calendar)
         }
         return Streak(current: current, longest: max(longest, current), currentStart: start)
+    }
+
+    /// The start of the day before the one starting at `day`. Subtracting a day from a start
+    /// at midnight lands on a midnight that doesn't exist when the day before started at 1 AM.
+    static func dayBefore(_ day: Date, calendar: Calendar) -> Date {
+        calendar.startOfDay(for: day.addingTimeInterval(-1))
     }
 
     // MARK: - Tallies

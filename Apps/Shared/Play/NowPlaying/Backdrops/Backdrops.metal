@@ -48,15 +48,20 @@ float luma(float3 colour) {
 }
 
 // A little richer, as Music's backgrounds are, then kept under `ceiling`: dark colours stay
-// as they are and bright ones come down softly, keeping their hue, so a white cover gives
-// a pale grey field that white type still reads on rather than a glare.
+// as they are and bright ones come down softly, keeping their hue (yellows lean to gold), so
+// a white cover gives a pale grey field that white type still reads on rather than a glare.
 float3 readable(float3 colour, float richness, float ceiling) {
     float grey = luma(colour);
     colour = max(float3(0.0), mix(float3(grey), colour, richness));
     grey = luma(colour);
     if (grey > 0.0001) {
         float softened = ceiling * (1.0 - exp(-grey / ceiling));
-        colour *= softened / grey;
+        // Yellow brought down keeping its hue turns olive, the colour of mud. Leaned toward
+        // amber as it deepens, it stays gold, as a lamp's light does.
+        float high = max(max(colour.r, colour.g), 0.001);
+        float yellow = saturate((min(colour.r, colour.g) - colour.b) / high);
+        colour.g *= 1.0 - 0.2 * yellow * (1.0 - softened / grey);
+        colour *= softened / max(luma(colour), 0.0001);
     }
     return colour;
 }

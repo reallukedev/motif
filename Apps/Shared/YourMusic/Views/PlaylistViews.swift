@@ -519,7 +519,8 @@ struct TracksPlaylistPage: View {
                 isCurrent: player.current?.local?.id == pair.1.id,
                 isPlayable: music.isPlayable(pair.1),
                 // Each song's own cover, as Apple Music's playlists show them.
-                artwork: .url(music.artworkURL(pair.1.artwork)?.absoluteString, seed: pair.1.album ?? pair.1.title)
+                artwork: .url(music.artworkURL(pair.1.artwork)?.absoluteString, seed: pair.1.album ?? pair.1.title),
+                drag: SongDrag([pair.1]).songs.first
             )
         }
         let track = { (id: String) in zip(ids, songs).first { $0.0 == id }?.1 }
@@ -550,7 +551,6 @@ struct TracksPlaylistPage: View {
     #endif
 
     private func header(_ playlist: TracksPlaylist, songs: [LocalTrack], playable: [LocalTrack], context: PlayContext) -> some View {
-        let history = CollectionHistory.summary(songIdentities: songs.map(\.identity), facts: feed.facts)
         let first = PlaylistCover.distinctCovers(of: songs).first
         let length = CollectionFacts.length(count: songs.count, seconds: songs.compactMap(\.duration).reduce(0, +))
         let facts: Text? = if let rules = playlist.rules {
@@ -760,9 +760,23 @@ struct PlaylistPickerSheet: View {
     @Environment(YourMusic.self) private var music
     @Environment(PlayerModel.self) private var player
     @Environment(\.dismiss) private var dismiss
-    @State private var makesPlaylist = false
+    @State private var makesPlaylist: Bool
+
+    /// Picks that came from New Playlist… in a menu, which skip straight to naming it.
+    static var startsNew: Set<PlaylistPick.ID> = []
+
+    init(pick: PlaylistPick) {
+        self.pick = pick
+        _makesPlaylist = State(initialValue: Self.startsNew.contains(pick.id))
+    }
 
     var body: some View {
+        content
+            .onDisappear { Self.startsNew.remove(pick.id) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         #if os(iOS)
         NavigationStack {
             List {

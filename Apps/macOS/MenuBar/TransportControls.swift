@@ -17,7 +17,7 @@ struct TransportControls: View {
             // Sized to the glyph, the wide skip symbols filled their circles edge to edge.
             GlassEffectContainer(spacing: 18) {
                 HStack(spacing: 18) {
-                    button(.previous, symbol: "backward.fill", label: "Previous Track", glyph: 13, box: 18)
+                    button(.previous, symbol: "backward.fill", label: "Previous", glyph: 13, box: 18)
                     button(
                         .playPause,
                         symbol: isPlaying ? "pause.fill" : "play.fill",
@@ -25,7 +25,7 @@ struct TransportControls: View {
                         glyph: 17,
                         box: 24
                     )
-                    button(.next, symbol: "forward.fill", label: "Next Track", glyph: 13, box: 18)
+                    button(.next, symbol: "forward.fill", label: "Next", glyph: 13, box: 18)
                 }
             }
             .buttonStyle(.glass)

@@ -40,8 +40,32 @@ nonisolated struct SongDrag: Codable, Hashable, Sendable, Transferable {
         return String(AttributedString(localized: "^[\(songs.count) Song](inflect: true)").characters)
     }
 
+    /// The file of a song of yours on this device, for a drag onto Finder or another app.
+    /// One file a drag, so only for one song.
+    var fileURL: URL? {
+        guard songs.count == 1, let id = songs.first?.localID, id.hasPrefix("file:") else { return nil }
+        return LibraryFolders.music.appending(path: String(id.dropFirst("file:".count)))
+    }
+
+    /// The song on Apple Music, for a drag into Messages, Mail or a browser.
+    var catalogURL: URL? {
+        guard songs.count == 1, let id = songs.first?.songID, !id.isEmpty, id.allSatisfy(\.isNumber) else { return nil }
+        return URL(string: "https://music.apple.com/song/\(id)")
+    }
+
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .tracksSongs)
+        // A copy, so a drag to Finder never moves the file out of your music.
+        FileRepresentation(exportedContentType: .audio) { drag in
+            guard let url = drag.fileURL else { throw CocoaError(.fileNoSuchFile) }
+            return SentTransferredFile(url, allowAccessingOriginalFile: false)
+        }
+        .exportingCondition { $0.fileURL != nil }
+        ProxyRepresentation { drag in
+            guard let url = drag.catalogURL else { throw CocoaError(.fileNoSuchFile) }
+            return url
+        }
+        .exportingCondition { $0.catalogURL != nil }
         // Anywhere else, the songs as text, a line each.
         ProxyRepresentation { drag in
             drag.songs.map { "\($0.title), \($0.artistName)" }.joined(separator: "\n")

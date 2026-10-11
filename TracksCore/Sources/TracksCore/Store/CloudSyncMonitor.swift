@@ -2,12 +2,11 @@ import CloudKit
 import CoreData
 import Foundation
 import Observation
-import OSLog
 
 /// What the CloudKit mirror last said about itself.
 ///
 /// A store that opened with sync can still fail to sync. The container opens, and only
-/// afterwards does the mirror find out CloudKit won't take its records — as happened when
+/// afterwards does the mirror find out CloudKit won't take its records, as happened when
 /// the Production schema was missing `CD_scrobbledAt`. Every export failed, setup never
 /// finished, nothing was imported, and Settings still said "On", while the Mac and the iPhone
 /// quietly grew two different histories. This listens to the events the mirror posts so that
@@ -58,54 +57,11 @@ public final class CloudSyncMonitor {
                   let endDate = event.endDate
             else { return }
             let succeeded = event.succeeded
-            let startDate = event.startDate
             let message = event.error.map(Self.message(for:))
             MainActor.assumeIsolated {
                 self?.record(activity, succeeded: succeeded, message: message, at: endDate)
-                if !succeeded { self?.explainFailure(since: startDate) }
             }
         }
-    }
-
-    /// Replaces the event's bare error with CloudKit's own reason, if the log has one.
-    ///
-    /// The event only keeps an error's domain and code, so a refused save reaches here as
-    /// "CKErrorDomain error 2" with the reason gone. CloudKit logs the server's message for
-    /// each refused record, in this process, where the app can read it back.
-    private func explainFailure(since start: Date) {
-        guard let failure else { return }
-        Task {
-            guard let reason = await Self.loggedServerMessage(since: start),
-                  self.failure == failure
-            else { return }
-            self.failure = Failure(activity: failure.activity, message: reason, date: failure.date)
-        }
-    }
-
-    /// The last server message CloudKit logged in this process since `start`.
-    @concurrent
-    nonisolated static func loggedServerMessage(since start: Date) async -> String? {
-        guard let store = try? OSLogStore(scope: .currentProcessIdentifier),
-              let entries = try? store.getEntries(
-                  at: store.position(date: start.addingTimeInterval(-5)),
-                  matching: NSPredicate(format: "subsystem == %@", "com.apple.cloudkit")
-              )
-        else { return nil }
-        var latest: String?
-        for case let entry as OSLogEntryLog in entries {
-            if let message = serverMessage(in: entry.composedMessage) { latest = message }
-        }
-        return latest
-    }
-
-    /// Pulls `server message = "…"` out of a logged CloudKit error.
-    nonisolated static func serverMessage(in text: String) -> String? {
-        let marker = "server message = \""
-        guard let start = text.range(of: marker)?.upperBound,
-              let end = text[start...].firstIndex(of: "\"")
-        else { return nil }
-        let message = text[start..<end]
-        return message.isEmpty ? nil : String(message)
     }
 
     /// Folds in one finished piece of work.
@@ -121,26 +77,59 @@ public final class CloudSyncMonitor {
         }
         failure = Failure(
             activity: activity,
-            message: message ?? "iCloud reported a problem without saying what it was.",
+            message: message ?? Self.words(for: nil),
             date: date
         )
     }
 
-    /// The most useful sentence out of a CloudKit error.
+    /// A CloudKit error in words: what happened and what to do. CloudKit's own description
+    /// and the server's message only go to the log, where CloudKit also writes the reason
+    /// for each refused record.
     ///
     /// A refused save arrives as a partial failure whose own description is only "Failed to
     /// modify some records". The reason is on one of the records inside it, surrounded by
     /// dozens of "Batch Request Failed" errors that only mean they were sent alongside it.
     public nonisolated static func message(for error: any Error) -> String {
-        if let error = error as? CKError,
-           let partial = error.partialErrorsByItemID?.values
-               .compactMap({ $0 as? CKError })
-               .filter({ $0.code != .batchRequestFailed })
-               // Dictionary order isn't stable, so pick the same one every time.
-               .min(by: { $0.localizedDescription < $1.localizedDescription }) {
-            return partial.localizedDescription
+        Log.iCloud.error("iCloud sync failed: \(String(describing: error), privacy: .public)")
+        guard let error = error as? CKError else { return words(for: nil) }
+        let cause = error.partialErrorsByItemID?.values
+            .compactMap { $0 as? CKError }
+            .filter { $0.code != .batchRequestFailed }
+            // Dictionary order isn't stable, so pick the same one every time.
+            .min { $0.code.rawValue < $1.code.rawValue }
+        return words(for: (cause ?? error).code)
+    }
+
+    /// Why the store couldn't open with iCloud, in words. The error goes to the log.
+    public nonisolated static func startFailure(for error: any Error) -> String {
+        if error is CKError { return message(for: error) }
+        Log.iCloud.error("The store couldn't open with iCloud: \(String(describing: error), privacy: .public)")
+        return String(localized: "Tracks couldn’t open your history with iCloud. Check you’re signed in to iCloud, then open Tracks again.")
+    }
+
+    private nonisolated static func words(for code: CKError.Code?) -> String {
+        switch code {
+        case .notAuthenticated:
+            String(localized: "You’re signed out of iCloud. Sign in to iCloud in Settings to sync your history.")
+        case .networkUnavailable, .networkFailure:
+            String(localized: "You’re offline. Tracks will sync when you’re back online.")
+        case .serviceUnavailable, .requestRateLimited, .zoneBusy:
+            String(localized: "iCloud is busy. Tracks will try again shortly.")
+        case .quotaExceeded:
+            String(localized: "Your iCloud storage is full. Free up space in iCloud to keep syncing.")
+        case .permissionFailure, .managedAccountRestricted:
+            String(localized: "iCloud isn’t letting Tracks sync on this device. Check iCloud in Settings.")
+        case .incompatibleVersion:
+            String(localized: "This version of Tracks can’t sync. Update Tracks on all your devices.")
+        // A record the Production schema doesn't have a field for, as when a build's new
+        // field hasn't been deployed.
+        case .invalidArguments, .serverRejectedRequest:
+            String(localized: "iCloud wouldn’t take this device’s history. Update Tracks on all your devices.")
+        case .accountTemporarilyUnavailable:
+            String(localized: "iCloud isn’t available right now. Tracks will try again.")
+        default:
+            String(localized: "iCloud sync ran into a problem. Tracks will try again.")
         }
-        return error.localizedDescription
     }
 }
 

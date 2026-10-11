@@ -48,7 +48,7 @@ struct LastFMSettingsPage: View {
         .onChange(of: connection.state) { old, new in
             offerImportIfJustConnected(from: old, to: new)
         }
-        .alert(LastFMHistoryWords.offerTitle, isPresented: $offersImport) {
+        .alert("Import Your Last.fm History?", isPresented: $offersImport) {
             Button("Import") { model.lastFMHistory?.start() }
             Button("Not Now", role: .cancel) {}
         } message: {
@@ -95,8 +95,11 @@ struct LastFMSettingsPage: View {
         case .idle, .failed:
             connectButton
         case .waitingForBrowser:
-            ProgressView()
-                .controlSize(.small)
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Button("Cancel", action: connection.cancel)
+            }
         case .connected:
             EmptyView()
         }

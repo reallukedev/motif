@@ -53,16 +53,26 @@ extension CarPlaySceneDelegate {
                     if let song = player.current?.song, Self.canFavorite(song) { player.lookUpFavorite(song) }
                 }
                 updateNowPlayingButtons()
+                updateKeepTicker()
                 refreshRadioIfNeeded()
-                if queue != nil { await refreshQueue() }
+                if queue != nil { refreshQueue() }
             }
         }
-        // The ring fills with time, which nothing observable says, so it's looked at every
-        // second and redrawn when it's moved on a step.
+    }
+
+    /// The ring fills with time, which nothing observable says, so it's looked at every second
+    /// and redrawn when it's moved on a step: only while a song plays and Now Playing is on the
+    /// car's screen, so nothing ticks while it's paused or out of sight.
+    func updateKeepTicker() {
+        let shouldTick = isNowPlayingShown && model.player.isPlaying && interface != nil
+        guard shouldTick != (keepTicker != nil) else { return }
+        keepTicker?.cancel()
+        keepTicker = nil
+        guard shouldTick else { return }
         keepTicker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                guard let self else { return }
+                guard let self, !Task.isCancelled else { return }
                 let step = keepStep
                 guard step != lastKeepStep else { continue }
                 lastKeepStep = step
@@ -186,24 +196,19 @@ extension CarPlaySceneDelegate {
     }
 
     func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+        // Already open (a second tap before it came up): left as it is.
+        if let queue, interface?.templates.contains(where: { $0 === queue }) == true { return }
         let template = CPListTemplate(title: String(localized: "Up Next"), sections: [])
+        template.emptyViewTitleVariants = [String(localized: "Nothing Playing")]
         queue = template
         isQueueShown = false
-        Task {
-            await refreshQueue()
-            guard let interface else { return }
-            // Opened from the car's own Now Playing button deep in a tab: CarPlay takes five
-            // screens at most, so Now Playing moves to the tab's second place first.
-            if interface.templates.count > Self.deepestBeforeNowPlaying {
-                interface.popToRootTemplate(animated: false, completion: nil)
-                interface.pushTemplate(nowPlayingTemplate, animated: false, completion: nil)
-            }
-            // Counted as open only once it's on screen: until then a refresh from the watch
-            // mustn't take it for closed and stop keeping it current.
-            interface.pushTemplate(template, animated: true) { [weak self] _, _ in
-                guard self?.queue === template else { return }
-                self?.isQueueShown = true
-            }
+        refreshQueue()
+        // Counted as open only once it's on screen: until then a refresh from the watch
+        // mustn't take it for closed and stop keeping it current. Deep in a tab, the trail
+        // starts again from the tab, under Now Playing.
+        push(template) { [weak self] in
+            guard let self, queue === template else { return }
+            isQueueShown = interface?.templates.contains { $0 === template } == true
         }
     }
 
@@ -219,13 +224,8 @@ extension CarPlaySceneDelegate {
             } else {
                 nil
             }
-            guard let page, let interface else { return }
-            // CarPlay takes five screens at most. Already that deep (Library, Artists, an
-            // artist, an album, Now Playing): the album starts a fresh trail from the tab.
-            if interface.templates.count > Self.deepestBeforeNowPlaying {
-                interface.popToRootTemplate(animated: false, completion: nil)
-            }
-            interface.pushTemplate(page, animated: true, completion: nil)
+            guard let page else { return }
+            push(page)
         }
     }
 
@@ -247,16 +247,12 @@ extension CarPlaySceneDelegate {
                 ? String(AttributedString(localized: "“\(track.title)” counts toward your history in ^[\(left) second](inflect: true) of listening.").characters)
                 : String(localized: "“\(track.title)” counts toward your history as soon as it plays.")
         }
-        let sheet = CPActionSheetTemplate(title: title, message: message, actions: [
-            CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak self] _ in
-                self?.interface?.dismissTemplate(animated: true, completion: nil)
-            },
-        ])
-        interface?.presentTemplate(sheet, animated: true, completion: nil)
+        present(CPActionSheetTemplate(title: title, message: message, actions: [okAction()]))
     }
 
-    /// Up Next with covers: the song playing first, marked, then what's coming.
-    private func refreshQueue() async {
+    /// Up Next with covers: the song playing first, marked, then what's coming. The list is
+    /// drawn at once and the covers fill in, so it keeps up with the queue.
+    func refreshQueue() {
         guard let queue else { return }
         // Gone from the screen: stop keeping it current.
         if isQueueShown, let interface, !interface.templates.contains(where: { $0 === queue }) {
@@ -266,28 +262,30 @@ extension CarPlaySceneDelegate {
         }
         let player = model.player
         let side = CPListItem.maximumImageSize.height
+        let standIn = CarPlayImages.placeholder(symbol: "music.note", side: side, scale: scale)
         let sharePlay = SharePlayController.shared
+        var covered: [(row: CPListItem, track: PlayerTrack)] = []
         // SharePlay first, where the songs passengers add will go.
         var sections: [CPListSection] = [CPListSection(items: [sharePlayRow()])]
         if let current = player.current {
             let plays = model.playFeed.facts(for: current)?.plays ?? 0
-            var detail = current.artistName
-            if plays > 0 {
-                detail += " · " + String(AttributedString(localized: "^[\(plays) play](inflect: true)").characters)
-            }
-            let row = CPListItem(text: current.title, detailText: detail, image: await cover(for: current, side: side))
+            let detail = plays > 0
+                ? String(AttributedString(localized: "\(current.artistName) · ^[\(plays) play](inflect: true)").characters)
+                : current.artistName
+            let row = CPListItem(text: current.title, detailText: detail, image: standIn)
             row.isPlaying = true
             row.isExplicitContent = current.isExplicit
             // Already on: a tap goes back to it.
             row.handler = { [weak self] _, completion in
                 completion()
-                self?.interface?.popTemplate(animated: true, completion: nil)
+                self?.popScreen()
             }
+            covered.append((row, current))
             sections.append(CPListSection(items: [row], header: String(localized: "Now Playing"), sectionIndexTitle: nil))
         }
         var rows: [CPListItem] = []
         // Room for SharePlay's row and the song playing.
-        let limit = max(0, CPListTemplate.maximumItemCount - 2)
+        let limit = max(0, Int(CPListTemplate.maximumItemCount) - 2)
         for track in player.upNext.prefix(min(40, limit)) {
             // Why a live mix picked it, where one thing stands out, as the phone's Up Next says.
             let detail = if sharePlay.isFromSharePlay(track) {
@@ -299,7 +297,7 @@ extension CarPlaySceneDelegate {
             } else {
                 track.artistName
             }
-            let row = CPListItem(text: track.title, detailText: detail, image: await cover(for: track, side: side))
+            let row = CPListItem(text: track.title, detailText: detail, image: standIn)
             row.isExplicitContent = track.isExplicit
             row.handler = { [weak self] _, completion in
                 // By the song, not its place: the queue may have moved on since the list opened.
@@ -307,8 +305,9 @@ extension CarPlaySceneDelegate {
                     player.jump(toUpNext: index)
                 }
                 completion()
-                self?.interface?.popTemplate(animated: true, completion: nil)
+                self?.popScreen()
             }
+            covered.append((row, track))
             rows.append(row)
         }
         if !rows.isEmpty {
@@ -323,8 +322,11 @@ extension CarPlaySceneDelegate {
             row.isEnabled = false
             sections.append(CPListSection(items: [row], header: String(localized: "Up Next"), sectionIndexTitle: nil))
         }
-        queue.emptyViewTitleVariants = [String(localized: "Nothing Playing")]
-        queue.updateSections(sections)
+        queue.updateSections(Self.capped(sections))
+        let tracks = covered.map(\.track)
+        fillImages(covered.map(\.row)) { [weak self] index in
+            await self?.cover(for: tracks[index], side: side)
+        }
     }
 
     func cover(for track: PlayerTrack, side: CGFloat) async -> UIImage {

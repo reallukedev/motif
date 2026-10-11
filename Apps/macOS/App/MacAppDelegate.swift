@@ -22,6 +22,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     /// Held while capture is running. See ``trackCaptureActivity()``.
     private var captureActivity: (any NSObjectProtocol)?
 
+    /// SwiftUI's way to open the main window, kept by the windows that have it, so the Dock
+    /// can bring the window back from here.
+    static var openWindow: OpenWindowAction?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // First, so a problem later in launch still leaves a record of this run.
         quitMonitor.start(isDemoLaunch: model.isDemoLaunch)
@@ -31,6 +35,15 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         NearbyMac.start(model)
         followTracksPlayer()
         watchSpaceBar()
+    }
+
+    /// A click on the Dock icon brings the main window back, as Music's does, even with the
+    /// Mini Player open, when AppKit would count that as a window and do nothing.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        let window = MainWindow.open
+        guard window == nil || window?.isMiniaturized == true, let openWindow = Self.openWindow else { return true }
+        MainWindow.bringForward(openWindow: openWindow)
+        return false
     }
 
     // MARK: - Space
@@ -59,8 +72,11 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
               window.attachedSheet == nil, window.sheetParent == nil
         else { return false }
         let identifier = window.identifier?.rawValue ?? ""
-        // The menu bar's panel has its own Space, and Settings is for settings.
-        if identifier.contains("Settings") || (window is NSPanel && !identifier.hasPrefix(MiniPlayerWindow.id)) {
+        // The menu bar's panel has its own Space, and Settings is for settings. Popovers from
+        // the main window, Up Next and your devices, play and pause as the window does.
+        let isMainWindowPopover = window.parent.map { MainWindow.isMain($0) } ?? false
+        if identifier.contains("Settings")
+            || (window is NSPanel && !identifier.hasPrefix(MiniPlayerWindow.id) && !isMainWindowPopover) {
             return false
         }
         switch window.firstResponder {

@@ -8,7 +8,8 @@ struct ShelfHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        // At accessibility sizes the link goes under the title rather than breaking it.
+        AdaptiveStack(verticalAlignment: .firstTextBaseline, spacing: 4) {
             Text(title)
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
@@ -311,6 +312,13 @@ extension Array where Element == Suggestion {
 enum SuggestionShelfPaging {
     static let rowsPerColumn = 4
 
+    /// Loading columns enough to fill the widest page, with the next one peeking in on iPhone.
+    #if os(macOS)
+    static let loadingColumns = 4
+    #else
+    static let loadingColumns = 2
+    #endif
+
     /// Most of the width on iPhone, so the next column peeks in. On the Mac, as many to a page
     /// as leave each one room for a title without stretching it across the window: three in a
     /// wide window, four in an ultra-wide one, as Music's Top Songs are.
@@ -401,11 +409,14 @@ struct SuggestedSongsSection: View {
                             }
                         }
                         if showsLoading {
-                            LoadingRows(count: SuggestionShelfPaging.rowsPerColumn)
-                                .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
-                                    SuggestionShelfPaging.columnWidth(in: length)
-                                }
-                                .transition(.opacity)
+                            // As many columns as the songs will fill, so they arrive in place.
+                            ForEach(0..<SuggestionShelfPaging.loadingColumns, id: \.self) { _ in
+                                LoadingRows(count: SuggestionShelfPaging.rowsPerColumn)
+                                    .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
+                                        SuggestionShelfPaging.columnWidth(in: length)
+                                    }
+                            }
+                            .transition(.opacity)
                         }
                     }
                     .scrollTargetLayout()
@@ -629,7 +640,7 @@ struct SuggestedArtistMenu: View {
             Button("Play Top Songs", systemImage: "play") {
                 Task { await ArtistPlayback.playTopSongs(of: suggestion.artist, player: player) }
             }
-            Button("Start Station", systemImage: "dot.radiowaves.left.and.right") {
+            Button("Create Station", systemImage: "dot.radiowaves.left.and.right") {
                 player.playStation(from: suggestion.artist)
             }
             Divider()

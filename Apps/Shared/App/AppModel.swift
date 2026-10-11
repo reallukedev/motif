@@ -14,6 +14,7 @@ final class AppModel {
     let store: TracksStore?
     let capture: CaptureService?
     let playback: PlaybackController?
+    /// Why the store couldn't be opened, for diagnostics. Too technical for the screen.
     let startupError: String?
 
     /// Mirrors settings and song statuses between the user's devices. Nil in a demo launch,
@@ -90,7 +91,7 @@ final class AppModel {
     @ObservationIgnored private var hasPreparedYourMusic = false
 
     /// A page for the main window to open, asked for from outside it (the menu bar's
-    /// "View Song Stats"). The window pushes it and clears it.
+    /// Your Stats). The window pushes it and clears it.
     var pendingRoute: Route?
 
     /// The Mac sidebar selection. Lives here so menu commands can change it.
@@ -127,6 +128,9 @@ final class AppModel {
             yourMusicEngine = appleMusicEngine
             player = PlayerModel(engine: appleMusicEngine, isDemo: true)
         } else {
+            #if os(iOS)
+            TracksPlayerContext.startUsingAfterLaunch()
+            #endif
             appleMusicEngine = MusicKitPlayerEngine()
             let startsWithYourMusic = MusicSource.current == .yourMusic
             let local: (any PlayerEngine)? = startsWithYourMusic ? LocalPlayerEngine(music: yourMusic, capture: .yourMusic) : nil
@@ -150,7 +154,7 @@ final class AppModel {
             // Start watching saves before anything writes. Not in a demo launch, which
             // mustn't open the real store.
             if !isDemoLaunch { _ = WidgetRefresher.shared }
-            let capture = CaptureService(store: store)
+            let capture = isDemoLaunch ? CaptureService(store: store) : try CaptureService.shared()
             let playback = PlaybackController(store: store, service: PlatformPlaybackService.make())
             // The capture service decides when a station has stopped; the controller does
             // the playing. This is the one place that knows about both.
@@ -523,15 +527,17 @@ final class AppModel {
             let outcome = try await MotifImport.run(into: store)
             motifImport = .finished(outcome)
             if outcome.plays > 0 {
-                player.confirm(String(localized: "Brought Over \(outcome.plays.formatted()) Plays from Motif"))
+                player.confirm(String(AttributedString(localized: "Brought Over ^[\(outcome.plays) Play](inflect: true) from Motif").characters))
             }
+        } catch MotifImport.Failure.noMotifHistory {
+            motifImport = .failed(String(localized: "There’s no Motif history on this device."))
         } catch {
-            motifImport = .failed(error.localizedDescription)
+            motifImport = .failed(String(localized: "Couldn’t read Motif’s history. Try again."))
         }
     }
 
-    /// Both sides go quiet while the app is away — iOS suspends it, and a Mac window can sit
-    /// closed for days — so this is where the user is most likely to be looking at stale
+    /// Both sides go quiet while the app is away (iOS suspends it, and a Mac window can sit
+    /// closed for days), so this is where the user is most likely to be looking at stale
     /// settings or at rows another device has already merged.
     func syncOnForeground() {
         guard !isDemoLaunch else { return }

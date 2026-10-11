@@ -15,6 +15,15 @@ struct OpenPlayRouteAction: Equatable {
         push(route)
     }
 
+    /// Whether there's a stack to push onto. A menu leaves out Go to Album and the like where
+    /// there isn't, rather than offering items that do nothing.
+    var canPush: Bool { stack != "none" }
+
+    /// This action, where there's a stack for it.
+    var ifPushes: ((PlayRoute) -> Void)? {
+        canPush ? { push($0) } : nil
+    }
+
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.stack == rhs.stack
     }
@@ -41,8 +50,18 @@ struct TrackRow: View {
 
     @Environment(PlayerModel.self) private var player
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var coverSide: CGFloat = 48
+    @ScaledMetric(relativeTo: .body) private var coverSide: CGFloat = Self.cover
     @ScaledMetric(relativeTo: .body) private var numberWidth: CGFloat = 28
+
+    // Mac rows are denser than a finger's: Music's covers there are about 40 points, and the
+    // row needs no 44 point target.
+    #if os(macOS)
+    static let cover: CGFloat = 38
+    private static let minimumHeight: CGFloat = 28
+    #else
+    static let cover: CGFloat = 48
+    private static let minimumHeight: CGFloat = 44
+    #endif
 
     var body: some View {
         HStack(spacing: 12) {
@@ -81,7 +100,7 @@ struct TrackRow: View {
                     .accessibilityLabel(PlayCountText.spoken(plays))
             }
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: Self.minimumHeight)
         .opacity(isPlayable ? 1 : 0.45)
         .contentShape(.rect)
     }
@@ -150,6 +169,8 @@ extension Song {
 /// Everything that can be done with an Apple Music song, for its context menu.
 struct SongMenu: View {
     let song: Song
+    /// Play, where a click doesn't already play the song: on the Mac, where it selects.
+    var play: (() -> Void)?
     /// Hides Go to Album on the album's own page.
     var showsAlbum = true
     var showsArtist = true
@@ -161,40 +182,15 @@ struct SongMenu: View {
     @Environment(\.openPlayRoute) private var openPlayRoute
 
     var body: some View {
-        Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
-            player.enqueue(.songs([song]), next: true, title: song.title)
-        }
-        Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") {
-            player.enqueue(.songs([song]), next: false, title: song.title)
-        }
-        Button("Create Station", systemImage: "dot.radiowaves.left.and.right") {
-            player.playStation(from: song)
-        }
-        Divider()
-        Button("Add to Library", systemImage: "plus") {
-            player.addToLibrary(song)
-        }
-        FavoriteMenuItem(song: song)
-        if showsAlbum {
-            Button("Go to Album", systemImage: "square.stack") {
-                Task { if let album = await SongLinks.album(of: song) { openPlayRoute(.album(album)) } }
-            }
-        }
-        if showsArtist {
-            Button("Go to Artist", systemImage: "music.microphone") {
-                Task { if let artist = await SongLinks.artist(of: song) { openPlayRoute(.artist(artist)) } }
-            }
-        }
-        if let url = song.url {
-            ShareLink(item: url) {
-                Label("Share Song", systemImage: "square.and.arrow.up")
-            }
-        }
-        Divider()
-        if showsSuggestLess {
-            SuggestLessButton(songIdentity: HistoryImport.key(title: song.title, artistName: song.artistName))
-            BlockArtistButton(songBy: song.artistName)
-        }
+        SongMenuItems(.catalog(
+            song,
+            player: player,
+            play: play,
+            go: openPlayRoute.ifPushes,
+            showsAlbum: showsAlbum,
+            showsArtist: showsArtist,
+            showsSuggestLess: showsSuggestLess
+        ))
     }
 }
 
@@ -254,25 +250,13 @@ struct BlockArtistButton: View {
 /// A history song's menu: the same actions, for a song known by id and name.
 struct HistorySongMenu: View {
     let song: MixSong
+    /// Play, where a click doesn't already play the song.
+    var play: (() -> Void)?
     @Environment(PlayerModel.self) private var player
     @Environment(\.openPlayRoute) private var openPlayRoute
 
     var body: some View {
-        if player.canPlay(songID: song.songID) {
-            Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                player.enqueue(.history([HistorySong(song)]), next: true, title: song.title)
-            }
-            Button("Play Last", systemImage: "text.line.last.and.arrowtriangle.forward") {
-                player.enqueue(.history([HistorySong(song)]), next: false, title: song.title)
-            }
-            Divider()
-        }
-        Button("Your Stats", systemImage: "chart.bar.xaxis") {
-            openPlayRoute(.stats(.song(song.songIdentity)))
-        }
-        Divider()
-        SuggestLessButton(songIdentity: song.songIdentity)
-        BlockArtistButton(songBy: song.artistName)
+        SongMenuItems(.history(song, player: player, play: play, go: openPlayRoute.ifPushes))
     }
 }
 

@@ -37,8 +37,8 @@ public enum ArtworkRepair {
 
     /// Probes each URL and returns the ones that didn't come back.
     ///
-    /// - Parameter probe: answers whether the image is still there. A probe that can't tell —
-    ///   no network, a timeout — must answer `true`, so a repair run offline doesn't wipe
+    /// - Parameter probe: answers whether the image is still there. A probe that can't tell
+    ///   (no network, a timeout) must answer `true`, so a repair run offline doesn't wipe
     ///   every cover in the history.
     public static func broken(
         among urls: [String],
@@ -69,7 +69,7 @@ public enum ArtworkRepair {
     ///
     /// Only a definite "not there" counts. A timeout, a server error or no network all answer
     /// `true`, because forgetting a cover we can't reach would leave the row blank until the
-    /// catalog is asked again — worse than the cover we already have.
+    /// catalog is asked again, worse than the cover we already have.
     public static func networkProbe(
         session: URLSession = .shared,
         timeout: TimeInterval = 10

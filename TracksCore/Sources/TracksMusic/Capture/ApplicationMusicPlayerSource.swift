@@ -29,17 +29,18 @@ public enum TracksPlayerContext {
 
     /// Whether Tracks’ Apple Music player is in use this launch, and so worth reading.
     ///
-    /// Always on iPhone, where Play is Tracks’ own. On the Mac it waits for the first song
-    /// Tracks plays: reaching `ApplicationMusicPlayer.shared` at all can make Tracks the Mac's
-    /// Now Playing app, and take the media keys from Music for someone who only ever plays
-    /// music there.
-    public private(set) static var isInUse: Bool = {
-        #if os(iOS)
-        true
-        #else
-        false
-        #endif
-    }()
+    /// Always on iPhone, where Play is Tracks’ own, from once launch has settled (see
+    /// ``startUsingAfterLaunch()``). On the Mac it waits for the first song Tracks plays:
+    /// reaching `ApplicationMusicPlayer.shared` at all can make Tracks the Mac's Now Playing
+    /// app, and take the media keys from Music for someone who only ever plays music there.
+    public private(set) static var isInUse = false
+
+    /// iPhone: the player is in use from launch, but first reached once the launch's scene
+    /// updates are over, since its first call can hold the main thread. See ``PlayerQuiet``.
+    public static func startUsingAfterLaunch() {
+        PlayerQuiet.followScenes()
+        PlayerQuiet.run { startUsing() }
+    }
 
     /// Sources waiting for the player to come into use.
     private static var waiting: [@MainActor () -> Void] = []
@@ -124,6 +125,7 @@ public final class ApplicationMusicPlayerSource: NowPlayingSource, @unchecked Se
             for await _ in changes {
                 if Task.isCancelled { return }
                 try? await Task.sleep(for: MusicPlayerReading.settleDelay)
+                await PlayerQuiet.settled()
                 guard let self else { return }
                 guard let observation = Self.currentObservation() else { continue }
                 self.continuation.withLock { $0 }?.yield(observation)

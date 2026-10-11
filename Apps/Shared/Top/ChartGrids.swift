@@ -196,7 +196,8 @@ private struct ChartTilePlayButton: View {
 
     var body: some View {
         Button(action: play) {
-            Image(systemName: "play.fill")
+            Label("Play \(title)", systemImage: "play.fill")
+                .labelStyle(.iconOnly)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)

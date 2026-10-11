@@ -16,6 +16,10 @@ enum MainWindow {
         windows.allObjects.first { $0.isVisible || $0.isMiniaturized }
     }
 
+    static func isMain(_ window: NSWindow) -> Bool {
+        windows.contains(window)
+    }
+
     fileprivate static func register(_ window: NSWindow) {
         windows.add(window)
     }

@@ -5,7 +5,15 @@ import TracksCore
 /// the song and its controls over it while the pointer is there.
 struct MiniPlayerWindow: Scene {
     static let id = "mini-player"
+    /// Whether it's open, for the Window menu's Switch to and from Mini Player.
+    static let presence = Presence()
     let model: AppModel
+
+    @MainActor
+    @Observable
+    final class Presence {
+        fileprivate(set) var isOpen = false
+    }
 
     var body: some Scene {
         Window("Mini Player", id: Self.id) {
@@ -18,10 +26,15 @@ struct MiniPlayerWindow: Scene {
                     .environment(model.yourMusic)
                     .environment(capture)
                     .environment(\.openPlayRoute, OpenPlayRouteAction(stack: "miniPlayer") { route in
-                        // Pages open in the main window, brought forward for them.
+                        // Pages open in the main window, brought forward for them, or opened
+                        // again if it was closed.
                         model.playNavigator.show(route)
-                        NSApp.activate(ignoringOtherApps: true)
-                        MainWindow.open?.makeKeyAndOrderFront(nil)
+                        if let openWindow = MacAppDelegate.openWindow {
+                            MainWindow.bringForward(openWindow: openWindow)
+                        } else {
+                            NSApp.activate(ignoringOtherApps: true)
+                            MainWindow.open?.makeKeyAndOrderFront(nil)
+                        }
                     })
             }
         }
@@ -32,6 +45,8 @@ struct MiniPlayerWindow: Scene {
         .windowBackgroundDragBehavior(.enabled)
         .defaultPosition(.bottomTrailing)
         .restorationBehavior(.disabled)
+        // The Window menu has it, as Switch to Mini Player and Mini Player.
+        .commandsRemoved()
     }
 }
 
@@ -47,6 +62,8 @@ private struct MiniPlayer: View {
     static let side: CGFloat = 300
     static let cornerRadius: CGFloat = 14
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
+    @Environment(YourMusic.self) private var music
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -61,6 +78,11 @@ private struct MiniPlayer: View {
                 nothingPlaying
             }
         }
+        .overlay(alignment: .top) {
+            windowButtons
+                .opacity(isHovering || voiceOver ? 1 : 0)
+                .allowsHitTesting(isHovering || voiceOver)
+        }
         .frame(width: Self.side, height: Self.side)
         .background {
             // The cover fills the window, so only its colour shows, round the edges as it loads.
@@ -73,6 +95,15 @@ private struct MiniPlayer: View {
         }
         .focusable()
         .focusEffectDisabled()
+        .onAppear {
+            MiniPlayerWindow.presence.isOpen = true
+            MacAppDelegate.openWindow = openWindow
+        }
+        .onDisappear { MiniPlayerWindow.presence.isOpen = false }
+        // Add to Playlist picks in the main window, so it comes forward for the sheet.
+        .onChange(of: music.playlists.picking?.id) { _, id in
+            if id != nil { MainWindow.bringForward(openWindow: openWindow) }
+        }
         .contextMenu {
             if let track = player.current {
                 Button(player.isPlaying ? "Pause" : "Play", systemImage: player.isPlaying ? "pause" : "play") { player.togglePlayPause() }
@@ -83,8 +114,36 @@ private struct MiniPlayer: View {
                 NowPlayingMenuItems(track: track)
             }
             Divider()
+            Button("Switch from Mini Player", systemImage: "macwindow", action: switchToMainWindow)
             Button("Close Mini Player", systemImage: "xmark") { dismissWindow(id: MiniPlayerWindow.id) }
         }
+    }
+
+    /// Music's: the main window back in its place.
+    private func switchToMainWindow() {
+        dismissWindow(id: MiniPlayerWindow.id)
+        MainWindow.bringForward(openWindow: openWindow)
+    }
+
+    /// Close at the top left, where a window's is, and the main window at the top right, over
+    /// a shade so they read on any cover.
+    private var windowButtons: some View {
+        HStack {
+            Button("Close Mini Player", systemImage: "xmark") { dismissWindow(id: MiniPlayerWindow.id) }
+                .help("Close Mini Player")
+            Spacer()
+            Button("Switch from Mini Player", systemImage: "macwindow", action: switchToMainWindow)
+                .help("Switch from Mini Player (⇧⌘M)")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(MiniWindowButtonStyle())
+        .padding(10)
+        .padding(.bottom, 24)
+        .background {
+            LinearGradient(colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
+        }
+        .environment(\.colorScheme, .dark)
     }
 
     private var showsControls: Bool {
@@ -115,6 +174,7 @@ private struct MiniPlayer: View {
                 }
                 .buttonStyle(BarIconButtonStyle(diameter: 36))
                 .disabled(player.context?.isStation == true)
+                .help("Previous (⌘←)")
                 .accessibilityLabel("Previous")
 
                 Button {
@@ -125,6 +185,7 @@ private struct MiniPlayer: View {
                         .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
                 }
                 .buttonStyle(BarIconButtonStyle(diameter: 44))
+                .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                 Button {
@@ -134,6 +195,7 @@ private struct MiniPlayer: View {
                     SkipArrows(direction: .forward, height: 14, trigger: nextPresses)
                 }
                 .buttonStyle(BarIconButtonStyle(diameter: 36))
+                .help("Next (⌘→)")
                 .accessibilityLabel("Next")
             }
 
@@ -166,5 +228,25 @@ private struct MiniPlayer: View {
         }
         .environment(\.colorScheme, .dark)
         .foregroundStyle(.white)
+    }
+}
+
+/// A small round button on the cover: a dark glass circle, brighter under the pointer.
+private struct MiniWindowButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.white.opacity(isHovering ? 1 : 0.85))
+            .frame(width: 24, height: 24)
+            .background(.black.opacity(configuration.isPressed ? 0.6 : isHovering ? 0.5 : 0.35), in: .circle)
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            // A bigger target than the circle, as the Mac's are.
+            .frame(width: 28, height: 28)
+            .contentShape(.circle)
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.13), value: isHovering)
+            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
     }
 }

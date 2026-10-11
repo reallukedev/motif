@@ -59,32 +59,40 @@ enum PlaySettingsWords {
 
     // MARK: - Source
 
+    /// Each combination is one whole string to translate, rather than pieces put together.
     static func sourceFooter(_ source: MusicSource, quickSwitch: QuickSwitchState) -> String {
+        let isAppleMusic = source == .appleMusic
         #if os(macOS)
-        let what = source == .appleMusic
-            ? String(localized: "Listen Now and your library play Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server.")
-            : String(localized: "Listen Now and your library play your own music: files on this Mac, and songs on your servers. Every song is kept in your history, just like Apple Music’s.")
-        #else
-        let what = source == .appleMusic
-            ? String(localized: "Play plays Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server.")
-            : String(localized: "Play plays your own music: files on this iPhone, and songs on your servers. Every song is kept in your history, just like Apple Music’s.")
-        #endif
         switch quickSwitch {
         case .unavailable:
-            return what
+            return isAppleMusic
+                ? String(localized: "Listen Now and your library play Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server.")
+                : String(localized: "Listen Now and your library play your own music: files on this Mac, and songs on your servers. Every song is kept in your history, just like Apple Music’s.")
         case .off:
-            #if os(macOS)
-            return what + " " + String(localized: "Quick Switch puts both a click away, in Listen Now’s title.")
-            #else
-            return what + " " + String(localized: "Quick Switch puts both a tap away, in Play’s title.")
-            #endif
+            return isAppleMusic
+                ? String(localized: "Listen Now and your library play Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server. Quick Switch puts both a click away, in Listen Now’s title.")
+                : String(localized: "Listen Now and your library play your own music: files on this Mac, and songs on your servers. Every song is kept in your history, just like Apple Music’s. Quick Switch puts both a click away, in Listen Now’s title.")
         case .on:
-            #if os(macOS)
-            return what + " " + String(localized: "Click Listen Now’s title to switch. What’s playing carries on until you play something from the other.")
-            #else
-            return what + " " + String(localized: "Tap Play’s title to switch. What’s playing carries on until you play something from the other, and Play suggests your downloads when you’re offline. To switch with a Focus, add the Tracks filter in Settings ▸ Focus.")
-            #endif
+            return isAppleMusic
+                ? String(localized: "Listen Now and your library play Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server. Click Listen Now’s title to switch. What’s playing carries on until you play something from the other.")
+                : String(localized: "Listen Now and your library play your own music: files on this Mac, and songs on your servers. Every song is kept in your history, just like Apple Music’s. Click Listen Now’s title to switch. What’s playing carries on until you play something from the other.")
         }
+        #else
+        switch quickSwitch {
+        case .unavailable:
+            return isAppleMusic
+                ? String(localized: "Songs come from Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server.")
+                : String(localized: "Songs come from your own music: files on this iPhone and songs on your servers. Every song is kept in your history, just like Apple Music’s.")
+        case .off:
+            return isAppleMusic
+                ? String(localized: "Songs come from Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server. Quick Switch puts both a tap away, in Play’s title.")
+                : String(localized: "Songs come from your own music: files on this iPhone and songs on your servers. Every song is kept in your history, just like Apple Music’s. Quick Switch puts both a tap away, in Play’s title.")
+        case .on:
+            return isAppleMusic
+                ? String(localized: "Songs come from Apple Music. Choose Your Music to play the FLAC and other files you own, and songs on your own music server. Tap Play’s title to switch. What’s playing carries on until you play something from the other, and Play suggests your downloads when you’re offline. To switch with a Focus, add the Tracks filter in Settings ▸ Focus.")
+                : String(localized: "Songs come from your own music: files on this iPhone and songs on your servers. Every song is kept in your history, just like Apple Music’s. Tap Play’s title to switch. What’s playing carries on until you play something from the other, and Play suggests your downloads when you’re offline. To switch with a Focus, add the Tracks filter in Settings ▸ Focus.")
+        }
+        #endif
     }
 
     enum QuickSwitchState: Equatable {

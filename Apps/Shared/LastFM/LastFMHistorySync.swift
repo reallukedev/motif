@@ -75,7 +75,9 @@ final class LastFMHistorySync {
             } catch is CancellationError {
                 phase = .idle
             } catch {
-                phase = .failed(ScrobbleService.describe(error))
+                // Stop cancels a request in flight, which URLSession reports as its own error.
+                let wasStopped = Task.isCancelled || (error as? URLError)?.code == .cancelled
+                phase = wasStopped ? .idle : .failed(ScrobbleService.describe(error))
             }
             readProgress()
             task = nil

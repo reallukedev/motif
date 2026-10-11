@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import TracksCore
 
 /// Songs downloaded from your servers to play without a connection: the original files, FLAC
@@ -41,6 +42,11 @@ final class Downloads {
     private(set) var items: [String: Item] = [:]
     /// Songs on their way, by track id, from 0 to 1.
     private(set) var progress: [String: Double] = [:]
+    /// Songs on their way whose first bytes have come, so they aren't waiting to start.
+    private(set) var started: Set<String> = []
+    /// Songs on their way from a server that didn't say how big they are, so how far along
+    /// they are can't be told.
+    private(set) var sizeUnknown: Set<String> = []
     /// Called with each song once it's downloaded.
     @ObservationIgnored var onDownloaded: ((LocalTrack) -> Void)?
     /// Songs that couldn't be downloaded, by track id, with why.
@@ -148,6 +154,8 @@ final class Downloads {
             task.taskDescription = Self.describe(trackID: track.id, attempt: attempt)
             pending[track.id] = Pending(track: track, attempt: attempt, requestedBitRate: bitRate)
             progress[track.id] = 0
+            started.remove(track.id)
+            sizeUnknown.remove(track.id)
             failures[track.id] = nil
             task.resume()
         }
@@ -156,14 +164,14 @@ final class Downloads {
 
     /// Whether a download is queued and hasn't started: waiting for Wi-Fi, with cellular off.
     func isWaitingForWiFi(_ trackID: String, onCellular: Bool) -> Bool {
-        onCellular && !Self.allowsCellular && progress[trackID] == 0
+        onCellular && !Self.allowsCellular && progress[trackID] != nil && !started.contains(trackID)
     }
 
     /// Downloading over cellular was turned on or off: the downloads that haven't started are
     /// asked for again under the new rule, so ones waiting for Wi-Fi start at once, or ones
     /// about to start on cellular wait.
     func cellularSettingChanged() {
-        let notStarted = pending.filter { progress[$0.key] == 0 }
+        let notStarted = pending.filter { progress[$0.key] != nil && !started.contains($0.key) }
         guard !notStarted.isEmpty else { return }
         cancel(Set(notStarted.keys))
         start(notStarted.values.map(\.track))
@@ -182,6 +190,8 @@ final class Downloads {
         }
         for id in trackIDs {
             progress[id] = nil
+            started.remove(id)
+            sizeUnknown.remove(id)
             pending[id] = nil
         }
         Self.save(pending, to: Self.pendingURL)
@@ -212,8 +222,14 @@ final class Downloads {
 
     // MARK: - From the session
 
-    fileprivate func didWrite(_ trackID: String, attempt: String, fraction: Double) {
+    /// - Parameter fraction: how far along it is, or nil when the server didn't say its size.
+    fileprivate func didWrite(_ trackID: String, attempt: String, fraction: Double?) {
         guard pending[trackID]?.attempt == attempt else { return }
+        if !started.contains(trackID) { started.insert(trackID) }
+        guard let fraction else {
+            if !sizeUnknown.contains(trackID) { sizeUnknown.insert(trackID) }
+            return
+        }
         // Every row showing a download redraws on each write: whole percents are plenty, and
         // the session reports every chunk.
         if let shown = progress[trackID], fraction < 1, fraction - shown < 0.01 { return }
@@ -221,20 +237,30 @@ final class Downloads {
     }
 
     fileprivate func didFinish(_ trackID: String, attempt: String, fileName: String?, bytes: Int64, outcome: Outcome) {
-        // Stopped on purpose: nothing more to say.
-        if stoppedAttempts.remove(attempt) != nil { return }
         let current = pending[trackID]
-        // A newer attempt at the same song is under way: this one's word is stale. Its file, if
-        // any, has the same name the newer one will land under.
-        if let current, current.attempt != attempt { return }
+        // Stopped on purpose, or a newer attempt at the same song is under way: this one's
+        // word is stale, and the file it landed isn't wanted.
+        let wasStopped = stoppedAttempts.remove(attempt) != nil
+        if wasStopped || (current.map { $0.attempt != attempt } ?? false) {
+            Self.discard(fileName)
+            return
+        }
         progress[trackID] = nil
+        started.remove(trackID)
+        sizeUnknown.remove(trackID)
         pending[trackID] = nil
         Self.save(pending, to: Self.pendingURL)
         switch outcome {
         case .finished:
             // After a relaunch the attempt may be gone from memory; the library still knows the song.
-            guard let fileName, let track = current?.track ?? catalogTrack(trackID) else { return }
+            guard let fileName else { return }
+            guard let track = current?.track ?? catalogTrack(trackID) else {
+                Self.discard(fileName)
+                return
+            }
+            let replaced = items[trackID]?.fileName
             items[trackID] = Item(track: track, fileName: fileName, bytes: bytes, downloadedAt: .now, requestedBitRate: current?.requestedBitRate)
+            if replaced != fileName { Self.discard(replaced) }
             failures[trackID] = nil
             Self.save(items, to: Self.recordURL)
             onDownloaded?(track)
@@ -281,7 +307,10 @@ final class Downloads {
         for task in tasks {
             guard let (id, attempt) = Self.parse(task.taskDescription), pending[id]?.attempt == attempt else { continue }
             let expected = task.countOfBytesExpectedToReceive
-            progress[id] = expected > 0 ? Double(task.countOfBytesReceived) / Double(expected) : 0
+            let received = task.countOfBytesReceived
+            progress[id] = expected > 0 ? Double(received) / Double(expected) : 0
+            if received > 0 { started.insert(id) }
+            if received > 0, expected <= 0 { sizeUnknown.insert(id) }
         }
     }
 
@@ -300,10 +329,42 @@ final class Downloads {
         LibraryFolders.downloads.appending(path: name)
     }
 
-    /// A safe file name for a track id, which holds colons and a server's own characters.
-    nonisolated static func fileName(for trackID: String, suffix: String) -> String {
+    private static func discard(_ name: String?) {
+        guard let name else { return }
+        try? FileManager.default.removeItem(at: fileURL(name))
+    }
+
+    /// Why a download failed, in a sentence that says what to do. The system's own words go
+    /// to the log, since they name sockets and file paths.
+    nonisolated static func failureReason(for error: any Error) -> String {
+        if let code = (error as? URLError)?.code {
+            switch code {
+            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff:
+                return String(localized: "You’re offline. Try again once you’re connected.")
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut:
+                return String(localized: "Your server didn’t answer. Check that it’s running, then try again.")
+            default:
+                break
+            }
+        }
+        if isOutOfSpace(error) {
+            return String(localized: "There isn’t enough space for it. Free up some space, then try again.")
+        }
+        return String(localized: "Couldn’t download this song. Try again.")
+    }
+
+    private nonisolated static func isOutOfSpace(_ error: any Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain, error.code == NSFileWriteOutOfSpaceError { return true }
+        if error.domain == NSPOSIXErrorDomain, error.code == Int(ENOSPC) { return true }
+        return (error.userInfo[NSUnderlyingErrorKey] as? NSError).map(isOutOfSpace) ?? false
+    }
+
+    /// A safe file name for a track id, which holds colons and a server's own characters. Each
+    /// attempt lands under its own, so a stale one can be deleted without touching a newer one.
+    nonisolated static func fileName(for trackID: String, attempt: String, suffix: String) -> String {
         let safe = trackID.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "_" }
-        return String(safe) + "." + (suffix.isEmpty ? "audio" : suffix)
+        return String(safe) + "-" + attempt.prefix(8) + "." + (suffix.isEmpty ? "audio" : suffix)
     }
 
     private static func load<Value: Decodable>(_ url: URL) -> Value? {
@@ -321,10 +382,11 @@ final class Downloads {
 /// that happens here, off the main actor; everything else is handed to ``Downloads``.
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     @MainActor weak var owner: Downloads?
+    private nonisolated static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Tracks", category: "Downloads")
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard let (id, attempt) = Downloads.parse(downloadTask.taskDescription), totalBytesExpectedToWrite > 0 else { return }
-        let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        guard let (id, attempt) = Downloads.parse(downloadTask.taskDescription) else { return }
+        let fraction = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : nil
         Task { @MainActor in self.owner?.didWrite(id, attempt: attempt, fraction: fraction) }
     }
 
@@ -336,10 +398,21 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
             Task { @MainActor in self.owner?.didFinish(id, attempt: attempt, fileName: nil, bytes: 0, outcome: .failed(reason)) }
             return
         }
-        let suffix = Self.suffix(for: downloadTask.response)
-        let name = Downloads.fileName(for: id, suffix: suffix)
-        let destination = Downloads.fileURL(name)
         let manager = FileManager.default
+        let size = (try? manager.attributesOfItem(atPath: location.path(percentEncoded: false))[.size] as? Int64) ?? 0
+        let head = (try? FileHandle(forReadingFrom: location)).flatMap { handle in
+            defer { try? handle.close() }
+            return try? handle.read(upToCount: DownloadedAudio.headLength)
+        } ?? Data()
+        guard DownloadedAudio.isAudio(mimeType: downloadTask.response?.mimeType, head: head, size: size) else {
+            Self.log.error("A download wasn't audio: \(downloadTask.response?.mimeType ?? "no type", privacy: .public), \(size) bytes")
+            let reason = String(localized: "Your server sent an error instead of the song. Try again later.")
+            Task { @MainActor in self.owner?.didFinish(id, attempt: attempt, fileName: nil, bytes: 0, outcome: .failed(reason)) }
+            return
+        }
+        let suffix = Self.suffix(for: downloadTask.response)
+        let name = Downloads.fileName(for: id, attempt: attempt, suffix: suffix)
+        let destination = Downloads.fileURL(name)
         try? manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? manager.removeItem(at: destination)
         do {
@@ -347,7 +420,8 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
             let bytes = (try? manager.attributesOfItem(atPath: destination.path(percentEncoded: false))[.size] as? Int64) ?? 0
             Task { @MainActor in self.owner?.didFinish(id, attempt: attempt, fileName: name, bytes: bytes, outcome: .finished) }
         } catch {
-            let reason = error.localizedDescription
+            Self.log.error("Couldn't keep a download: \(error, privacy: .public)")
+            let reason = Downloads.failureReason(for: error)
             Task { @MainActor in self.owner?.didFinish(id, attempt: attempt, fileName: nil, bytes: 0, outcome: .failed(reason)) }
         }
     }
@@ -356,9 +430,10 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
         guard let error, let (id, attempt) = Downloads.parse(task.taskDescription) else { return }
         // A cancel Tracks didn't ask for (the app was quit, say) is a failure, to try again; one it
         // did ask for is ignored by the owner, which knows the attempt was stopped.
+        Self.log.error("A download failed: \(error, privacy: .public)")
         let reason = (error as? URLError)?.code == .cancelled
             ? String(localized: "Stopped before it finished.")
-            : error.localizedDescription
+            : Downloads.failureReason(for: error)
         Task { @MainActor in
             self.owner?.didFinish(id, attempt: attempt, fileName: nil, bytes: 0, outcome: .failed(reason))
         }

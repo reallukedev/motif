@@ -93,11 +93,21 @@ struct ArtistArtworkTests {
         #expect(ArtistArtworkLookup.creditedArtist(named: credited, among: names) == expected)
     }
 
+    /// A cache of its own in a file nobody else reads, and a defaults suite of its own for
+    /// where the pictures used to be kept.
+    private struct ScratchCache {
+        let file = FileManager.default.temporaryDirectory.appending(path: "ArtistArtwork-\(UUID().uuidString).json")
+        let legacy = ScratchDefaults()
+        var cache: ArtistArtworkCache { ArtistArtworkCache(url: file, legacySuiteName: legacy.suiteName) }
+
+        func remove() { try? FileManager.default.removeItem(at: file) }
+    }
+
     @Test("a lookup with no picture is remembered, so it isn't repeated")
     func cacheRemembersMisses() {
-        let suite = "com.luke.tracks.tests.\(UUID().uuidString)"
-        defer { ScratchDefaults.remove(suiteName: suite) }
-        let cache = ArtistArtworkCache(suiteName: suite)
+        let scratch = ScratchCache()
+        defer { scratch.remove() }
+        let cache = scratch.cache
 
         cache.record(found: ["rod wave": "https://example.test/rod.jpg"], asked: ["rod wave", "nobody"])
         #expect(cache.urls == ["rod wave": "https://example.test/rod.jpg"])
@@ -111,9 +121,9 @@ struct ArtistArtworkTests {
     /// before the artist's songs had catalog ids.
     @Test("forgetting misses queues them again and keeps the pictures that were found")
     func forgetMissingKeepsFoundPictures() {
-        let suite = "com.luke.tracks.tests.\(UUID().uuidString)"
-        defer { ScratchDefaults.remove(suiteName: suite) }
-        let cache = ArtistArtworkCache(suiteName: suite)
+        let scratch = ScratchCache()
+        defer { scratch.remove() }
+        let cache = scratch.cache
 
         cache.record(
             found: ["rod wave": "https://example.test/rod.jpg"],
@@ -125,5 +135,33 @@ struct ArtistArtworkTests {
         #expect(cache.urls == ["rod wave": "https://example.test/rod.jpg"])
         // Nothing left to forget the second time.
         #expect(cache.forgetMissing() == 0)
+    }
+
+    /// One entry per artist ever played grew without end in the App Group's defaults, which
+    /// every widget and the menu bar load whole to read a setting.
+    @Test("the pictures are kept out of the shared defaults")
+    func keptOutOfSharedDefaults() {
+        let scratch = ScratchCache()
+        defer { scratch.remove() }
+
+        scratch.cache.record(found: ["rod wave": "https://example.test/rod.jpg"], asked: ["rod wave", "nobody"])
+
+        #expect(scratch.legacy.defaults.object(forKey: ArtistArtworkCache.legacyDefaultsKey) == nil)
+        #expect(scratch.cache.urls == ["rod wave": "https://example.test/rod.jpg"])
+        #expect(scratch.cache.lookedUp == ["rod wave", "nobody"])
+    }
+
+    @Test("pictures found before the move are moved, not looked up again")
+    func movesTheOldCache() {
+        let scratch = ScratchCache()
+        defer { scratch.remove() }
+        scratch.legacy.defaults.set(
+            ["rod wave": "https://example.test/rod.jpg", "nobody": ""],
+            forKey: ArtistArtworkCache.legacyDefaultsKey
+        )
+
+        #expect(scratch.cache.urls == ["rod wave": "https://example.test/rod.jpg"])
+        #expect(scratch.cache.lookedUp == ["rod wave", "nobody"])
+        #expect(scratch.legacy.defaults.object(forKey: ArtistArtworkCache.legacyDefaultsKey) == nil)
     }
 }

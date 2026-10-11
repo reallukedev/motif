@@ -10,7 +10,7 @@ import Foundation
 /// same answer from its own copy.
 ///
 /// Until this existed, the merge only ran at launch and on a sixty-second timer that only
-/// turns while capture is running — so a device that was open but idle showed the duplicates
+/// turns while capture is running, so a device that was open but idle showed the duplicates
 /// until something else happened to it. Core Data posts
 /// `NSPersistentStoreRemoteChange` when the CloudKit mirror writes to the store, which is the
 /// actual moment there is something to reconcile.

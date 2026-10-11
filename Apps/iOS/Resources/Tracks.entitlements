@@ -30,7 +30,7 @@
          container, because widgets and intents read them straight out of the App Group's
          defaults without opening the model container. See TracksCore's SettingsSync.
 
-         Both apps resolve this to the same string — they share a bundle id — which is what
+         Both apps resolve this to the same string (they share a bundle id), which is what
          lets the Mac and the iPhone see each other's settings. Without the entitlement
          NSUbiquitousKeyValueStore accepts writes and syncs nothing. -->
     <!-- Siri's "play" requests, which Tracks handles in the app. Automatic signing adds the

@@ -34,7 +34,12 @@ public struct PeriodActivity: Sendable, Equatable {
     /// The artists heard for the first time ever in the period, by ``CaptureStat/artistIdentity``.
     public let newArtists: Set<String>
     /// Plays in the period before, to say how this one compares. Nil for all time.
+    ///
+    /// While this period is under way, only the part of the one before that it has caught up
+    /// with: Thursday evening against last week up to Thursday evening.
     public let previousPlays: Int?
+    /// Listening in the same stretch of the period before as ``previousPlays``.
+    public let previousSeconds: TimeInterval?
 
     public init(
         buckets: [Bucket],
@@ -46,7 +51,8 @@ public struct PeriodActivity: Sendable, Equatable {
         albums: Int,
         newSongs: Int,
         newArtists: Set<String> = [],
-        previousPlays: Int?
+        previousPlays: Int?,
+        previousSeconds: TimeInterval? = nil
     ) {
         self.buckets = buckets
         self.bucketSpan = bucketSpan
@@ -58,16 +64,19 @@ public struct PeriodActivity: Sendable, Equatable {
         self.newSongs = newSongs
         self.newArtists = newArtists
         self.previousPlays = previousPlays
+        self.previousSeconds = previousSeconds
     }
 
     /// The busiest bar's plays, so the bars share one scale. Never zero.
     public var busiest: Int { max(1, buckets.map(\.plays).max() ?? 1) }
 
-    /// The change in plays against the period before, as a fraction: 0.25 for a quarter more.
-    /// Nil with nothing to compare against.
+    /// The change in listening time against the period before, as a fraction: 0.25 for a
+    /// quarter more. Seconds rather than plays, so a run of skipped songs isn't more
+    /// listening. While this period is under way, against the period before up to the same
+    /// point, as ``previousPlays`` says. Nil with nothing to compare against.
     public var change: Double? {
-        guard let previousPlays, previousPlays > 0 else { return nil }
-        return Double(plays - previousPlays) / Double(previousPlays)
+        guard let previousSeconds, previousSeconds > 0 else { return nil }
+        return (seconds - previousSeconds) / previousSeconds
     }
 }
 
@@ -147,6 +156,7 @@ extension ListeningHistory {
             seconds += self.seconds[index]
         }
 
+        let previous = comparison(for: period, now: now, calendar: calendar).map { indices(in: $0) }
         return PeriodActivity(
             buckets: buckets,
             bucketSpan: period.span.bucketSpan,
@@ -157,7 +167,17 @@ extension ListeningHistory {
             albums: albums.count,
             newSongs: newSongs,
             newArtists: newArtists,
-            previousPlays: period.previous(calendar: calendar).map { playCount(in: $0) }
+            previousPlays: previous?.count,
+            previousSeconds: previous.map { $0.reduce(0) { $0 + self.seconds[$1] } }
         )
+    }
+
+    /// The stretch of the period before `period` to compare it with: all of it, or while
+    /// `period` is under way, as far into it as `period` has got.
+    func comparison(for period: ChartPeriod, now: Date, calendar: Calendar) -> DateInterval? {
+        guard let previous = period.previous(calendar: calendar)?.interval else { return nil }
+        guard let current = period.interval, period.isCurrent(now: now) else { return previous }
+        let elapsed = now.timeIntervalSince(current.start)
+        return DateInterval(start: previous.start, end: min(previous.end, previous.start.addingTimeInterval(elapsed)))
     }
 }

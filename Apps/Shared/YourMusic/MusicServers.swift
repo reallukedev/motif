@@ -211,7 +211,8 @@ final class MusicServers {
             searchFailed = true
         }
         // Older servers answer an empty search with nothing, or refuse it: walk the albums.
-        if songs.isEmpty || (searchFailed && songs.count < Self.pageSize) {
+        // A search that failed partway is only some of the songs, so it's walked too.
+        if songs.isEmpty || searchFailed {
             guard let walked = try? await Self.songsByAlbum(client) else {
                 // Keep what was there; a failed sync mustn't empty the library.
                 return
@@ -365,7 +366,13 @@ final class MusicServers {
         for batch in stride(from: 0, to: albums.count, by: 8).map({ Array(albums[$0..<min($0 + 8, albums.count)]) }) {
             try await withThrowingTaskGroup(of: [SubsonicSong].self) { group in
                 for album in batch {
-                    group.addTask { (try? await client.album(id: album.id).songs) ?? [] }
+                    // An album the server can't give is skipped; a lost connection fails the
+                    // walk, so part of the library isn't kept as all of it.
+                    group.addTask {
+                        do { return try await client.album(id: album.id).songs }
+                        catch let error as URLError { throw error }
+                        catch { return [] }
+                    }
                 }
                 for try await found in group { songs += found }
             }

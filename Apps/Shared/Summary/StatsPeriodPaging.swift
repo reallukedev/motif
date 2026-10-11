@@ -44,6 +44,8 @@ struct PeriodPager: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .lineLimit(1)
+                // A month's full name at the largest sizes shrinks rather than being cut off.
+                .minimumScaleFactor(0.7)
             Button("Later", systemImage: "chevron.forward", action: paging.goForward)
                 .disabled(!paging.canGoForward)
                 .help(Text("Show the \(Text(summary.range.unitName)) after"))
@@ -83,28 +85,41 @@ extension View {
 private struct PeriodSwipe: ViewModifier {
     let paging: StatsPeriodPaging?
     @Binding var selection: Date?
+    /// Where the bar on show was tapped, so a second tap on it puts the total back.
+    @State private var tappedX: CGFloat?
 
     func body(content: Content) -> some View {
         if let paging {
-            content
-                .chartXSelection(value: $selection)
-                .chartGesture { proxy in
-                    LongPressGesture(minimumDuration: 0.2)
-                        .sequenced(before: DragGesture(minimumDistance: 0))
-                        .onChanged { value in
-                            if case .second(true, let drag?) = value {
-                                proxy.selectXValue(at: drag.location.x)
+            content.chartOverlay { proxy in
+                GeometryReader { geometry in
+                    // A tap reads a bar and a quick sideways swipe changes the period. Neither
+                    // holds on to the touch, so a drag that starts on a chart still scrolls the
+                    // page, which a press-and-drag gesture here would stop.
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture { location in
+                            guard let plot = proxy.plotFrame else { return }
+                            if selection != nil, let tappedX, abs(location.x - tappedX) < 12 {
+                                selection = nil
+                                self.tappedX = nil
+                                return
                             }
+                            selection = proxy.value(atX: location.x - geometry[plot].origin.x, as: Date.self)
+                            tappedX = location.x
                         }
-                        .onEnded { _ in selection = nil }
-                        .exclusively(before: DragGesture(minimumDistance: 24).onEnded { value in
-                            let across = value.translation.width
-                            // Mostly sideways, and far enough to mean it.
-                            guard abs(across) > 44, abs(across) > abs(value.translation.height) * 1.5 else { return }
-                            // Content follows the finger: swiping right brings in the past.
-                            if across > 0 { paging.goBack() } else { paging.goForward() }
-                        })
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 20)
+                                .onEnded { value in
+                                    let across = value.translation.width
+                                    guard abs(across) > 44, abs(across) > abs(value.translation.height) * 1.5 else { return }
+                                    selection = nil
+                                    tappedX = nil
+                                    // Content follows the finger: swiping right brings in the past.
+                                    if across > 0 { paging.goBack() } else { paging.goForward() }
+                                }
+                        )
                 }
+            }
         } else {
             content.chartXSelection(value: $selection)
         }

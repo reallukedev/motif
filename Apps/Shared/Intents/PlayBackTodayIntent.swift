@@ -17,8 +17,9 @@ struct PlayBackTodayIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = try TracksStore.shared()
-        let controller = PlaybackController(store: store, service: PlatformPlaybackService.make())
+        // The app's own controller (see PlayInTracksIntent.swift), which lives on to mark each
+        // song played back as it ends. The widgets' half is in PlayBackButton.swift.
+        let controller = try Self.playbackController()
         await controller.playBackToday()
 
         if let error = controller.lastError {

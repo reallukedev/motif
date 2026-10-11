@@ -155,7 +155,6 @@ struct LibrarySongsTablePage: View {
     @State private var selection: Set<LibrarySongRow.ID> = []
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
-    @Environment(\.openPlayRoute) private var openPlayRoute
 
     var body: some View {
         VStack(spacing: 0) {
@@ -215,12 +214,12 @@ struct LibrarySongsTablePage: View {
     private func menu(for ids: Set<LibrarySongRow.ID>) -> some View {
         let chosen = pager.items.filter { ids.contains($0.id.rawValue) }
         if chosen.count == 1, let song = chosen.first {
-            SongMenu(song: song)
-            Button("Your Stats…", systemImage: "chart.bar.xaxis") {
-                openPlayRoute(.stats(.song(HistoryImport.key(title: song.title, artistName: song.artistName))))
-            }
+            SongMenu(song: song, play: { play(rows.first { $0.id == song.id.rawValue }) })
         } else if !chosen.isEmpty {
             let title = String(AttributedString(localized: "^[\(chosen.count) song](inflect: true)").characters)
+            Button("Play", systemImage: "play") {
+                player.play(.songs(chosen), from: .songs(title))
+            }
             Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
                 player.enqueue(.songs(chosen), next: true, title: title)
             }
@@ -281,7 +280,6 @@ struct LibraryYourSongsTablePage: View {
     @Environment(YourMusic.self) private var music
     @Environment(PlayFeed.self) private var feed
     @Environment(PlayerModel.self) private var player
-    @Environment(\.openPlayRoute) private var openPlayRoute
     @AppStorage("macYourSongOrder") private var order = LibraryOrder.title
     @State private var query = ""
     @State private var selection: Set<LibrarySongRow.ID> = []
@@ -327,7 +325,7 @@ struct LibraryYourSongsTablePage: View {
                         deleting = ids.compactMap { byID[$0] }.filter { !$0.isFromServer }
                     }
                 ) { ids in
-                    menu(for: ids.compactMap { byID[$0] })
+                    menu(for: ids.compactMap { byID[$0] }, rows: rows, byID: byID)
                 }
             }
         }
@@ -370,13 +368,18 @@ struct LibraryYourSongsTablePage: View {
     }
 
     @ViewBuilder
-    private func menu(for tracks: [LocalTrack]) -> some View {
+    private func menu(for tracks: [LocalTrack], rows: [LibrarySongRow], byID: [String: LocalTrack]) -> some View {
         if tracks.count == 1, let track = tracks.first {
-            LocalTrackMenu(track: track, showsStats: true, onDelete: { deleting = [$0] })
+            LocalTrackMenu(track: track, showsStats: true, onDelete: { deleting = [$0] }) { actions in
+                actions.play = music.isPlayable(track) ? { play(from: rows.first { $0.id == track.id }, rows: rows, byID: byID) } : nil
+            }
         } else if !tracks.isEmpty {
             let playable = tracks.filter(music.isPlayable)
             let title = String(AttributedString(localized: "^[\(tracks.count) song](inflect: true)").characters)
             if !playable.isEmpty {
+                Button("Play", systemImage: "play") {
+                    player.play(.local(playable), from: .songs(title))
+                }
                 Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
                     player.enqueue(.local(playable), next: true, title: title)
                 }
@@ -385,9 +388,7 @@ struct LibraryYourSongsTablePage: View {
                 }
                 Divider()
             }
-            Button("Add to Playlist…", systemImage: "text.badge.plus") {
-                music.playlists.picking = PlaylistPick(tracks: tracks)
-            }
+            AddToPlaylistMenu(tracks: tracks)
             let server = tracks.filter { $0.isFromServer && !music.downloads.isDownloaded($0.id) }
             if !server.isEmpty {
                 Button("Download", systemImage: "arrow.down.circle") { music.downloads.download(server) }

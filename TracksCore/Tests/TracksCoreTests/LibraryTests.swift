@@ -116,16 +116,41 @@ private struct StubTransport: SubsonicTransport {
 struct SubsonicTests {
     let server = SubsonicServer(id: "home", name: "Home", url: URL(string: "https://music.example.com")!, username: "luke", salt: "c19b2d")
 
+    private func query(_ url: URL) -> [String: String] {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return Dictionary(items.map { ($0.name, $0.value ?? "") }) { first, _ in first }
+    }
+
     @Test("the token is md5 of the password and salt, and the password never goes in the address")
-    func token() {
+    func token() throws {
         // The worked example from the Subsonic API documentation.
         #expect(SubsonicClient.token(password: "sesame", salt: "c19b2d") == "26719a1196d2a940705a59634eb18eab")
         let url = SubsonicClient(server: server, password: "sesame").url("ping")
-        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+        let query = query(url)
         #expect(url.path() == "/rest/ping")
-        #expect(query.contains(URLQueryItem(name: "t", value: "26719a1196d2a940705a59634eb18eab")))
-        #expect(query.contains(URLQueryItem(name: "f", value: "json")))
+        let salt = try #require(query["s"])
+        #expect(query["t"] == SubsonicClient.token(password: "sesame", salt: salt))
+        #expect(query["f"] == "json")
         #expect(!url.absoluteString.contains("sesame"))
+    }
+
+    /// With one salt for good, an address from any log signed every request after it.
+    @Test("each request is signed with a salt of its own")
+    func freshSaltPerRequest() {
+        let client = SubsonicClient(server: server, password: "sesame")
+        let first = query(client.url("ping"))
+        let second = query(client.url("ping"))
+        #expect(first["s"] != second["s"])
+        #expect(first["t"] != second["t"])
+        #expect(query(client.streamURL(songID: "7"))["s"] != query(client.streamURL(songID: "7"))["s"])
+    }
+
+    /// Covers are cached by address, so theirs can't change between launches.
+    @Test("a cover's address stays the same")
+    func stableCoverAddress() {
+        let client = SubsonicClient(server: server, password: "sesame")
+        #expect(client.coverArtURL(id: "al-1", size: 600) == client.coverArtURL(id: "al-1", size: 600))
+        #expect(query(client.coverArtURL(id: "al-1"))["s"] == server.salt)
     }
 
     @Test("a plus in a username or search reaches the server as a plus")

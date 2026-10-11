@@ -250,10 +250,10 @@ extension ChartPeriod {
             }
         }
         return switch span {
-        case .day: "No Listening on This Day"
-        case .week: "No Listening This Week"
-        case .month: "No Listening This Month"
-        case .year: "No Listening This Year"
+        case .day: "No Listening That Day"
+        case .week: "No Listening That Week"
+        case .month: "No Listening That Month"
+        case .year: "No Listening That Year"
         case .allTime: "Nothing Played Yet"
         }
     }

@@ -18,10 +18,10 @@ struct SaveCurrentRadioSongIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = try TracksStore.shared()
         // Created before capturing so the capture counts as a change.
         let widgets = WidgetRefresher.shared
-        let service = CaptureService(store: store)
+        // The app's own, when it's running, so the play is scrobbled and written once.
+        let service = try CaptureService.shared()
         let decision = await service.captureCurrentSong()
         // Reload now, since the process is suspended soon after a background intent returns.
         widgets?.reloadIfChanged()

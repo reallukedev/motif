@@ -16,6 +16,11 @@ struct MusicSearchResults: View {
     @Environment(\.openPlayRoute) private var openRoute
     @State private var results = Results()
     @State private var state: LoadState = .idle
+    /// Bumped by Try Again, so the retry runs as the search task itself and a newer query
+    /// still replaces it.
+    @State private var attempt = 0
+    /// The song selected on the Mac, where a click selects and a double-click plays.
+    @FocusState private var selectedSong: String?
     @AppStorage("recentMusicSearches") private var recentStorage = ""
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
 
@@ -49,7 +54,7 @@ struct MusicSearchResults: View {
             .animation(.snappy, value: results.isEmpty)
         }
         .overlay { overlay }
-        .task(id: SearchKey(query: query, scope: scope, authorization: model.musicAuthorization, allowsExplicit: allowsExplicit)) {
+        .task(id: SearchKey(query: query, scope: scope, authorization: model.musicAuthorization, allowsExplicit: allowsExplicit, attempt: attempt)) {
             await runSearch()
         }
     }
@@ -201,11 +206,12 @@ struct MusicSearchResults: View {
     /// Songs in rows, two columns of them on the Mac.
     private func songRows(_ shown: [Song], all: [Song]) -> some View {
         SearchSongGrid(items: shown) { song in
-            Button {
+            let play = {
                 remember()
                 // The song, then the rest of the results, as playing from any list does.
                 player.play(.songs(all, startingAt: all.firstIndex(of: song) ?? 0), from: .songs(String(localized: "Search")))
-            } label: {
+            }
+            SongResultRow(id: song.id.rawValue, selection: $selectedSong, step: { step(from: song, by: $0, in: all) }, play: play) {
                 TrackRow(
                     title: song.title,
                     subtitle: [song.artistName, song.albumTitle].compactMap(\.self).joined(separator: " · "),
@@ -216,9 +222,15 @@ struct MusicSearchResults: View {
                 .padding(.vertical, 5)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .contextMenu { SongMenu(song: song) }
+            .macDraggable(SongDrag(song))
+            .contextMenu { SongMenu(song: song, play: play) }
         }
+    }
+
+    /// The arrow keys, through every song shown, across both columns in reading order.
+    private func step(from song: Song, by offset: Int, in all: [Song]) {
+        guard let index = all.firstIndex(of: song), all.indices.contains(index + offset) else { return }
+        selectedSong = all[index + offset].id.rawValue
     }
 
     @ViewBuilder
@@ -254,7 +266,7 @@ struct MusicSearchResults: View {
             } description: {
                 Text("Check your connection and try again.")
             } actions: {
-                Button("Try Again") { Task { await runSearch() } }
+                Button("Try Again") { attempt += 1 }
             }
         } else if !isBlank, state == .loaded, results.isEmpty {
             ContentUnavailableView.search(text: query)
@@ -340,6 +352,7 @@ private struct SearchKey: Equatable {
     let scope: SearchScope
     let authorization: MusicAuthorization.Status
     let allowsExplicit: Bool
+    let attempt: Int
 }
 
 private extension Optional where Wrapped == MusicSearchResults.TopResult {

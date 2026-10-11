@@ -12,6 +12,10 @@ struct MacRootView: View {
     @AppStorage(SearchScope.macStorageKey) private var searchScope: SearchScope = .appleMusic
     /// The panel and the full player: the window's, not the app's.
     @State private var playerWindow = PlayerWindowState()
+    @State private var history = NavigationHistory()
+    /// Tracks Radio's tuning, presented by the window from outside the full player and the
+    /// bar's popover, whose looks mustn't reach it.
+    @State private var showsTuner = false
     @FocusState private var isSearchFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isOnScreen) private var isOnScreen
@@ -47,15 +51,25 @@ struct MacRootView: View {
             .environment(playerWindow)
             .environment(\.beginSearch, BeginSearchAction { scope in beginSearch(in: scope) })
             .onChange(of: model.sidebarSelection) {
+                history.reset()
                 navigator.path = NavigationPath()
                 query = ""
+            }
+            .onChange(of: navigator.path) { old, new in
+                history.pathChanged(from: old, to: new)
             }
             // Initial too, for a window the request itself had to open.
             .onChange(of: model.pendingRoute, initial: true) { _, route in
                 guard let route else { return }
+                model.pendingRoute = nil
+                // The song Tracks is playing opens as it's playing, as Music's mini player
+                // opens Now Playing: the menu bar's song asks for it this way.
+                if case .song(let identity) = route, player.hasQueue, identity == player.current?.songIdentity {
+                    playerWindow.showsFullPlayer = true
+                    return
+                }
                 query = ""
                 navigator.path = NavigationPath([route])
-                model.pendingRoute = nil
             }
             .onChange(of: model.musicSource) { old, source in
                 follow(sourceChangeFrom: old, to: source)
@@ -63,9 +77,15 @@ struct MacRootView: View {
             .onChange(of: player.hasQueue) { _, hasQueue in
                 if !hasQueue { playerWindow.showsPanel = false }
             }
-            // The popover is the bar's, and the full player covers the bar.
+            // The popover is the bar's, and the full player covers the bar. It opens again on
+            // the song's details, the cover face up.
             .onChange(of: isShowingFullPlayer) { _, isShowing in
-                if isShowing { playerWindow.showsPanel = false }
+                if isShowing {
+                    playerWindow.showsPanel = false
+                } else {
+                    playerWindow.fullPlayerShowsUpNext = false
+                    playerWindow.fullPlayerShowsHistory = false
+                }
             }
             // The full player takes the whole window: the toolbar, the keyboard and VoiceOver
             // leave the page behind it until it closes.
@@ -73,7 +93,7 @@ struct MacRootView: View {
             .accessibilityHidden(isShowingFullPlayer)
             .overlay {
                 if isShowingFullPlayer {
-                    FullPlayer { playerWindow.showsFullPlayer = false }
+                    FullPlayer(window: playerWindow) { playerWindow.showsFullPlayer = false }
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.02)))
                 }
             }
@@ -103,19 +123,31 @@ struct MacRootView: View {
             }
             // Songs being added to a playlist, from a menu anywhere.
             .sheet(item: Bindable(model.yourMusic.playlists).picking) { PlaylistPickerSheet(pick: $0) }
+            .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
+            .environment(\.openRadioTuner, OpenRadioTunerAction {
+                // The popover it was asked from goes first, so the sheet isn't left under it.
+                guard playerWindow.showsPanel else {
+                    showsTuner = true
+                    return
+                }
+                playerWindow.showsPanel = false
+                Task { showsTuner = true }
+            })
             .playerCommands(
-                showsPanel: $playerWindow.showsPanel,
-                panelPage: $playerWindow.panelPage,
-                showsFullPlayer: $playerWindow.showsFullPlayer,
+                window: playerWindow,
+                isShowingFullPlayer: isShowingFullPlayer,
+                history: history,
+                path: $navigator.path,
                 goToCurrentSong: goToCurrentSong,
-                beginSearch: { beginSearch(in: nil) }
+                beginSearch: { beginSearch(in: nil) },
+                open: open
             )
             .opensDeepLinks(in: model)
-            .observesLibrary(model.library)
             .modelContainer(store.container)
             .environment(capture)
             .environment(playback)
             .playEnvironment(model, playsSongsInTracks: songDestination == .tracks)
+            .onAppear { MacAppDelegate.openWindow = openWindow }
             .task { await model.playFeed.followSubscription() }
             .task { await model.lidarr.check() }
             .task(id: model.musicSource) {
@@ -127,7 +159,7 @@ struct MacRootView: View {
                 LaunchScene.openMix(model)
             }
             // Through the Mac's one voice: Music may be the player your devices are shown.
-            .onChange(of: "\(player.current?.id ?? "").\(player.isPlaying)") { Task { await NearbyMac.tell(model) } }
+            .onPlayingChange(of: model.player) { Task { await NearbyMac.tell(model) } }
             #if DEBUG
             .onChange(of: player.hasQueue) { _, hasQueue in
                 if hasQueue, LaunchScene.opensStage { openWindow(id: StageWindow.id) }
@@ -156,7 +188,7 @@ struct MacRootView: View {
             ContentUnavailableView {
                 Label("Tracks Can't Open Your History", systemImage: "exclamationmark.triangle")
             } description: {
-                Text(model.startupError ?? "The database couldn't be opened.")
+                Text("Quit Tracks and open it again. If that doesn’t help, restart your Mac.")
             }
         }
     }
@@ -166,6 +198,7 @@ struct MacRootView: View {
     /// (Downloads, Lidarr) goes back to Listen Now.
     private func follow(sourceChangeFrom old: MusicSource, to source: MusicSource) {
         guard old != source else { return }
+        history.reset()
         model.playNavigator.path = NavigationPath()
         if let selection = model.sidebarSelection,
            SidebarItem.library(for: old, hasLidarr: true).contains(selection),
@@ -184,6 +217,13 @@ struct MacRootView: View {
         playerWindow.showsFullPlayer = false
         if let scope { searchScope = scope }
         isSearchFocused = true
+    }
+
+    /// A page from the menu bar, over whatever the window shows.
+    private func open(_ route: PlayRoute) {
+        playerWindow.showsFullPlayer = false
+        query = ""
+        model.playNavigator.show(route)
     }
 
     /// The playing song's album, or its stats when there's no album to show.

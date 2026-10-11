@@ -258,7 +258,7 @@ struct CaptureMergeTests {
     ///
     /// The window check used to be skipped whenever either row was an import, so any two
     /// rows of one song merged however far apart they were. On iPhone, imports from Recently
-    /// Played are most of the history, so every repeat play of a song was deleted — and the
+    /// Played are most of the history, so every repeat play of a song was deleted, and the
     /// deletion synced, taking it off the Mac too.
     @Test("plays of one song a month apart are four plays, not one")
     func repeatImportedPlaysSurvive() throws {

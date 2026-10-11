@@ -180,3 +180,16 @@ enum PlayIntentError: Error, CustomLocalizedStringResourceConvertible {
         }
     }
 }
+
+extension PlayBackTodayIntent {
+    /// The app's one controller: one made for the intent would be freed as it returns, before
+    /// it marks anything played back, and on the Mac would fight the app's for Music.
+    @MainActor static func playbackController() throws -> PlaybackController {
+        let model = AppModel.shared
+        guard !model.isDemoLaunch else { throw PlayIntentError.sampleData }
+        guard let controller = model.playback else {
+            throw PlayIntentError.problem(model.startupError ?? String(localized: "Tracks couldn't open your history."))
+        }
+        return controller
+    }
+}

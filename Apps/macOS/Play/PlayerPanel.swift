@@ -65,7 +65,7 @@ struct UpNextList: View {
     @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
     @State private var selection: Set<String> = []
     @State private var isDropTarget = false
-    @State private var showsTuner = false
+    @Environment(\.openRadioTuner) private var openRadioTuner
 
     var body: some View {
         List(selection: $selection) {
@@ -134,6 +134,14 @@ struct UpNextList: View {
                             .monospacedDigit()
                     }
                     Spacer()
+                    // Tuning opens from the station it changes, presented by the window. In the
+                    // header, since the Mac's list leaves a section's footer out.
+                    if player.isPlayingTracksRadio, let openRadioTuner {
+                        Button("Tune…") { openRadioTuner() }
+                            .buttonStyle(.link)
+                            .font(.subheadline)
+                            .help("How adventurous it is, the genres it leans into, and old favorites")
+                    }
                     if !queued.isEmpty, !player.isLive, player.context?.isStation != true {
                         Button("Clear") { player.removeUpNext(at: IndexSet(queued.map(\.index))) }
                             .buttonStyle(.link)
@@ -160,13 +168,6 @@ struct UpNextList: View {
                         } else {
                             note("\(player.context?.title ?? "") picks each song as the one before starts.")
                         }
-                    }
-                    // Tuning opens from the station it changes.
-                    if player.isPlayingTracksRadio {
-                        Button("Tune Tracks Radio\u{2026}") { showsTuner = true }
-                            .buttonStyle(.link)
-                            .font(.subheadline)
-                            .help("How adventurous it is, the genres it leans into, and old favorites")
                     }
                 }
             }
@@ -244,7 +245,6 @@ struct UpNextList: View {
             }
         }
         .animation(PlayMotion.hover, value: isDropTarget)
-        .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
     }
 
     private func playLast(_ drops: [SongDrag]) {

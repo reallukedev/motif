@@ -9,6 +9,9 @@ struct SongDetailView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: SongProfile?
+    /// The id whose profile was last worked out from a loaded library, so "No Plays" waits
+    /// for the answer instead of showing while the first one is still on its way.
+    @State private var loadedID: String?
     @State private var showsAllPlays = false
 
     var body: some View {
@@ -18,7 +21,7 @@ struct SongDetailView: View {
                     .padding()
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
-            } else if model.library.isLoaded {
+            } else if loadedID == songID {
                 ContentUnavailableView("No Plays", systemImage: "music.note")
             }
         }
@@ -28,12 +31,16 @@ struct SongDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: "\(songID)|\(model.library.revision)") {
-            let (id, history) = (songID, model.library.history)
+            let (id, history, isLoaded) = (songID, model.library.history, model.library.isLoaded)
             let next = await OffMainActor.run { StatsCalculator.songProfile(id: id, history: history) }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: profile?.song.id == songID, reduceMotion: reduceMotion) {
-                profile = next
+            // A lookup that changed nothing on this page doesn't redraw it.
+            if next != profile {
+                LiveUpdate.apply(isLive: profile?.song.id == songID, reduceMotion: reduceMotion) {
+                    profile = next
+                }
             }
+            if isLoaded { loadedID = id }
         }
     }
 
@@ -115,7 +122,8 @@ struct SongDetailView: View {
                     }
                 }
                 Card(padding: 0) {
-                    VStack(spacing: 0) {
+                    // Lazy: a favourite can have thousands of plays once they're all shown.
+                    LazyVStack(spacing: 0) {
                         let plays = showsAllPlays ? profile.plays : Array(profile.plays.prefix(8))
                         ForEach(Array(plays.enumerated()), id: \.offset) { index, date in
                             HStack {
@@ -156,7 +164,7 @@ struct SongDetailView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Apple Music", systemImage: "arrow.up.forward.app") {
+                Button("Show in Music", systemImage: "arrow.up.forward.app") {
                     if let url = URL(string: "https://music.apple.com/song/\(song.songID)") {
                         openURL(url)
                     }

@@ -236,7 +236,7 @@ struct ArtistScaffold<Sections: View, More: View>: View {
             Button("Shuffle", systemImage: "shuffle", action: shuffle)
         }
         if let station {
-            Button("Start Station", systemImage: "dot.radiowaves.left.and.right", action: station)
+            Button("Create Station", systemImage: "dot.radiowaves.left.and.right", action: station)
         }
         Button("Your Stats", systemImage: "chart.bar.xaxis") {
             openPlayRoute(.stats(.artist(identity)))

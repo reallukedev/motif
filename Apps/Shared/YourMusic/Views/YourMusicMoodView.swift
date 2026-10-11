@@ -21,7 +21,7 @@ struct YourMusicMoodView: View {
         let songs = ServerMix.blend(owned: yours, new: finds)
         let isFinding = suggestionMode == .everything && !music.servers.onlineServers.isEmpty && music.discover.moodFinds[mood] == nil
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
+            LazyVStack(alignment: .leading, spacing: mood.style.pace.sectionSpacing) {
                 hero(canPlay: !songs.isEmpty, hasFinds: !finds.isEmpty)
                 list(songs, isFinding: isFinding || !hasLoaded)
                 if hasLoaded, songs.isEmpty, !isFinding {
@@ -35,8 +35,15 @@ struct YourMusicMoodView: View {
             .padding(.bottom, 24)
             .animation(.snappy, value: songs.count)
         }
+        .tint(mood.style.ink)
         .heroTitle(mood.title)
+        #if os(macOS)
+        .navigationTitle(mood.title)
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        #else
         .toolbarTitleDisplayMode(.inline)
+        #endif
         .task { await load() }
     }
 
@@ -55,52 +62,66 @@ struct YourMusicMoodView: View {
     // MARK: Hero
 
     private func hero(canPlay: Bool, hasFinds: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: mood.symbol)
-                    .font(.system(size: 34, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(mood.title)
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Text(mood.tagline)
-                    .font(.title3)
-                    .opacity(0.9)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        let style = mood.style
+        return RoomHero(
+            style: style,
+            title: mood.title,
+            tagline: mood.tagline,
+            facts: yours.isEmpty ? nil : String(AttributedString(localized: "^[\(yours.count) song](inflect: true) in your music").characters),
+            covers: heroCovers(style),
+            isLoading: !hasLoaded
+        ) {
             VStack(alignment: .leading, spacing: 12) {
-                // What Play does, above it, clear of the fade below.
+                RoomPlayButtons(
+                    style: style,
+                    playTitle: isOn ? (player.isPlaying ? "Pause" : "Resume") : "Play",
+                    playSymbol: isOn && player.isPlaying ? "pause.fill" : "play.fill",
+                    canPlay: canPlay,
+                    shuffle: yours.isEmpty ? nil : { player.play(.local(yours), from: .songs(mood.title), shuffled: true) },
+                    play: { isOn ? player.togglePlayPause() : play(startingWith: nil) }
+                ) {
+                    if let session = mood.session {
+                        RoomRoundMenu(title: session.title, symbol: session.symbol, isOn: player.sleepTimer != nil) {
+                            if player.sleepTimer != nil {
+                                Button("Turn Off Timer", systemImage: "xmark") { player.setSleepTimer(nil) }
+                                Divider()
+                            }
+                            ForEach(session.minutes, id: \.self) { minutes in
+                                Button(session.itemTitle(minutes)) {
+                                    player.setSleepTimer(.at(.now.addingTimeInterval(TimeInterval(minutes * 60))))
+                                    if !isOn { play(startingWith: nil) }
+                                }
+                            }
+                        }
+                    }
+                }
+                // What Play does, under it: with new finds, it mixes them in.
                 Text(hasFinds
-                    ? "Your songs that suit it and new ones like them, picked one at a time as it plays. What you skip steers what comes next."
-                    : "Your songs that suit it, picked one at a time as it plays. Skip as much as you like.")
+                    ? "Your songs that suit it and new ones like them, picked as it plays."
+                    : "Your songs that suit it, picked as it plays.")
                     .font(.footnote)
                     .opacity(0.85)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
-
-                Button {
-                    play(startingWith: nil)
-                } label: {
-                    Label("Go with the Flow", systemImage: "play.fill")
-                        .font(.headline)
-                        .foregroundStyle(mood.color)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(.white, in: .capsule)
-                }
-                .buttonStyle(.pressable)
-                .disabled(!canPlay)
             }
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, PlayMetrics.margin)
-        .padding(.top, 12)
-        .padding(.bottom, 24 + HeroField.fade)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            HeroField(color: mood.base, symbol: mood.symbol)
+    }
+
+    /// The mood's flow is on, playing or paused.
+    private var isOn: Bool {
+        player.hasQueue && player.context == PlayContext(kind: .endless, title: mood.title)
+    }
+
+    /// Your songs' covers, one per album, in the mood's arrangement.
+    private func heroCovers(_ style: RoomStyle) -> [CoverArt] {
+        var seen = Set<String>()
+        var covers: [CoverArt] = []
+        for track in yours where covers.count < CoverMosaic.count(for: style.covers) {
+            if seen.insert(track.album ?? track.id).inserted {
+                covers.append(.url(music.artworkURL(track.artwork)?.absoluteString, seed: track.album ?? track.title))
+            }
         }
+        return covers
     }
 
     // MARK: Songs

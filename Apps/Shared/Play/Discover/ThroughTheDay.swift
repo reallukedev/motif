@@ -369,8 +369,9 @@ struct ThroughTheDayPage: View {
 #endif
 
 #if os(macOS)
-/// Through the Day on the Mac, as a sheet from the tuner or the Play pane: its title in the
-/// content, the day's curve, a feel for each part, and Reset to Default and Done at its foot.
+/// Through the Day on the Mac, in a popover from the tuner or a sheet from the Play pane: its
+/// title in the content, the day's curve, a feel for each part, and Reset to Default and Done
+/// at its foot.
 struct ThroughTheDaySheet: View {
     @Environment(PlayerModel.self) private var player
     @AppStorage(PlayPreferences.radioDayKey) private var storedDay = ""

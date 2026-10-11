@@ -42,7 +42,8 @@ struct RecentSearchesSection: View {
                             Label(recent, systemImage: "clock.arrow.circlepath")
                                 .font(.subheadline.weight(.medium))
                                 .padding(.horizontal, 14)
-                                .frame(height: 34)
+                                .padding(.vertical, 7)
+                                .frame(minHeight: 34)
                                 .background(.quaternary, in: .capsule)
                                 // A full-height target around the chip.
                                 .frame(minHeight: 44)

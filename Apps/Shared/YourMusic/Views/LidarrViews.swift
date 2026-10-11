@@ -312,8 +312,8 @@ struct LidarrPage: View {
                     Button("Refresh", systemImage: "arrow.clockwise") {
                         Task { await refresh() }
                     }
+                    // ⌘R is View > Refresh, which this page answers through `refreshCommand()`.
                     .help("Refresh (⌘R)")
-                    .keyboardShortcut("r", modifiers: .command)
                 }
                 #endif
                 ToolbarItem(placement: .primaryAction) {
@@ -324,6 +324,7 @@ struct LidarrPage: View {
             }
             .sheet(isPresented: $addsArtist) { LidarrAddArtistSheet() }
             .task { await refresh() }
+            .refreshCommand()
             .refreshable { await refresh() }
     }
 
@@ -770,6 +771,7 @@ struct LidarrArtistPage: View {
             }
         }
         .task { await load(force: false) }
+        .refreshCommand()
         .refreshable { await load(force: true) }
     }
 
@@ -797,7 +799,7 @@ struct LidarrArtistPage: View {
             }
             .buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .controlSize(rowControlSize)
             .help("Ask Lidarr to Search for \(album.title)")
         } else {
             Button("Get") {
@@ -805,9 +807,18 @@ struct LidarrArtistPage: View {
             }
             .buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .controlSize(rowControlSize)
             .help("Get \(album.title) with Lidarr")
         }
+    }
+
+    /// Small on the Mac, as its lists are dense. A finger needs the regular size.
+    private var rowControlSize: ControlSize {
+        #if os(iOS)
+        .regular
+        #else
+        .small
+        #endif
     }
 
     private func run(_ album: LidarrAlbum, _ work: @escaping () async -> String) {
