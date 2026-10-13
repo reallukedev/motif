@@ -38,6 +38,9 @@ final class MusicKitPlayerEngine: PlayerEngine {
     /// can lose its picture as the mini player opens into Now Playing (see ``CoverImage``);
     /// these are drawn from Tracks’ own cache instead.
     private var queuedCovers: [String: Artwork] = [:]
+    /// Songs whose catalog cover is being looked up, by song id. A station's songs aren't
+    /// known ahead, so their covers are found as each one starts.
+    private var coversLookedUp: Set<String> = []
     /// Each entry's track as last made, by entry id. The player reports a change many times a
     /// song, and most of the queue is the same each time.
     private var made: [String: MadeTrack] = [:]
@@ -165,8 +168,12 @@ final class MusicKitPlayerEngine: PlayerEngine {
         }
         let title = song?.title ?? entry.title
         var artwork = song?.artwork ?? entry.artwork
-        if artwork.flatMap(Self.loadableCover) == nil, let queued = song.flatMap({ queuedCovers[$0.id.rawValue] }) {
-            artwork = queued
+        if artwork.flatMap(Self.loadableCover) == nil, let song {
+            if let queued = queuedCovers[song.id.rawValue] {
+                artwork = queued
+            } else {
+                lookUpCover(of: song, for: entry.id)
+            }
         }
         let track = PlayerTrack(
             id: entry.id,
@@ -262,6 +269,7 @@ final class MusicKitPlayerEngine: PlayerEngine {
         if context.isStation { player.state.repeatMode = MusicPlayer.RepeatMode.none }
         queueStarting = playID
         queuedCovers = Self.covers(of: queued)
+        coversLookedUp = []
         player.queue = queue
         // In the same main-actor turn as the queue change, so nothing reading the player
         // (the capture source, its recheck) can see the new queue under the old flag, or the
@@ -539,6 +547,22 @@ final class MusicKitPlayerEngine: PlayerEngine {
         (tracks ?? []).compactMap { track in
             if case .song(let song) = track { return song }
             return nil
+        }
+    }
+
+    /// Finds the catalog's cover for a song the player gave only a `musicKit://` one, as a
+    /// station's songs come, so the player's background can read its colours, then redraws it.
+    private func lookUpCover(of song: Song, for entryID: String) {
+        let id = song.id.rawValue
+        guard coversLookedUp.insert(id).inserted else { return }
+        Task { [weak self] in
+            let request = MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: song.id)
+            guard let found = try? await request.response().items.first,
+                  let self, let artwork = found.artwork, Self.loadableCover(artwork) != nil
+            else { return }
+            self.queuedCovers[id] = artwork
+            self.made[entryID] = nil
+            self.refresh()
         }
     }
 
