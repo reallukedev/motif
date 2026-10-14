@@ -204,7 +204,7 @@ struct MusicSourceFocusFilter: SetFocusFilterIntent {
 /// without stopping what's playing.
 struct SwitchMusicSourceIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Music Source"
-    static let description = IntentDescription("Switches between Apple Music and your own music. The song on carries on from the other source when it has it. Leave the source empty to switch to whichever isn't on.")
+    static let description = IntentDescription("Switches between your music sources. The song playing carries on from the other source when it has it. Leave the source empty to switch to whichever isn't on.")
 
     @Parameter(title: "Music Source")
     var source: MusicSource?
