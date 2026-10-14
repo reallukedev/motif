@@ -234,13 +234,13 @@ struct PartyPlayButtons: View {
                 Label("Play", systemImage: "play.fill")
                     .frame(maxWidth: PartyMetrics.fillsButtons ? .infinity : nil)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .tint(tint)
             Button(action: shuffle) {
                 Label("Shuffle", systemImage: "shuffle")
                     .frame(maxWidth: PartyMetrics.fillsButtons ? .infinity : nil)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
             .tint(.primary)
         }
         .font(PartyMetrics.buttonFont)

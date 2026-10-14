@@ -6,27 +6,49 @@ public enum SearchTopKind: Sendable, Equatable {
 }
 
 public enum SearchRanking {
-    /// The best match for what was typed, given the first artist, album and song each search
-    /// found, or nil when there's nothing to show.
+    /// The best match for what was typed, given the name of the first artist, album and song
+    /// each search found, or nil when there's nothing to show.
     ///
-    /// A name typed in full wins outright, an artist's before an album's, so "tides" finds the
-    /// album Tides rather than the artist Tidesman. Then an artist whose name was being typed
-    /// ("mara so" for Mara Solis, or "mara solis live" for them too), or a later word of their
-    /// name ("sol"). Otherwise the first song.
-    public static func topKind(for query: String, artist: String?, album: String?, hasSong: Bool) -> SearchTopKind? {
-        let term = StatsCalculator.folded(query.trimmingCharacters(in: .whitespacesAndNewlines))
+    /// Each is scored by how well its name matches: typed in full, then being typed from its
+    /// start ("mara so" for Mara Solis, "midn" for Midnight Bakery), then a later word being
+    /// typed from three letters ("sol", "bake"). The best wins, an artist before an album and
+    /// an album before a song when they match as well. So "tides" finds the album Tides rather
+    /// than the artist Tidesman, and "midn" the album Midnight Bakery over a song that only has
+    /// it in its artist's name. With no name matching, the first song.
+    public static func topKind(for query: String, artist: String?, album: String?, song: String?) -> SearchTopKind? {
+        let term = SearchFolding.fold(query)
         guard !term.isEmpty else { return nil }
-        let artistName = artist.map(StatsCalculator.folded).flatMap { $0.isEmpty ? nil : $0 }
-        let albumTitle = album.map(StatsCalculator.folded).flatMap { $0.isEmpty ? nil : $0 }
-        if let artistName, artistName == term { return .artist }
-        if let albumTitle, albumTitle == term { return .album }
-        if let artistName, artistName.hasPrefix(term) || term.hasPrefix(artistName + " ") { return .artist }
-        // A later word of their name, from three letters: "sol" for Mara Solis.
-        if let artistName, term.count >= 3,
-           artistName.split(separator: " ").dropFirst().contains(where: { $0.hasPrefix(term) }) {
-            return .artist
+        let candidates: [(SearchTopKind, Match)] = [
+            (.artist, match(artist, term, allowsMoreAfter: true)),
+            (.album, match(album, term)),
+            (.song, match(song, term)),
+        ]
+        // `max` keeps the last of equals, so the first of the best is found by hand.
+        var best: (kind: SearchTopKind, match: Match)?
+        for (kind, match) in candidates where match > .none && match > (best?.match ?? .none) {
+            best = (kind, match)
         }
-        return hasSong ? .song : nil
+        if let best { return best.kind }
+        return song == nil ? nil : .song
+    }
+
+    /// How well a name matches what was typed, worst first.
+    enum Match: Int, Comparable {
+        case none, laterWord, start, whole
+
+        static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+    }
+
+    /// - Parameter allowsMoreAfter: an artist's name typed with more after it ("mara solis
+    ///   live") still matches from the start.
+    static func match(_ name: String?, _ term: String, allowsMoreAfter: Bool = false) -> Match {
+        guard let name = name.map(SearchFolding.fold), !name.isEmpty else { return .none }
+        if name == term { return .whole }
+        if name.hasPrefix(term) || (allowsMoreAfter && term.hasPrefix(name + " ")) { return .start }
+        if term.count >= 3, name.split(separator: " ").dropFirst().contains(where: { $0.hasPrefix(term) }) {
+            return .laterWord
+        }
+        return .none
     }
 }
 
@@ -48,8 +70,9 @@ public enum RecentSearches {
         return kept.prefix(limit).joined(separator: "\n")
     }
 
-    /// The storage without one search.
+    /// The storage without one search, whatever its case, as adding treats it.
     public static func removing(_ query: String, from storage: String) -> String {
-        list(storage).filter { $0 != query }.joined(separator: "\n")
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return list(storage).filter { $0.caseInsensitiveCompare(term) != .orderedSame }.joined(separator: "\n")
     }
 }

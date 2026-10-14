@@ -92,17 +92,18 @@ final class LibraryGatherer<Item: MusicLibraryRequestable & Sendable> {
         let showsPartial = !hasLoaded
         failed = false
         var collected: [Item] = []
+        // Pages can repeat an item, and a list mustn't show one id twice, even part way.
+        var seen = Set<MusicItemID>()
         do {
             for try await page in LibraryFetch.pages(Item.self, batch: Self.batch) {
-                collected += page
+                collected += page.filter { seen.insert($0.id).inserted }
                 let now = ContinuousClock.now
                 if showsPartial, now - started > Self.patience, now - shown > .seconds(1) {
                     publish(collected, isComplete: false)
                     shown = now
                 }
             }
-            var seen = Set<MusicItemID>()
-            publish(collected.filter { seen.insert($0.id).inserted }, isComplete: true)
+            publish(collected, isComplete: true)
             gatheredAt = .now
         } catch {
             if items.isEmpty { failed = true }
@@ -149,6 +150,8 @@ final class LibraryPager<Item: MusicLibraryRequestable & Sendable> {
     private(set) var revision = 0
     private(set) var isLoading = false
     private(set) var failed = false
+    /// The next page couldn't be fetched. It's kept, to ask again.
+    private(set) var loadMoreFailed = false
     /// False until the first items for the current query arrive.
     private(set) var hasLoaded = false
     /// Bumped by Try Again, so the page asks again.
@@ -196,6 +199,7 @@ final class LibraryPager<Item: MusicLibraryRequestable & Sendable> {
             return
         }
         next = nil
+        loadMoreFailed = false
         isLoading = true
         failed = false
         defer { if asked == generation { isLoading = false } }
@@ -252,7 +256,13 @@ final class LibraryPager<Item: MusicLibraryRequestable & Sendable> {
     /// Loads every page up to `limit` into ``items``, for an order Apple Music can't keep
     /// itself (your plays).
     func loadAll(upTo limit: Int) async {
-        while next != nil, items.count < limit, !Task.isCancelled {
+        loadMoreFailed = false
+        while next != nil, items.count < limit, !Task.isCancelled, !loadMoreFailed {
+            // A page already being fetched: wait for it rather than spin.
+            if isLoading {
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
             await loadNext()
         }
     }
@@ -276,9 +286,11 @@ final class LibraryPager<Item: MusicLibraryRequestable & Sendable> {
         let more = try? await batch.nextBatch()
         guard asked == generation else { return }
         guard let more else {
-            next = nil
+            // Kept to ask again: a dropped connection mustn't end the list as if it were whole.
+            if !Task.isCancelled { loadMoreFailed = true }
             return
         }
+        loadMoreFailed = false
         let known = Set(items.map(\.id))
         items += more.filter { !known.contains($0.id) }
         next = more.hasNextBatch ? more : nil

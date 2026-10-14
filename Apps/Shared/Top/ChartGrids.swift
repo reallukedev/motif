@@ -7,12 +7,14 @@ import TracksCore
 struct ArtistChartGrid: View {
     let entries: [ChartEntry]
     let open: (ChartEntry) -> Void
+    /// Whether any of an entry's songs can play here, so a tile with none offers no Play.
+    let canPlay: (ChartEntry) -> Bool
     let play: (ChartEntry) -> Void
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.minimum), spacing: 20, alignment: .top)], spacing: 28) {
-            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                ArtistChartTile(position: index + 1, entry: entry, open: { open(entry) }, play: { play(entry) })
+            ForEach(entries.enumerated(), id: \.element.id) { index, entry in
+                ArtistChartTile(position: index + 1, entry: entry, open: { open(entry) }, play: canPlay(entry) ? { play(entry) } : nil)
             }
         }
     }
@@ -28,7 +30,7 @@ private struct ArtistChartTile: View {
     let position: Int
     let entry: ChartEntry
     let open: () -> Void
-    let play: () -> Void
+    let play: (() -> Void)?
     @State private var isHovered = false
 
     var body: some View {
@@ -39,7 +41,7 @@ private struct ArtistChartTile: View {
                     .shadow(color: .black.opacity(isHovered ? 0.28 : 0.16), radius: isHovered ? 14 : 8, y: isHovered ? 8 : 4)
                     .scaleEffect(isHovered ? 1.03 : 1)
                     .overlay(alignment: .bottomTrailing) {
-                        if isHovered {
+                        if isHovered, let play {
                             ChartTilePlayButton(title: entry.title, play: play)
                                 .transition(.scale(scale: 0.8).combined(with: .opacity))
                         }
@@ -81,13 +83,19 @@ private struct ArtistChartTile: View {
             withAnimation(PlayMotion.hover) { isHovered = hovering }
         }
         .contextMenu {
-            Button("Play Their Songs", systemImage: "play", action: play)
+            if let play {
+                Button("Play Their Songs", systemImage: "play", action: play)
+            }
             Button("Your Stats", systemImage: "chart.bar.xaxis", action: open)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("Number \(position), \(entry.title), \(amounts)"))
         .accessibilityHint("Opens your stats")
-        .accessibilityAction(named: "Play Their Songs", play)
+        .accessibilityActions {
+            if let play {
+                Button("Play Their Songs", action: play)
+            }
+        }
     }
 
     /// "134 plays · 12 songs".
@@ -104,12 +112,14 @@ private struct ArtistChartTile: View {
 struct AlbumChartGrid: View {
     let entries: [ChartEntry]
     let open: (ChartEntry) -> Void
+    /// Whether any of an entry's songs can play here, so a tile with none offers no Play.
+    let canPlay: (ChartEntry) -> Bool
     let play: (ChartEntry) -> Void
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.minimum), spacing: 20, alignment: .top)], spacing: 26) {
-            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                AlbumChartTile(position: index + 1, entry: entry, open: { open(entry) }, play: { play(entry) })
+            ForEach(entries.enumerated(), id: \.element.id) { index, entry in
+                AlbumChartTile(position: index + 1, entry: entry, open: { open(entry) }, play: canPlay(entry) ? { play(entry) } : nil)
             }
         }
     }
@@ -125,7 +135,7 @@ private struct AlbumChartTile: View {
     let position: Int
     let entry: ChartEntry
     let open: () -> Void
-    let play: () -> Void
+    let play: (() -> Void)?
     @State private var isHovered = false
 
     var body: some View {
@@ -135,7 +145,7 @@ private struct AlbumChartTile: View {
                     .aspectRatio(1, contentMode: .fit)
                     .shadow(color: .black.opacity(isHovered ? 0.28 : 0.16), radius: isHovered ? 14 : 8, y: isHovered ? 8 : 4)
                     .overlay(alignment: .bottomTrailing) {
-                        if isHovered {
+                        if isHovered, let play {
                             ChartTilePlayButton(title: entry.title, play: play)
                                 .padding(8)
                                 .transition(.scale(scale: 0.8).combined(with: .opacity))
@@ -171,13 +181,19 @@ private struct AlbumChartTile: View {
             withAnimation(PlayMotion.hover) { isHovered = hovering }
         }
         .contextMenu {
-            Button("Play What You Played", systemImage: "play", action: play)
+            if let play {
+                Button("Play What You Played", systemImage: "play", action: play)
+            }
             Button("Your Stats", systemImage: "chart.bar.xaxis", action: open)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("Number \(position), \(entry.title), \(entry.subtitle ?? ""), \(amounts)"))
         .accessibilityHint("Opens your stats")
-        .accessibilityAction(named: "Play", play)
+        .accessibilityActions {
+            if let play {
+                Button("Play", action: play)
+            }
+        }
     }
 
     /// "34 plays · 9 songs".
@@ -233,7 +249,7 @@ struct ArtistShareBar: View {
                 .foregroundStyle(.secondary)
             GeometryReader { proxy in
                 HStack(spacing: 2) {
-                    ForEach(Array(shares.enumerated()), id: \.offset) { _, share in
+                    ForEach(shares.enumerated(), id: \.offset) { _, share in
                         Rectangle()
                             .fill(share.color)
                             .frame(width: max(2, (proxy.size.width - CGFloat(shares.count - 1) * 2) * CGFloat(share.plays) / CGFloat(max(plays, 1))))
@@ -244,7 +260,7 @@ struct ArtistShareBar: View {
             .frame(height: 14)
             .accessibilityHidden(true)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16, alignment: .leading)], alignment: .leading, spacing: 8) {
-                ForEach(Array(shares.enumerated()), id: \.offset) { _, share in
+                ForEach(shares.enumerated(), id: \.offset) { _, share in
                     HStack(spacing: 6) {
                         Circle()
                             .fill(share.color)

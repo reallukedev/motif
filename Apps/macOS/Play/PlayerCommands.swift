@@ -237,6 +237,8 @@ private struct ControlsMenuItems: View {
         }
         .disabled(!player.hasQueue)
 
+        PlayOnMenu(model: model)
+
         Divider()
 
         Button("Play Tracks Radio", systemImage: "dot.radiowaves.left.and.right") { player.playTracksRadio() }
@@ -260,7 +262,7 @@ private struct ControlsMenuItems: View {
             Task { await model.capture?.captureCurrentSong() }
         }
         .keyboardShortcut("s", modifiers: [.command, .option])
-        .disabled(model.isShowingSampleData)
+        .disabled(model.isShowingSampleData || model.capture?.isPaused == true)
 
         Divider()
 

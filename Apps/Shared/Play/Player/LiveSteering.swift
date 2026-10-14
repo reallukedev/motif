@@ -6,7 +6,7 @@ extension LiveMix.Steering {
     var isTurningAway: Bool {
         switch self {
         case .awayFromGenre, .awayFromDecade, .fewerNewFinds, .moreNewFinds, .tryingSomethingElse: true
-        case .towardGenre, .towardArtist: false
+        case .towardGenre, .towardArtist, .settledOn: false
         }
     }
 
@@ -20,6 +20,7 @@ extension LiveMix.Steering {
         case .tryingSomethingElse: String(localized: "Trying Something Different")
         case .towardGenre(let genre): String(localized: "More \(genre)")
         case .towardArtist(let artist): String(localized: "More Like \(artist)")
+        case .settledOn(let genre): String(localized: "Settled on \(genre)")
         }
     }
 
@@ -40,6 +41,8 @@ extension LiveMix.Steering {
             String(localized: "You let a \(genre) song play, so more like it are coming.")
         case .towardArtist(let artist):
             String(localized: "More like \(artist) are coming.")
+        case .settledOn(let genre):
+            String(localized: "\(genre) landed best of the first few songs, so more of it is coming, with something different now and then.")
         }
     }
 

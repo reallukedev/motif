@@ -276,13 +276,13 @@ private struct FeaturedRelease: View {
                         Label("Play", systemImage: "play.fill")
                             .frame(minWidth: 74)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     Button {
                         player.addToLibrary(release.album)
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     Menu {
                         GetWithLidarrButton(album: release.album.title, artist: release.album.artistName)
                         FeedItemMenu(item: FeedItem(album: release.album))
@@ -291,7 +291,7 @@ private struct FeaturedRelease: View {
                             .labelStyle(.iconOnly)
                     }
                     .menuIndicator(.hidden)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .fixedSize()
                 }

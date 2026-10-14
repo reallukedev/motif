@@ -27,6 +27,11 @@ struct ArtistFinder: View {
                         if discovery.isExpanding {
                             placeholders
                                 .transition(.opacity)
+                        } else if discovery.expandFailed {
+                            LoadMoreFailedRow(text: "Couldn't load more artists.") {
+                                Task { await discovery.expand() }
+                            }
+                            .padding(.horizontal, PlayMetrics.margin)
                         }
                         Color.clear
                             .frame(height: 1)
@@ -35,7 +40,7 @@ struct ArtistFinder: View {
                     }
                 case .loading:
                     placeholders
-                case .empty, .noAccess:
+                case .empty, .noAccess, .failed:
                     state(phase)
                         .frame(maxWidth: 560, alignment: .leading)
                         .padding(.horizontal, PlayMetrics.margin)
@@ -120,6 +125,8 @@ struct ArtistFinder: View {
 
     enum Phase: Equatable {
         case noAccess, loading, empty, artists
+        /// Apple Music couldn't be reached for the first artists.
+        case failed
     }
 
     private func phase(_ artists: [SuggestedArtist]) -> Phase {
@@ -135,6 +142,7 @@ struct ArtistFinder: View {
         #endif
         if !player.isDemo, model.musicAuthorization != .authorized { return .noAccess }
         if !artists.isEmpty { return .artists }
+        if discovery.expandFailed, !discovery.isExpanding { return .failed }
         if !discovery.hasSeeded || discovery.canExpand { return .loading }
         return .empty
     }
@@ -143,6 +151,15 @@ struct ArtistFinder: View {
     private func state(_ phase: Phase) -> some View {
         if phase == .noAccess {
             PlayAccessCard()
+        } else if phase == .failed {
+            PlayStateCard(
+                symbol: "wifi.exclamationmark",
+                title: String(localized: "Couldn't Reach Apple Music"),
+                message: String(localized: "Check your connection, then try again.")
+            ) {
+                Button("Try Again") { Task { await discovery.expand() } }
+                    .buttonStyle(.glassProminent)
+            }
         } else {
             PlayStateCard(
                 symbol: "person.crop.circle.badge.plus",
@@ -150,7 +167,7 @@ struct ArtistFinder: View {
                 message: String(localized: "Suggestions come from the artists you play most. Play a few more, and they'll start. Until then, see what everyone's playing.")
             ) {
                 NavigationLink("Find Popular Songs", value: PlayRoute.songFinder(.popular))
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
             }
         }
     }

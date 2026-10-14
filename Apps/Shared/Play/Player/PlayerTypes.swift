@@ -10,7 +10,7 @@ nonisolated enum CoverArt: Hashable, Sendable, Codable {
 }
 
 /// A song in the player's queue, as the screens show it.
-struct PlayerTrack: Identifiable, Equatable, Codable {
+nonisolated struct PlayerTrack: Identifiable, Equatable, Codable, Sendable {
     /// The queue entry's id, which differs between two copies of one song in a queue.
     let id: String
     let title: String
@@ -174,7 +174,9 @@ enum PlayerProblem: Error, Equatable {
     case needsAppleMusic
     /// The songs left to play are all by an artist the person blocked, named.
     case blockedArtist(String)
-    case failed(String)
+    /// What went wrong, and a title when it wasn't playing that failed: adding to the
+    /// library, say.
+    case failed(String, title: String? = nil)
 
     var title: String {
         switch self {
@@ -186,7 +188,7 @@ enum PlayerProblem: Error, Equatable {
         case .notInYourMusic: String(localized: "Not in Your Music")
         case .needsAppleMusic: String(localized: "This Is Apple Music")
         case .blockedArtist(let name): String(localized: "You Blocked \(name)")
-        case .failed: String(localized: "Couldn't Play")
+        case .failed(_, let title): title ?? String(localized: "Couldn't Play")
         }
     }
 
@@ -210,13 +212,26 @@ enum PlayerProblem: Error, Equatable {
             String(localized: "Tracks is playing your own music. Switch Music Source to Apple Music in Settings to play this.")
         case .blockedArtist:
             String(localized: "Tracks doesn't play or suggest artists you've blocked. Unblock them to play this.")
-        case .failed(let detail):
+        case .failed(let detail, _):
             detail
         }
     }
 }
 
 extension PlayerProblem {
+    /// An error from something other than playing, titled for what failed. Problems with
+    /// their own title, such as access being off, keep it; the rest never talk about playing.
+    init(_ error: any Error, couldnt title: String) {
+        let problem = PlayerProblem(error)
+        guard case .failed(let detail, nil) = problem else {
+            self = problem
+            return
+        }
+        // Playback's words for a vague failure are about starting to play.
+        let isOwnWords = error is PlayerProblem || error is MusicTokenRequestError || PlaybackFailure(error) == .offline
+        self = .failed(isOwnWords ? detail : String(localized: "Try again in a moment."), title: title)
+    }
+
     /// Any error, said plainly: what went wrong and what to do, never the raw domain and code
     /// MusicKit or the network gave.
     init(_ error: any Error) {

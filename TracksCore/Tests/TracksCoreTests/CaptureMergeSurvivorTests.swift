@@ -214,4 +214,39 @@ struct CaptureMergeSurvivorTests {
 
         #expect(try store.mergeDuplicateCaptures(policy: policy) == 0)
     }
+
+    // MARK: - Exact copies
+
+    /// Motif's history brought over on two devices at once gives two identical rows. Each
+    /// device kept its own copy and deleted the other's, so the play was lost everywhere.
+    @Test("exact copies of a play are both kept rather than risking both")
+    func exactCopiesStay() throws {
+        insert(.radio, at: 0, device: "motif")
+        insert(.radio, at: 0, device: "motif")
+        try store.context.save()
+
+        #expect(try store.mergeDuplicateCaptures(policy: policy) == 0)
+        #expect(try remaining().count == 2)
+    }
+
+    @Test("rows that differ still merge as before")
+    func differingRowsStillMerge() throws {
+        insert(.radio, at: 0, device: "mac")
+        insert(.imported, at: 60, device: "phone")
+        try store.context.save()
+
+        #expect(try store.mergeDuplicateCaptures(policy: policy) == 1)
+    }
+
+    @Test("stations that can't be told apart are both kept")
+    func exactStationCopiesStay() throws {
+        store.context.insert(Station(name: "Chill", firstSeenAt: start))
+        store.context.insert(Station(name: "Chill", firstSeenAt: start))
+        store.context.insert(Station(name: "Rock", firstSeenAt: start))
+        store.context.insert(Station(name: "rock", firstSeenAt: start.addingTimeInterval(60)))
+        try store.context.save()
+
+        #expect(try store.mergeDuplicateStations() == 1)
+        #expect(try store.context.fetch(FetchDescriptor<Station>()).count == 3)
+    }
 }

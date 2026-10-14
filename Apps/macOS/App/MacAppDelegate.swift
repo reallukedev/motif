@@ -95,17 +95,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     /// playing: a start can be reported more than once, and a toggle would set Music going again.
     private func followTracksPlayer() {
         let player = model.player
-        let isPlaying = withObservationTracking {
-            player.isPlaying
-        } onChange: { [weak self] in
-            // Fires just before the change lands; read it back once it has.
-            Task { @MainActor in self?.followTracksPlayer() }
-        }
-        defer { tracksWasPlaying = isPlaying }
-        guard isPlaying, !tracksWasPlaying, !model.isDemoLaunch else { return }
-        Task { [monitor] in
-            _ = await ScriptingQueue.run { MediaTransportControl.pause() }
-            await monitor.refresh()
+        Task { [weak self] in
+            for await isPlaying in Observations({ player.isPlaying }) {
+                guard let self else { return }
+                defer { tracksWasPlaying = isPlaying }
+                guard isPlaying, !tracksWasPlaying, !model.isDemoLaunch else { continue }
+                Task { [monitor] in
+                    _ = await ScriptingQueue.run { MediaTransportControl.pause() }
+                    await monitor.refresh()
+                }
+            }
         }
     }
 
@@ -165,23 +164,22 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     /// unexpected quit rather than vanishing.
     private func trackCaptureActivity() {
         guard let capture = model.capture else { return }
-        withObservationTracking {
-            switch (capture.isRunning, captureActivity) {
-            case (true, nil):
-                captureActivity = ProcessInfo.processInfo.beginActivity(
-                    options: [.background, .suddenTerminationDisabled, .automaticTerminationDisabled],
-                    reason: "Recording listening history"
-                )
-            case (false, let activity?):
-                ProcessInfo.processInfo.endActivity(activity)
-                captureActivity = nil
-            default:
-                break
+        Task { [weak self] in
+            for await isRunning in Observations({ capture.isRunning }) {
+                guard let self else { return }
+                switch (isRunning, captureActivity) {
+                case (true, nil):
+                    captureActivity = ProcessInfo.processInfo.beginActivity(
+                        options: [.background, .suddenTerminationDisabled, .automaticTerminationDisabled],
+                        reason: "Recording listening history"
+                    )
+                case (false, let activity?):
+                    ProcessInfo.processInfo.endActivity(activity)
+                    captureActivity = nil
+                default:
+                    break
+                }
             }
-        } onChange: { [weak self] in
-            // Fires just before the change lands, so the new state is read back on the main
-            // actor, where tracking is also set up again for the change after it.
-            Task { @MainActor in self?.trackCaptureActivity() }
         }
     }
 }

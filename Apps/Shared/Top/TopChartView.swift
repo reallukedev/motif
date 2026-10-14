@@ -166,7 +166,7 @@ struct TopChartView: View {
                     .frame(maxWidth: .infinity)
                     #endif
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             Button {
                 playback.play(songs, shuffled: true, title: playTitle)
             } label: {
@@ -175,7 +175,7 @@ struct TopChartView: View {
                     .frame(maxWidth: .infinity)
                     #endif
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
         }
         .buttonBorderShape(.capsule)
         #if os(iOS)
@@ -197,12 +197,12 @@ struct TopChartView: View {
         } actions: {
             if let earlier = snapshot.earlier {
                 Button("Go to \(earlier.title())") { show(earlier) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .buttonBorderShape(.capsule)
             }
             if !snapshot.period.isCurrent() {
                 Button(span.currentLabel) { anchor = nil }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                     .buttonBorderShape(.capsule)
             }
         }
@@ -270,13 +270,15 @@ struct TopChartView: View {
 
     /// An artist's or album's songs from the period, most played first.
     private func playSongs(of entry: ChartEntry) {
-        let songs = shown?.songs ?? []
-        let theirs: [MixSong] = switch kind {
-        case .artists: songs.filter { StatsCalculator.folded($0.artistName) == entry.id }
-        case .albums: songs.filter { $0.albumTitle == entry.title && $0.artistName == entry.subtitle }
-        case .songs: entry.song.map { [$0] } ?? []
-        }
-        playback.play(theirs, title: entry.title)
+        playback.play(songs(of: entry), title: entry.title)
+    }
+
+    private func songs(of entry: ChartEntry) -> [MixSong] {
+        entry.song.map { [$0] } ?? entry.songs
+    }
+
+    private func canPlay(_ entry: ChartEntry) -> Bool {
+        !playback.playable(songs(of: entry)).isEmpty
     }
 
     private func open(_ entry: ChartEntry) {
@@ -315,8 +317,8 @@ struct TopChartView: View {
             } else {
                 switch kind {
                 case .songs: ChartList(entries: shown.entries, open: open)
-                case .artists: ArtistChartGrid(entries: shown.entries, open: open, play: playSongs(of:))
-                case .albums: AlbumChartGrid(entries: shown.entries, open: open, play: playSongs(of:))
+                case .artists: ArtistChartGrid(entries: shown.entries, open: open, canPlay: canPlay, play: playSongs(of:))
+                case .albums: AlbumChartGrid(entries: shown.entries, open: open, canPlay: canPlay, play: playSongs(of:))
                 }
             }
         } else {
@@ -375,7 +377,7 @@ struct TopChartView: View {
                         .accessibilityHint(laterHelp)
                 }
                 .labelStyle(.iconOnly)
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .fontWeight(.semibold)
             }

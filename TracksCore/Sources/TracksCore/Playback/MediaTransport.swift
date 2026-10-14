@@ -33,7 +33,7 @@ public enum TransportRouting {
         guard presence.isRunning else { return .none }
         // On a live station, `next track`, `previous track` and `back track` do nothing
         // and return no error; only `playpause` works. See
-        // docs/ProbeResults/macos-transport-2026-09-08.md. Only tested on a live
+        // docs/PlatformNotes.md. Only tested on a live
         // broadcast; an algorithmic station might accept `next track`.
         return TransportCapabilities(
             canPlayPause: true,

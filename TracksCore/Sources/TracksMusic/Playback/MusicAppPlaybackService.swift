@@ -14,7 +14,7 @@ import TracksCore
 /// Tracks sequences the queue itself. Started on a playlist track, Music.app left the playlist
 /// after one song and went into Autoplay, so this plays one song at a time and starts the next
 /// when it stops. Playback only continues while Tracks is running.
-public final class MusicAppPlaybackService: PlaybackService, @unchecked Sendable {
+public final class MusicAppPlaybackService: PlaybackService, Sendable {
     /// Read at play time because the playlist can be renamed in Settings.
     private let playlistName: @Sendable () -> String
 

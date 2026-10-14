@@ -64,7 +64,20 @@
     <key>TracksLastFMSecret</key>
     <string>$(TRACKS_LASTFM_SECRET)</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Tracks finds Tracks on your other devices nearby, to show what your Mac is playing on them and let them control it.</string>
+    <string>Tracks reaches your own music server on your network, and finds Tracks on your other devices nearby to show what your Mac is playing on them and let them control it.</string>
+    <!-- Your Music connects to servers people add themselves, which often serve plain HTTP on
+         a home network, a VPN or their own domain. Matches iOS. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER).playing</string>
+    </array>
     <key>NSBonjourServices</key>
     <array>
         <string>_tracks._tcp</string>

@@ -303,18 +303,21 @@ private struct LocalSongsList: View {
     @AppStorage("yourMusicSongOrder") private var order = LibraryOrder.title
     @State private var query = ""
     @State private var deleting: LocalTrack?
+    /// The songs filtered and in order, worked out off the main actor when what they come
+    /// from changes. Nil until the first time.
+    @State private var sortedSongs: [LocalTrack]?
 
     private static let orders: [LibraryOrder] = [.title, .natural(.artist), .natural(.album), .natural(.added), .natural(.plays)]
 
     var body: some View {
-        let songs = sorted(LibrarySort.filtered(music.index.tracks, matching: query) { LibrarySortKeys(title: $0.title, artist: $0.artist, album: $0.album ?? "") })
+        let songs = sortedSongs ?? []
         let context = PlayContext.songs(String(localized: "Your Songs"))
         // One list from the first frame, with the state as its row until there are songs, so
         // the filter field stays tucked under the title (see `libraryStateRow()`).
         List {
-            if music.index.isEmpty {
+            if music.index.isEmpty || sortedSongs == nil {
                 Group {
-                    if music.hasScanned || !music.servers.servers.isEmpty {
+                    if sortedSongs != nil, music.hasScanned || !music.servers.servers.isEmpty {
                         LibraryEmptyYourMusic(title: String(localized: "No Songs Yet"))
                     } else {
                         LoadingRows(count: 10)
@@ -381,19 +384,40 @@ private struct LocalSongsList: View {
         ) {
             Button("Delete Song", role: .destructive) { if let deleting { music.deleteFile(deleting) } }
         }
+        // Plays matter only to that order, so a new play doesn't sort the others again.
+        .task(id: LibraryPageKey(query: query, order: order, index: music.indexRevision, plays: order.field == .plays ? feed.builtRevision : nil)) {
+            let (tracks, query, order) = (music.index.tracks, query, order)
+            let facts = order.field == .plays ? feed.facts : [:]
+            if sortedSongs != nil, !query.isEmpty {
+                // Typing: wait for a pause rather than sort for every letter.
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
+            }
+            let next = await OffMainActor.run { Self.sorted(tracks, matching: query, by: order, facts: facts) }
+            guard !Task.isCancelled else { return }
+            sortedSongs = next
+        }
     }
 
-    private func sorted(_ tracks: [LocalTrack]) -> [LocalTrack] {
-        let byID = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let rows = tracks.map { LibrarySongRow(track: $0, plays: feed.facts[$0.identity]?.plays ?? 0, isPlayable: true, artworkURL: nil) }
-        return order.sorted(rows).compactMap { byID[$0.id] }
+    nonisolated private static func sorted(_ tracks: [LocalTrack], matching query: String, by order: LibraryOrder, facts: [String: SongFacts]) -> [LocalTrack] {
+        let matches = LibrarySort.filtered(tracks, matching: query) { LibrarySortKeys(title: $0.title, artist: $0.artist, album: $0.album ?? "") }
+        return LibrarySort.sorted(matches, by: order) { track in
+            LibrarySortKeys(
+                title: track.title,
+                artist: track.artist,
+                album: track.album ?? "",
+                added: track.addedAt == .distantPast ? nil : track.addedAt,
+                duration: track.duration ?? 0,
+                plays: order.field == .plays ? facts[track.identity]?.plays ?? 0 : 0
+            )
+        }
     }
 }
 #endif
 
 extension LibrarySortKeys {
     /// An album of yours, sorted as Apple Music's are.
-    init(localAlbum album: LocalAlbum) {
+    nonisolated init(localAlbum album: LocalAlbum) {
         self.init(
             title: album.title,
             artist: album.artist,
@@ -408,14 +432,13 @@ struct LocalAlbumsPage: View {
     @Environment(YourMusic.self) private var music
     @AppStorage("yourMusicAlbumOrder") private var order = LibraryOrder.natural(.added)
     @State private var query = ""
+    /// Filtered and in order off the main actor. Nil until the first time.
+    @State private var sortedAlbums: [LocalAlbum]?
 
     private static let orders: [LibraryOrder] = [.natural(.added), .title, .natural(.artist), .natural(.year)]
 
     var body: some View {
-        let albums = LibrarySort.sorted(
-            LibrarySort.filtered(music.index.albums, matching: query) { LibrarySortKeys(localAlbum: $0) },
-            by: order
-        ) { LibrarySortKeys(localAlbum: $0) }
+        let albums = sortedAlbums ?? []
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 #if os(macOS)
@@ -424,8 +447,8 @@ struct LocalAlbumsPage: View {
                     subtitle: music.index.isEmpty ? nil : String(AttributedString(localized: "^[\(music.index.albums.count) album](inflect: true)").characters)
                 )
                 #endif
-                if music.index.isEmpty {
-                    if music.hasScanned || !music.servers.servers.isEmpty {
+                if music.index.isEmpty || sortedAlbums == nil {
+                    if sortedAlbums != nil, music.hasScanned || !music.servers.servers.isEmpty {
                         LibraryEmptyYourMusic(title: String(localized: "No Albums Yet"))
                     } else {
                         LibraryGridPlaceholder()
@@ -456,6 +479,17 @@ struct LocalAlbumsPage: View {
                 LibrarySortMenu(selection: $order, options: Self.orders) { $0.menuTitle }
             }
         }
+        .task(id: LibraryPageKey(query: query, order: order, index: music.indexRevision)) {
+            let (albums, query, order) = (music.index.albums, query, order)
+            let next = await OffMainActor.run {
+                LibrarySort.sorted(
+                    LibrarySort.filtered(albums, matching: query) { LibrarySortKeys(localAlbum: $0) },
+                    by: order
+                ) { LibrarySortKeys(localAlbum: $0) }
+            }
+            guard !Task.isCancelled else { return }
+            sortedAlbums = next
+        }
     }
 
     private var topPadding: CGFloat {
@@ -484,15 +518,14 @@ struct LocalArtistsPage: View {
     #endif
     @State private var query = ""
     @State private var plays: [String: Int] = [:]
+    /// Filtered and in order off the main actor. Nil until the first time.
+    @State private var sortedArtists: [LocalArtist]?
     #if os(macOS)
     @State private var selection: LocalArtist.ID?
     #endif
 
     var body: some View {
-        let artists = LibrarySort.sorted(
-            LibrarySort.filtered(music.index.artists, matching: query) { LibrarySortKeys(title: $0.name) },
-            by: .title
-        ) { LibrarySortKeys(title: $0.name) }
+        let artists = sortedArtists ?? []
         Group {
             #if os(macOS)
             VStack(spacing: 0) {
@@ -521,6 +554,17 @@ struct LocalArtistsPage: View {
             #endif
         }
         .artistPlays(into: $plays)
+        .task(id: LibraryPageKey(query: query, order: .title, index: music.indexRevision)) {
+            let (artists, query) = (music.index.artists, query)
+            let next = await OffMainActor.run {
+                LibrarySort.sorted(
+                    LibrarySort.filtered(artists, matching: query) { LibrarySortKeys(title: $0.name) },
+                    by: .title
+                ) { LibrarySortKeys(title: $0.name) }
+            }
+            guard !Task.isCancelled else { return }
+            sortedArtists = next
+        }
         #if DEBUG
         .task(id: music.index.artists.count) { LibraryLaunch.push(in: model) }
         #endif
@@ -537,10 +581,10 @@ struct LocalArtistsPage: View {
     /// Loading, an empty library, or nothing matching the filter.
     @ViewBuilder
     private var state: some View {
-        if !music.index.isEmpty {
+        if !music.index.isEmpty, sortedArtists != nil {
             LibraryNoMatches(query: query)
                 .frame(maxHeight: .infinity, alignment: .top)
-        } else if music.hasScanned || !music.servers.servers.isEmpty {
+        } else if music.index.isEmpty, music.hasScanned || !music.servers.servers.isEmpty {
             LibraryEmptyYourMusic(title: String(localized: "No Artists Yet"))
         } else {
             #if os(macOS)
@@ -650,4 +694,12 @@ private func deleteTitle(_ title: String) -> String {
     #else
     String(localized: "Delete \u{201C}\(title)\u{201D} from This iPhone?")
     #endif
+}
+
+/// What a library page's filtered, ordered list is worked out from.
+private struct LibraryPageKey: Equatable {
+    let query: String
+    let order: LibraryOrder
+    let index: Int
+    var plays: Int?
 }

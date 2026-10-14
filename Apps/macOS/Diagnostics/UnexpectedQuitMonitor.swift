@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import TracksCore
 
 /// Keeps the run log, starts the watchdog, and holds the notice about the last run.
@@ -14,6 +15,21 @@ final class UnexpectedQuitMonitor {
 
     @ObservationIgnored private let log = RunLog()
     @ObservationIgnored private var heartbeat: Task<Void, Never>?
+    @ObservationIgnored private var isWatched = false
+    @ObservationIgnored private var isDebugged = false
+
+    /// "Reopen Tracks If It Quits Unexpectedly". Off until the person turns it on, since the
+    /// app coming back by itself should be their choice. The watchdog reads it too.
+    var reopensAutomatically: Bool {
+        get {
+            access(keyPath: \.reopensAutomatically)
+            return log.reopensAutomatically
+        }
+        set {
+            withMutation(keyPath: \.reopensAutomatically) { log.reopensAutomatically = newValue }
+            if newValue { startWatchdogIfWanted() }
+        }
+    }
 
     /// Often enough that a run which ends unseen is placed within a minute.
     private static let heartbeatInterval: Duration = .seconds(60)
@@ -34,6 +50,7 @@ final class UnexpectedQuitMonitor {
 
         let info = Bundle.main.infoDictionary
         let debugged = Self.isDebuggerAttached
+        isDebugged = debugged
         notice = log.beginRun(
             version: info?["CFBundleShortVersionString"] as? String ?? "?",
             build: info?["CFBundleVersion"] as? String ?? "?",
@@ -48,7 +65,7 @@ final class UnexpectedQuitMonitor {
             }
         }
 
-        if !debugged { startWatchdog() }
+        startWatchdogIfWanted()
     }
 
     /// Marks the run as quit on purpose. Call from `applicationWillTerminate`.
@@ -65,6 +82,13 @@ final class UnexpectedQuitMonitor {
     /// How often the watchdog has reopened the app lately, for the debug report.
     var recentAutomaticReopens: Int { log.recentRelaunches.count }
 
+    /// Starts the watchdog once, when reopening is on and no debugger is attached.
+    private func startWatchdogIfWanted() {
+        guard log.reopensAutomatically, !isDebugged, !isWatched, heartbeat != nil else { return }
+        isWatched = true
+        startWatchdog()
+    }
+
     private func startWatchdog() {
         let helper = Bundle.main.bundleURL
             .appending(path: "Contents/Library/LoginItems/TracksWatchdog.app", directoryHint: .isDirectory)
@@ -75,10 +99,13 @@ final class UnexpectedQuitMonitor {
         // The previous run's watchdog can still be finishing up as this one starts. Without a
         // new instance, macOS would hand the request to it and the arguments would be lost.
         configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: helper, configuration: configuration) { _, error in
-            if let error {
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: helper, configuration: configuration)
+            } catch {
                 // Nothing to show: the app works without it, it just won't come back on its own.
-                print("Tracks watchdog didn't start: \(error.localizedDescription)")
+                Logger(subsystem: Bundle.main.bundleIdentifier ?? "Tracks", category: "Watchdog")
+                    .error("Watchdog didn't start: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

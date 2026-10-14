@@ -2,7 +2,7 @@ import Foundation
 
 /// Decides whether what Music.app is playing came from a radio station.
 ///
-/// No API says so. Diffing a station against an album (see `docs/ProbeResults/`) showed that
+/// No API says so. Diffing a station against an album (see `docs/PlatformNotes.md`) showed that
 /// a radio track reports no duration: `playerInfo` omits `Total Time` and AppleScript's
 /// `duration of current track` is `missing value`. Music drops integer keys valued zero.
 ///

@@ -70,6 +70,22 @@ struct AlbumProfileTests {
         #expect(profile.lastHeard == date(2026, 9, 2))
     }
 
+    @Test("a song with a featured artist counts on its artist's album, from either link")
+    func featuredSongsJoinTheAlbum() throws {
+        let history = ListeningHistory([
+            play("Saltwater", id: "1", at: date(2026, 8, 1)),
+            play("Undertow", by: "Mara Solis feat. Yuki Tanabe", id: "2", at: date(2026, 9, 2)),
+            play("Riptide", by: "Mara Solis (Feat. Nova Harbor)", id: "3", at: date(2026, 9, 3)),
+        ])
+        #expect(Set(history.captures.map(\.albumIdentity)) == [identity("Tides")])
+        for link in [identity("Tides"), identity("Tides", by: "Mara Solis feat. Yuki Tanabe")] {
+            let profile = try #require(StatsCalculator.albumProfile(id: link, history: history, calendar: calendar, now: now))
+            #expect(profile.album.artistName == "Mara Solis")
+            #expect(profile.album.count == 3)
+            #expect(profile.artistID == StatsCalculator.folded("Mara Solis"))
+        }
+    }
+
     /// The page links to the artist, so it has to carry an id the artist page understands.
     @Test("the profile carries the artist's identity for the link back")
     func linksToTheArtist() throws {

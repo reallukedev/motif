@@ -35,39 +35,13 @@ private struct DownloadsList: View {
         let songs = downloads.items.values.map { DownloadedSong(track: $0.keptTrack, bytes: $0.bytes, downloadedAt: $0.downloadedAt) }
         let stats = DownloadReport.stats(songs, facts: feed.facts)
         let unplayed = DownloadReport.unplayed(songs, facts: feed.facts)
-        let active = downloads.progress.keys.sorted().compactMap { id in music.index.track(id: id).map { ($0, downloads.progress[id] ?? 0) } }
+        let active = downloads.downloading
         let failed = downloads.failures.keys.sorted().compactMap { id in music.index.track(id: id).map { ($0, downloads.failures[id] ?? "") } }
         List {
-            // What's under way first: it's what you come to check.
+            // What's under way first: it's what you come to check. Its own view, so each step
+            // of a download redraws only its row, not the whole page.
             if !active.isEmpty {
-                Section("Downloading") {
-                    ForEach(active, id: \.0.id) { track, progress in
-                        HStack(spacing: 12) {
-                            LocalCover(artwork: track.artwork, seed: track.album ?? track.title, size: 44)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(track.title).lineLimit(1)
-                                Group {
-                                    if downloads.sizeUnknown.contains(track.id) {
-                                        ProgressView()
-                                            .progressViewStyle(.linear)
-                                    } else {
-                                        ProgressView(value: progress)
-                                    }
-                                }
-                                .tint(.accentColor)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .swipeActions {
-                            Button("Stop", systemImage: "xmark", role: .destructive) { downloads.cancel([track.id]) }
-                        }
-                    }
-                    let waiting = active.filter { downloads.isWaitingForWiFi($0.0.id, onCellular: music.network.isExpensive) }.count
-                    if waiting > 0 {
-                        Label("^[\(waiting) song](inflect: true) waiting for Wi-Fi", systemImage: "wifi")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                DownloadingSection(ids: active.sorted())
             }
 
             if !failed.isEmpty {
@@ -334,6 +308,45 @@ private struct DownloadsList: View {
     private static func freeSpace() async -> Int64? {
         let values = try? URL.documentsDirectory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage
+    }
+}
+
+/// The songs coming down, each with how far along it is.
+private struct DownloadingSection: View {
+    let ids: [String]
+    @Environment(YourMusic.self) private var music
+
+    var body: some View {
+        let downloads = music.downloads
+        let active = ids.compactMap { id in music.index.track(id: id).map { ($0, downloads.progress[id] ?? 0) } }
+        Section("Downloading") {
+            ForEach(active, id: \.0.id) { track, progress in
+                HStack(spacing: 12) {
+                    LocalCover(artwork: track.artwork, seed: track.album ?? track.title, size: 44)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(track.title).lineLimit(1)
+                        Group {
+                            if downloads.sizeUnknown.contains(track.id) {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                            } else {
+                                ProgressView(value: progress)
+                            }
+                        }
+                        .tint(.accentColor)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .swipeActions {
+                    Button("Stop", systemImage: "xmark", role: .destructive) { downloads.cancel([track.id]) }
+                }
+            }
+            let waiting = active.filter { downloads.isWaitingForWiFi($0.0.id, onCellular: music.network.isExpensive) }.count
+            if waiting > 0 {
+                Label("^[\(waiting) song](inflect: true) waiting for Wi-Fi", systemImage: "wifi")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 #endif

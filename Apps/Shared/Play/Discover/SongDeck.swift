@@ -210,7 +210,7 @@ struct SongDeck: View {
     /// The song on top and the two after it, fanned behind.
     private var pile: some View {
         ZStack {
-            ForEach(Array(visible.enumerated().reversed()), id: \.element.id) { depth, suggestion in
+            ForEach(visible.enumerated().reversed(), id: \.element.id) { depth, suggestion in
                 let isTop = depth == 0
                 CoverImage(cover: suggestion.song.artwork.map(CoverArt.artwork) ?? .url(nil, seed: suggestion.song.albumTitle ?? suggestion.song.title), size: Self.side)
                     .shadow(color: .black.opacity(isTop ? 0.4 : 0.2), radius: isTop ? 24 : 12, y: isTop ? 14 : 6)
@@ -297,7 +297,7 @@ struct SongDeck: View {
                         .labelStyle(.iconOnly)
                 }
                 .menuIndicator(.hidden)
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .fixedSize()
             }
@@ -346,7 +346,7 @@ struct SongDeck: View {
                     .padding(.horizontal, PlayMetrics.margin)
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 14) {
-                        ForEach(Array(next.enumerated()), id: \.element.id) { offset, suggestion in
+                        ForEach(next.enumerated(), id: \.element.id) { offset, suggestion in
                             Button {
                                 move(.pass) { position += offset + 1 }
                             } label: {
@@ -408,17 +408,17 @@ private struct PicksTray: View {
                 } label: {
                     Label("Play", systemImage: "play.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 if !player.isDemo, model.musicSource == .appleMusic {
                     Button {
                         for pick in picks { player.addToLibrary(pick.song) }
                     } label: {
                         Label("Add All", systemImage: "plus")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
                 }
                 Button("Clear", role: .destructive) { picks = [] }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
             }
             .buttonBorderShape(.capsule)
 

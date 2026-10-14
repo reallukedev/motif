@@ -153,38 +153,58 @@ struct ForYouCrate: View {
         let visible = discovery.songs.visible(in: music, source: source, mode: mode).dropFirst(skipped)
         let unanswered = discovery.songs.unanswered(in: music, source: source)
         let (discovery, music, mode) = (discovery, music, mode)
+        var generation = Hasher()
+        // Answers that left nothing new to show change it too, so the crate asks again.
+        generation.combine(discovery.expansions)
+        generation.combine(music.availabilityGeneration)
+        generation.combine(unanswered)
         return Supply(
             songs: visible.map(CrateSong.init),
             goesOn: discovery.canExpand || unanswered > 0,
-            generation: discovery.expansions &+ music.availabilityGeneration,
+            generation: generation.finalize(),
             loadMore: {
-                if discovery.songs.unanswered(in: music, source: source) > 0 {
-                    await discovery.songs.lookUp(in: music, source: source, mode: mode, first: 12)
-                } else if discovery.canExpand {
+                // A page's worth to show: songs your servers don't have are left out, so it
+                // looks up, and walks further out, until there are, or there's nothing left.
+                await SuggestionPaging.fill(
+                    want: Self.page,
+                    maxSteps: 6,
+                    count: { discovery.songs.visible(in: music, source: source, mode: mode).count }
+                ) {
+                    if discovery.songs.unanswered(in: music, source: source) > 0 {
+                        await discovery.songs.lookUp(in: music, source: source, mode: mode, first: 12)
+                        return true
+                    }
+                    guard discovery.canExpand, !discovery.expandFailed else { return false }
                     await discovery.expand()
+                    return !discovery.expandFailed
                 }
             }
         )
     }
 
-    /// More songs your servers find by artists new to you, none of them on Play's shelves.
+    /// More songs your servers find by artists new to you, none of them on Play's shelves: the
+    /// same song on two servers comes once.
     private func fromServers(_ servers: [SubsonicServer]) -> Supply {
-        var seen = Set<String>()
-        let found = servers.flatMap { server in
-            music.discover.forYou[server.id].map(\.further) ?? []
-        }
-        .filter { seen.insert($0.id).inserted }
+        let found = SuggestionPaging.new(
+            servers.flatMap { music.discover.forYou[$0.id].map(\.further) ?? [] },
+            known: [String](),
+            by: \.identity
+        )
         let goingOn = servers.filter { server in
             music.discover.forYou[server.id].map { $0.isFilling || $0.canGoOn } ?? false
         }
+        // Each answer counts, even one that found nothing, so the crate asks again.
+        let answers = servers.reduce(0) { $0 &+ (music.discover.answers[$1.id] ?? 0) }
         let music = music
         return Supply(
             songs: found.map { CrateSong($0, reason: String(localized: "New to You"), music: music) },
             goesOn: !goingOn.isEmpty,
-            generation: found.count,
+            generation: found.count &+ answers,
             loadMore: {
-                guard let server = goingOn.first else { return }
-                await music.discover.loadMore(for: server.id, shelf: .further)
+                // Each server in turn, so one that's found all it can doesn't hold up the rest.
+                guard !goingOn.isEmpty else { return }
+                let server = goingOn[answers % goingOn.count]
+                await music.discover.loadMore(for: server.id, shelf: .further, want: Self.page / 2)
             }
         )
     }

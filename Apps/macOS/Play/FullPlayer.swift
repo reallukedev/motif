@@ -61,16 +61,24 @@ struct FullPlayer: View {
                         }
                     }
                     .frame(width: Self.column)
-                    .frame(minHeight: side)
+                    // The column stands as tall as the cover: the song's name level with its
+                    // top edge, the controls with its bottom. Never shorter than the details need,
+                    // which a small window's cover can be.
+                    .frame(height: max(side, Self.columnHeight))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 32)
+        // Up into the title bar, whose buttons hide while the full player is open, so its
+        // own bar sits where they were rather than a bar's height below.
+        .ignoresSafeArea(edges: .top)
     }
 
     private static let column: CGFloat = 380
+    /// The song's details and every control, stacked with their least spacing.
+    private static let columnHeight: CGFloat = 330
     private static let gap: CGFloat = 56
 
     // MARK: - Top bar
@@ -93,7 +101,7 @@ struct FullPlayer: View {
                 Button("Exit Full Player", systemImage: "chevron.down", action: close)
                     .labelStyle(.iconOnly)
                     .buttonStyle(BarIconButtonStyle(diameter: 34))
-                    .keyboardShortcut(.cancelAction)
+                    .keyboardShortcut(.escape, modifiers: [])
                     .help("Exit Full Player (Esc)")
                 Spacer()
                 Menu("More", systemImage: "ellipsis") {
@@ -113,7 +121,8 @@ struct FullPlayer: View {
                 .help("More")
             }
         }
-        .padding(.top, 14)
+        // The title bar's height, its buttons centred in it as the traffic lights were.
+        .frame(height: 52)
         .padding(.bottom, 8)
     }
 
@@ -160,21 +169,33 @@ struct FullPlayer: View {
 
     private func details(_ track: PlayerTrack) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(track.title)
-                        .font(.system(size: 28, weight: .bold))
-                        .lineLimit(2)
-                    if track.isExplicit {
-                        ExplicitBadge()
+                // A click on the name or the artist offers the album and the artist.
+                NowPlayingTitleMenu(track: track, onNavigate: { destination in
+                    close()
+                    switch destination {
+                    case .play(let route): openPlayRoute(route)
+                    case .stats(let route): openPlayRoute(.stats(route))
                     }
+                }) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(track.title)
+                                .font(.system(size: 28, weight: .bold))
+                                .lineLimit(2)
+                            if track.isExplicit {
+                                ExplicitBadge()
+                            }
+                        }
+                        Text(track.artistName)
+                            .font(.title2)
+                            // Strong enough to read on the brightest moving backgrounds.
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(1)
+                    }
+                    .multilineTextAlignment(.leading)
                 }
-                Text(track.artistName)
-                    .font(.title2)
-                    // Strong enough to read on the brightest moving backgrounds.
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(1)
+                .help("Go to Album or Artist")
                 PlayCountLine(track: track)
                     .font(.title3)
                     .padding(.top, 6)
@@ -196,7 +217,6 @@ struct FullPlayer: View {
 
             secondaryControls
                 .padding(.top, 24)
-            Spacer(minLength: 0)
         }
     }
 
@@ -254,7 +274,7 @@ struct FullPlayer: View {
                 Button("Done") {
                     withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { showsUpNext = false }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
             }
             UpNextList()

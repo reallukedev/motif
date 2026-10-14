@@ -61,6 +61,7 @@ private struct QuickSourceSwitch: ViewModifier {
                     }
                 }
                 .animation(.snappy, value: suggestion?.source)
+                .sensoryFeedback(.success, trigger: model.musicSource)
         } else {
             content
         }
@@ -203,7 +204,7 @@ struct MusicSourceFocusFilter: SetFocusFilterIntent {
 /// without stopping what's playing.
 struct SwitchMusicSourceIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Music Source"
-    static let description = IntentDescription("Switches the music source that Play uses. Leave the source empty to switch to whichever isn't on.")
+    static let description = IntentDescription("Switches between Apple Music and your own music. The song on carries on from the other source when it has it. Leave the source empty to switch to whichever isn't on.")
 
     @Parameter(title: "Music Source")
     var source: MusicSource?
@@ -212,7 +213,13 @@ struct SwitchMusicSourceIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let model = AppModel.shared
         let target = source ?? (model.musicSource == .appleMusic ? .yourMusic : .appleMusic)
-        model.switchSource(to: target)
-        return .result(dialog: "Play is on \(target.name).")
+        guard target != model.musicSource else { return .result(dialog: "Already playing from \(target.name).") }
+        if target == .appleMusic, !model.isDemoLaunch, MusicAuthorization.currentStatus != .authorized {
+            throw PlayIntentError.appleMusicAccess
+        }
+        if await model.switchSourceCarryingOn(to: target) {
+            return .result(dialog: "Now playing from \(target.name).")
+        }
+        return .result(dialog: "Switched to \(target.name).")
     }
 }

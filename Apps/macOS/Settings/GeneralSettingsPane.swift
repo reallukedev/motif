@@ -5,11 +5,13 @@ import TracksCore
 /// Opening at login, the Dock, Apple Music access, and About.
 struct GeneralSettingsPane: View {
     @Environment(MacAppBehaviour.self) private var behaviour
+    @Environment(UnexpectedQuitMonitor.self) private var quitMonitor
     @AppStorage("showMenuBarExtra") private var showsMenuBarExtra = true
     @State private var launchesAtLogin = false
 
     var body: some View {
         @Bindable var behaviour = behaviour
+        @Bindable var quitMonitor = quitMonitor
 
         Form {
             SettingsHero(
@@ -35,6 +37,11 @@ struct GeneralSettingsPane: View {
                 )
                 // With the menu bar extra hidden too there'd be no way back into Tracks.
                 .disabled(behaviour.showsDockIcon && !showsMenuBarExtra)
+                SettingsSwitch(
+                    "Reopen Tracks If It Quits Unexpectedly",
+                    detail: reopenDetail,
+                    isOn: $quitMonitor.reopensAutomatically
+                )
             } header: {
                 Text("Startup")
             }
@@ -83,6 +90,12 @@ struct GeneralSettingsPane: View {
             : Text("Open Tracks yourself. It fills in what it missed from Recently Played.")
     }
 
+    private var reopenDetail: Text {
+        quitMonitor.reopensAutomatically
+            ? Text("If macOS closes Tracks, it opens again. Quit and Force Quit leave it closed.")
+            : Text("If macOS closes Tracks, it stays closed until you open it.")
+    }
+
     private var dockDetail: Text {
         if behaviour.showsDockIcon && !showsMenuBarExtra {
             return Text("Needed while Tracks is hidden from the menu bar, so there’s a way back in.")
@@ -109,6 +122,7 @@ private struct PanePreview<Pane: View>: View {
         pane
             .environment(previewModel)
             .environment(MacAppBehaviour())
+            .environment(UnexpectedQuitMonitor())
     }
 }
 

@@ -32,3 +32,5 @@ Config/Local.xcconfig
 
 # Gradle build caches.
 .gradle/
+Android/**/.gradle/
+Android/**/build/

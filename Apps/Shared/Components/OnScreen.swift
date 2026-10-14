@@ -42,7 +42,7 @@ private struct OnScreenTracker: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.isOnScreen, isVisible)
-            .background(OcclusionReader { isVisible = $0 })
+            .background { OcclusionReader { isVisible = $0 } }
     }
 }
 

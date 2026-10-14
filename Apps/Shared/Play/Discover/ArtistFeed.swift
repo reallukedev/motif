@@ -19,7 +19,7 @@ struct ArtistFeed: View {
                 // other way round, so no two rows look alike.
                 let rows = stride(from: 0, to: cards.count, by: 2).map { Array(cards[$0..<min($0 + 2, cards.count)]) }
                 LazyVStack(spacing: Self.spacing) {
-                    ForEach(Array(rows.enumerated()), id: \.element.first?.id) { index, row in
+                    ForEach(rows.enumerated(), id: \.element.first?.id) { index, row in
                         PairedRow(wideFirst: index.isMultiple(of: 2), spacing: Self.spacing) {
                             ForEach(row) { card in
                                 FeedCardView(card: card)
@@ -298,7 +298,7 @@ private struct ListCard: View {
             }
             .padding(.bottom, 12)
 
-            ForEach(Array(artists.enumerated()), id: \.element.id) { index, artist in
+            ForEach(artists.enumerated(), id: \.element.id) { index, artist in
                 if index > 0 {
                     Divider().padding(.leading, 64)
                 }
@@ -446,7 +446,7 @@ private struct GenreCard: View {
             CardWords(eyebrow: String(localized: "Deeper Into"), title: genre, line: names)
             Spacer(minLength: 0)
             HStack(spacing: -22) {
-                ForEach(Array(artists.enumerated()), id: \.element.id) { index, artist in
+                ForEach(artists.enumerated(), id: \.element.id) { index, artist in
                     NavigationLink(value: PlayRoute.artist(artist.artist)) {
                         CoverImage(cover: artist.artist.artwork.map(CoverArt.artwork) ?? .url(nil, seed: artist.artist.name), size: Self.side, isCircle: true)
                             .overlay { Circle().strokeBorder(color, lineWidth: 4) }

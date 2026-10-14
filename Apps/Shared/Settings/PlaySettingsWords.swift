@@ -153,24 +153,11 @@ enum PlaySettingsWords {
         #endif
     }
 
-    /// Your other devices, and on iPhone, shaking it.
-    /// - Parameter needsLocalNetwork: Local Network is off for Tracks, so it can't find them.
-    static func devicesFooter(showsNearby: Bool, shakeToPlay: Bool, needsLocalNetwork: Bool = false) -> String {
-        var lines: [String] = []
-        #if os(iOS)
-        if shakeToPlay {
-            lines.append(String(localized: "Shake iPhone to play a song you haven’t heard that Tracks thinks you’ll like, with Tracks Radio after it."))
-        }
-        #endif
-        if showsNearby {
-            #if os(macOS)
-            lines.append(String(localized: "Listen Now shows what Tracks on your iPhone or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
-            #else
-            lines.append(String(localized: "Play shows what Tracks on your Mac or iPad is playing when it’s nearby, with its controls and Play Here. Only your own devices, signed in to your iCloud, can connect."))
-            #endif
-            if needsLocalNetwork { lines.append(localNetworkOff) }
-        }
-        return lines.joined(separator: " ")
+    /// Shaking iPhone to play.
+    static func shakeFooter(_ shakeToPlay: Bool) -> String {
+        shakeToPlay
+            ? String(localized: "Shake iPhone to play a song you haven’t heard that Tracks thinks you’ll like, with Tracks Radio after it.")
+            : String(localized: "Shaking iPhone does nothing in Tracks.")
     }
 
     /// Why your devices can't be found, and where to fix it.

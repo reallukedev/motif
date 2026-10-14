@@ -85,7 +85,7 @@ struct PartyView: View {
                 Text("Check your connection and try again.")
             } actions: {
                 Button("Try Again", action: tryAgain)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
             }
         } else if let found = found[vibe] {
             if found.playlists.isEmpty, found.stations.isEmpty {
@@ -95,7 +95,7 @@ struct PartyView: View {
                     Text("Apple Music didn't have any playlists for this party just now.")
                 } actions: {
                     Button("Try Another Vibe", action: tryAnotherVibe)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                 }
             } else {
                 PartyPlaylists(vibe: vibe, playlists: found.playlists)
@@ -142,7 +142,7 @@ struct PartyView: View {
                 Text("None of your music suits it yet, and none of your playlists look like party ones. Tracks goes by each song's genre.")
             } actions: {
                 Button("Try Another Vibe", action: tryAnotherVibe)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
             }
         }
         Label("Apple Music's party playlists show here when Music Source is set to Apple Music.", systemImage: "info.circle")

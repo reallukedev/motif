@@ -22,7 +22,6 @@ struct PlaySettingsPane: View {
     @AppStorage(PlayPreferences.radioDownloadsFirstKey) private var radioDownloadsFirst = true
     @AppStorage(PlayPreferences.radioDeletesAfterPlayingKey) private var radioDeletesAfterPlaying = false
     @AppStorage(QuickSwitch.storageKey) private var quickSwitch = false
-    @AppStorage(NearbyDevices.storageKey) private var showsNearby = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @Environment(AppModel.self) private var model
     @Environment(YourMusic.self) private var music
@@ -295,16 +294,6 @@ struct PlaySettingsPane: View {
                     Text(PlaySettingsWords.destinationName(destination)).tag(destination)
                 }
             }
-            SettingsSwitch(
-                "Your Other Devices",
-                detail: showsNearby
-                    ? Text("Shows what Tracks on your iPhone or iPad is playing, nearby.")
-                    : Text("Tracks doesn’t look for your other devices."),
-                isOn: $showsNearby
-            )
-            .onChange(of: showsNearby) { _, on in
-                if on { model.nearby.start() } else { model.nearby.stop() }
-            }
         } header: {
             Text("Around Tracks")
         } footer: {
@@ -314,12 +303,7 @@ struct PlaySettingsPane: View {
     }
 
     private var aroundFooter: String {
-        var lines = [PlaySettingsWords.openingFooter(openingTab), PlaySettingsWords.destinationFooter(songDestination)]
-        if showsNearby {
-            lines.append(String(localized: "Only your own devices, signed in to your iCloud, can connect."))
-            if model.nearby.needsLocalNetwork { lines.append(PlaySettingsWords.localNetworkOff) }
-        }
-        return lines.joined(separator: " ")
+        [PlaySettingsWords.openingFooter(openingTab), PlaySettingsWords.destinationFooter(songDestination)].joined(separator: " ")
     }
 
     // MARK: - Content

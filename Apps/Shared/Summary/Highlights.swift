@@ -84,6 +84,7 @@ struct HighlightsList: View {
     var periodOffset = 0
     @Environment(AppModel.self) private var model
     @State private var insights: [Insight] = []
+    @State private var hasLoaded = false
     private var sources = SourceScopeSetting()
 
     var body: some View {
@@ -96,6 +97,13 @@ struct HighlightsList: View {
             .padding()
             .frame(maxWidth: 700)
             .frame(maxWidth: .infinity)
+        }
+        .overlay {
+            if !hasLoaded {
+                ProgressView()
+            } else if insights.isEmpty {
+                ContentUnavailableView("No Highlights", systemImage: "sparkles", description: Text("Play a few more songs and highlights will show up here."))
+            }
         }
         .groupedBackground()
         .navigationTitle("Highlights")
@@ -113,6 +121,7 @@ struct HighlightsList: View {
             }
             guard !Task.isCancelled else { return }
             insights = next
+            hasLoaded = model.library.isLoaded
         }
     }
 }

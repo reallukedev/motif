@@ -64,6 +64,11 @@ struct TracksApp: App {
             guard phase == .active else { return }
             model.syncOnForeground()
         }
+        .onChange(of: showMenuBarExtra, initial: true) { _, shown in
+            // Command-dragging the icon out of the menu bar writes false here. With the Dock
+            // icon hidden too, there'd be no way back into Tracks, so bring the Dock icon back.
+            if !shown && !behaviour.showsDockIcon { behaviour.showsDockIcon = true }
+        }
 
         #if DEBUG
         // The menu bar window can't be screenshotted, so this shows the same view in a normal
@@ -85,6 +90,7 @@ struct TracksApp: App {
                 .tracksOnScreen()
                 .modelContainer(for: model.store)
                 .environment(behaviour)
+                .environment(quitMonitor)
         }
 
         // `isInserted:` is the only way to toggle this at runtime. SceneBuilder has no
@@ -105,6 +111,9 @@ struct TracksApp: App {
                 animates: animatesMenuBar
             )
             .environment(menuBarArtwork)
+            // The status item draws at launch, before any window, so it's the first view
+            // that can hand over `openWindow`.
+            .keepsOpenWindow()
             .task(id: "\(menuBarArtworkURL ?? "")|\(menuBarLabelStyleRaw)") {
                 menuBarArtwork.load(
                     menuBarArtworkURL,
@@ -128,7 +137,7 @@ struct TracksCommands: Commands {
     var body: some Commands {
         CommandGroup(before: .toolbar) {
             // ⌘1 onwards, in the sidebar's order, which Open To decides.
-            ForEach(Array(SidebarItem.leading(opening: openingTab).enumerated()), id: \.element) { index, item in
+            ForEach(SidebarItem.leading(opening: openingTab).enumerated(), id: \.element) { index, item in
                 Button(item.title, systemImage: item.symbol) {
                     model.sidebarSelection = item
                 }

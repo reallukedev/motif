@@ -1,9 +1,6 @@
 import SwiftUI
 import AuthenticationServices
 import TracksCore
-#if os(macOS)
-import AppKit
-#endif
 
 /// Connecting a Last.fm account, and what gets sent. An iPhone page, and the Mac's Last.fm
 /// pane.
@@ -14,6 +11,7 @@ struct LastFMSettingsPage: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.webAuthenticationSession) private var webAuthentication
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(CaptureSettings.scrobblesToLastFMKey, store: CaptureSettings.sharedDefaults)
     private var scrobbles = true
@@ -136,7 +134,7 @@ struct LastFMSettingsPage: View {
                 preferredBrowserSession: .shared
             )
             #else
-            NSWorkspace.shared.open(url)
+            openURL(url)
             #endif
         }
     }

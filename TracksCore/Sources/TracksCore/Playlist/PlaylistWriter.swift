@@ -14,11 +14,17 @@ public protocol PlaylistWriter: Sendable {
     /// Adding to a playlist the user deleted answers 404, the same as a song Apple won't take.
     /// Asked only after that 404, to tell the two apart.
     func playlistExists(_ playlistID: String) async throws -> Bool
+    /// The library playlist with this name, if there is one. Asked before creating one, so a
+    /// device that hasn't heard the synced ID yet adopts the playlist rather than making
+    /// another.
+    func existingPlaylist(named name: String) async throws -> String?
 }
 
 extension PlaylistWriter {
     /// Writers that can't tell assume it is, which keeps the old behaviour.
     public func playlistExists(_ playlistID: String) async throws -> Bool { true }
+    /// Writers that can't look assume there's none.
+    public func existingPlaylist(named name: String) async throws -> String? { nil }
 }
 
 /// Why a playlist write failed, in terms the retry queue can act on.

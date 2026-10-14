@@ -471,7 +471,7 @@ final class ProbeModel {
             }
             for capture in captures {
                 log.append(.environment, "\(capture.title) by \(capture.artistName)", fields: [
-                    ("capturedAt", ISO8601DateFormatter().string(from: capture.capturedAt)),
+                    ("capturedAt", capture.capturedAt.formatted(.iso8601)),
                     ("songID", capture.songID.isEmpty ? "‹unresolved›" : capture.songID),
                     // Kind and songKey are the dedupe identity; two rows for one song differ here.
                     ("kind", capture.kind.rawValue),
@@ -480,8 +480,8 @@ final class ProbeModel {
                     ("device", capture.capturedByDeviceID.isEmpty ? "‹pre-sync›" : String(capture.capturedByDeviceID.prefix(8))),
                     ("albumTitle", capture.albumTitle ?? "‹none›"),
                     ("artworkURL", capture.artworkURL ?? "‹none›"),
-                    ("addedToPlaylist", capture.addedToPlaylistAt.map { ISO8601DateFormatter().string(from: $0) } ?? "no"),
-                    ("playedBackAt", capture.playedBackAt.map { ISO8601DateFormatter().string(from: $0) } ?? "no"),
+                    ("addedToPlaylist", capture.addedToPlaylistAt?.formatted(.iso8601) ?? "no"),
+                    ("playedBackAt", capture.playedBackAt?.formatted(.iso8601) ?? "no"),
                     ("needsPlaylistWrite", String(capture.needsPlaylistWrite)),
                     ("catalogLookupAttempts", String(capture.catalogLookupAttempts)),
                     ("lastError", capture.lastPlaylistWriteError ?? "‹none›"),

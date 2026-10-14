@@ -307,6 +307,44 @@ struct ForgetSongTests {
         #expect(HistoryImport.newSongs(in: offered, known: known).isEmpty)
     }
 
+    /// Forgetting used to block every later play of the song, on every device, for good.
+    @Test("a song played again days after it was forgotten is imported")
+    func laterPlaysCount() throws {
+        let store = try TracksStore(inMemory: true)
+        let config = scratch.settings
+        let forgotten = Date(timeIntervalSince1970: 1_700_000_000)
+        config.noteForgotten(HistoryImport.key(title: "LION", artistName: "Elevation"), at: forgotten)
+        let offered = [PlayedSong(songID: "i.abc", title: "LION", artistName: "Elevation")]
+
+        #expect(try store.importPlayedSongs(offered, settings: config, now: forgotten.addingTimeInterval(60 * 60)) == 0)
+        config.recentlyPlayedAnchor = []
+        #expect(try store.importPlayedSongs(offered, settings: config, now: forgotten.addingTimeInterval(3 * 24 * 60 * 60)) == 1)
+    }
+
+    @Test("Last.fm plays from before the song was forgotten stay out, later ones come in")
+    func scrobblesAfterForgetting() throws {
+        let store = try TracksStore(inMemory: true)
+        let config = scratch.settings
+        let forgotten = Date(timeIntervalSince1970: 1_700_000_000)
+        config.noteForgotten(HistoryImport.key(title: "LION", artistName: "Elevation"), at: forgotten)
+
+        let written = try store.importScrobbles([
+            ScrobbledTrack(title: "LION", artistName: "Elevation", playedAt: forgotten.addingTimeInterval(-60)),
+            ScrobbledTrack(title: "LION", artistName: "Elevation", playedAt: forgotten.addingTimeInterval(2 * 24 * 60 * 60)),
+        ], settings: config)
+
+        #expect(written == 1)
+        #expect(try store.context.fetch(TracksStore.allCaptures()).map(\.capturedAt)
+            == [forgotten.addingTimeInterval(2 * 24 * 60 * 60)])
+    }
+
+    /// Songs forgotten before the date was kept have nothing to measure from.
+    @Test("a song forgotten without a date stays forgotten")
+    func undatedStaysForgotten() {
+        #expect(CaptureSettings.isForgotten("k", playedAt: .distantFuture, forgotten: ["k"], dates: [:]))
+        #expect(!CaptureSettings.isForgotten("other", playedAt: .distantPast, forgotten: ["k"], dates: [:]))
+    }
+
     @Test("forgetting a song that was never captured still stops it arriving")
     func forgetsUnseenSongs() throws {
         let store = try TracksStore(inMemory: true)

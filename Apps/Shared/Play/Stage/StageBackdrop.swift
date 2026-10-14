@@ -94,13 +94,14 @@ private struct FlowBackdrop: View {
     @State private var isSettled = false
     @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
     @Environment(\.isOnScreen) private var isOnScreen
+    @Environment(PlayerModel.self) private var player: PlayerModel?
 
     var body: some View {
         TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: reduceMotion), paused: isSettled || !isOnScreen)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
-            let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
-            let bass = Float(bands.prefix(5).reduce(0, +) / 5)
-            let mid = Float(bands[6..<14].reduce(0, +) / 8)
+            let pulse = levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying, calm: reduceMotion)
+            let bass = pulse.bass
+            let mid = Float(pulse.bands[6..<14].reduce(0, +) / 8)
             // Slow, whatever the song: the drift is the room, the bass is the music.
             // The drift keeps its own time, which stops while paused and goes on from there.
             let t = Float(reduceMotion ? 0 : drift.phase(at: time).truncatingRemainder(dividingBy: 10_000))
@@ -127,7 +128,7 @@ private struct FlowBackdrop: View {
             )
             .overlay {
                 // The kick, as light from the middle.
-                RadialGradient(colors: [.white.opacity(Double(bass) * 0.22), .clear], center: .center, startRadius: 0, endRadius: 700)
+                RadialGradient(colors: [.white.opacity(Double(bass) * 0.22 + Double(pulse.kick) * 0.12), .clear], center: .center, startRadius: 0, endRadius: 700)
                     .blendMode(.plusLighter)
             }
             .overlay {
@@ -159,24 +160,26 @@ private struct BloomBackdrop: View {
         _art = State(initialValue: BackdropArtStore.shared.cached(cover))
     }
     @Environment(\.isOnScreen) private var isOnScreen
+    @Environment(PlayerModel.self) private var player: PlayerModel?
 
     var body: some View {
         GeometryReader { proxy in
             let side = max(proxy.size.width, proxy.size.height) * 1.5
             TimelineView(.animation(minimumInterval: reduceMotion || LowPowerMode.shared.isOn ? 1 / 20 : 1 / 30, paused: isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
-                let bands = levels.next(heard: AudioLevelMeter.shared.current(), time: time, energy: energy, isPlaying: isPlaying, calm: reduceMotion)
-                let bass = CGFloat(bands.prefix(5).reduce(0, +) / 5)
+                let pulse = levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying, calm: reduceMotion)
+                let bass = CGFloat(pulse.bass)
+                let kick = CGFloat(pulse.kick)
                 ZStack {
                     if let art {
                         Image(decorative: art.soft, scale: 1)
                             .resizable()
                             .interpolation(.high)
                             .frame(width: side, height: side)
-                            .scaleEffect(1.1 + bass * 0.12)
+                            .scaleEffect(1.1 + bass * 0.12 + kick * 0.025)
                             .rotationEffect(.degrees(reduceMotion ? 0 : (drift.phase(at: time) * 3).truncatingRemainder(dividingBy: 360)))
                             .saturation(1.35)
-                            .brightness(Double(bass) * 0.14 - 0.1)
+                            .brightness(Double(bass) * 0.14 + Double(kick) * 0.05 - 0.1)
                             .transition(.opacity)
                     }
                 }

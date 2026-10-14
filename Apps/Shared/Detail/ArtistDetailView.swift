@@ -20,6 +20,10 @@ struct ArtistDetailView: View {
                     .frame(maxWidth: .infinity)
             } else if loadedID == artistID {
                 ContentUnavailableView("No Plays", systemImage: "music.microphone")
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 120)
             }
         }
         .groupedBackground()
@@ -118,7 +122,7 @@ struct StatStrip: View {
         if typeSize.isAccessibilitySize {
             Card(padding: 14) {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    ForEach(items.enumerated(), id: \.offset) { _, item in
                         VStack(alignment: .leading, spacing: 0) {
                             Text(item.title)
                                 .font(.caption)
@@ -138,7 +142,7 @@ struct StatStrip: View {
     private var strip: some View {
         Card(padding: 14) {
             HStack(alignment: .top, spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                ForEach(items.enumerated(), id: \.offset) { index, item in
                     if index > 0 {
                         Divider().frame(maxHeight: 36)
                     }

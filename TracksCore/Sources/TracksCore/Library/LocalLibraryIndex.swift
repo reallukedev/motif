@@ -114,6 +114,8 @@ public struct LocalLibraryIndex: Sendable {
     /// Each album's title and artist, and each artist's name, folded, in the order of
     /// `albums` and `artists`.
     private let albumText: [(title: String, artist: String)]
+    /// The same, folded as search compares them: see ``SearchFolding``.
+    private let albumSearchText: [(title: String, artist: String)]
     private let artistText: [String]
 
     private struct SearchText: Sendable {
@@ -152,10 +154,11 @@ public struct LocalLibraryIndex: Sendable {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         self.artistsByID = Dictionary(self.artists.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         self.searchText = self.tracks.map {
-            SearchText(title: Self.fold($0.title), artist: Self.fold($0.artist), album: Self.fold($0.album ?? ""))
+            SearchText(title: SearchFolding.fold($0.title), artist: SearchFolding.fold($0.artist), album: SearchFolding.fold($0.album ?? ""))
         }
         self.albumText = self.albums.map { (Self.fold($0.title), Self.fold($0.artist)) }
-        self.artistText = self.artists.map { Self.fold($0.name) }
+        self.albumSearchText = self.albums.map { (SearchFolding.fold($0.title), SearchFolding.fold($0.artist)) }
+        self.artistText = self.artists.map { SearchFolding.fold($0.name) }
     }
 
     public var isEmpty: Bool { tracks.isEmpty }
@@ -207,12 +210,29 @@ public struct LocalLibraryIndex: Sendable {
     /// Songs, albums and artists whose names hold every word searched for, ignoring case and
     /// accents, best matches first: a name that is what was typed, then one that starts with
     /// it, then one with a word that does, then the rest, each in the library's order.
+    /// Every typed word in a song's, album's or artist's names, case, accents and punctuation
+    /// aside, the closest matches first: the whole name, then its start, then one of its
+    /// words'. With nothing found, a word a letter off counts too, so a typo still finds it.
     public func search(_ query: String, limit: Int = 50) -> (tracks: [LocalTrack], albums: [LocalAlbum], artists: [LocalArtist]) {
-        let words = Self.fold(query).split(separator: " ").map(String.init)
+        let words = SearchFolding.fold(query).split(separator: " ").map(String.init)
         guard !words.isEmpty else { return ([], [], []) }
+        let exact = search(words, limit: limit) { haystack, word in haystack.contains(word) }
+        guard exact.tracks.isEmpty, exact.albums.isEmpty, exact.artists.isEmpty,
+              words.contains(where: { $0.count >= 4 })
+        else { return exact }
+        return search(words, limit: limit) { haystack, word in
+            haystack.contains(word) || haystack.split(separator: " ").contains { SearchFolding.isNear(word, $0) }
+        }
+    }
+
+    private func search(
+        _ words: [String],
+        limit: Int,
+        matching: (String, String) -> Bool
+    ) -> (tracks: [LocalTrack], albums: [LocalAlbum], artists: [LocalArtist]) {
         let term = words.joined(separator: " ")
         func matches(_ haystack: String) -> Bool {
-            words.allSatisfy { haystack.contains($0) }
+            words.allSatisfy { matching(haystack, $0) }
         }
         var tracks: [(rank: Int, item: LocalTrack)] = []
         for (position, text) in searchText.enumerated() where matches(text.title + " " + text.artist + " " + text.album) {
@@ -220,7 +240,7 @@ public struct LocalLibraryIndex: Sendable {
             let rank = min(Self.rank(of: text.title, for: term), 4 + Self.rank(of: text.artist, for: term), 4 + Self.rank(of: text.album, for: term))
             tracks.append((rank, self.tracks[position]))
         }
-        let albums = zip(self.albums, albumText).compactMap { album, text -> (rank: Int, item: LocalAlbum)? in
+        let albums = zip(self.albums, albumSearchText).compactMap { album, text -> (rank: Int, item: LocalAlbum)? in
             guard matches(text.title + " " + text.artist) else { return nil }
             return (min(Self.rank(of: text.title, for: term), 4 + Self.rank(of: text.artist, for: term)), album)
         }
@@ -233,6 +253,23 @@ public struct LocalLibraryIndex: Sendable {
             Self.best(albums, limit: limit).map(\.item),
             Self.best(artists, limit: limit).map(\.item)
         )
+    }
+
+    /// Songs from elsewhere, a server's search say, closest to what was typed first, as this
+    /// library's own are: a song of that very name before one that only has it in its album's.
+    /// Equal ones stay in the order they came.
+    public static func ranked(_ tracks: [LocalTrack], for query: String) -> [LocalTrack] {
+        let term = SearchFolding.fold(query)
+        guard !term.isEmpty else { return tracks }
+        let ranked = tracks.map { track in
+            let rank = min(
+                rank(of: SearchFolding.fold(track.title), for: term),
+                4 + rank(of: SearchFolding.fold(track.artist), for: term),
+                4 + rank(of: SearchFolding.fold(track.album ?? ""), for: term)
+            )
+            return (rank: rank, item: track)
+        }
+        return best(ranked, limit: .max).map(\.item)
     }
 
     /// The best ranked first, equal ones in the order they came.

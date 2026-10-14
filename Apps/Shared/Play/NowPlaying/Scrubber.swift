@@ -19,7 +19,7 @@ struct Scrubber: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: interval, paused: !isPlaying || dragFraction != nil || !isOnScreen)) { _ in
-            let fraction = dragFraction ?? (duration > 0 ? min(1, max(0, time() / duration)) : 0)
+            let fraction = dragFraction ?? Self.fraction(time(), of: duration)
             let elapsed = fraction * duration
             VStack(spacing: 8) {
                 GeometryReader { proxy in
@@ -48,6 +48,9 @@ struct Scrubber: View {
                     )
                 }
                 .frame(height: 24)
+                // Felt as the bar is taken hold of, and at either end of the song.
+                .sensoryFeedback(.impact(weight: .light), trigger: dragFraction != nil) { _, held in held }
+                .sensoryFeedback(.impact(flexibility: .rigid, intensity: 0.6), trigger: dragFraction.map { $0 <= 0 || $0 >= 1 }) { _, atEnd in atEnd == true }
 
                 HStack {
                     Text(Self.format(elapsed))
@@ -89,8 +92,17 @@ struct Scrubber: View {
         #endif
     }
 
+    /// How far through, from 0 to 1. A length or time that isn't a real number, as a broken
+    /// file or a stream can report, counts as the start.
+    static func fraction(_ time: TimeInterval, of duration: TimeInterval) -> Double {
+        guard duration > 0, duration.isFinite, time.isFinite else { return 0 }
+        return min(1, max(0, time / duration))
+    }
+
     /// "3:07", or "1:02:07" past an hour.
     static func format(_ seconds: TimeInterval) -> String {
+        // Int(_:) traps on NaN and infinity.
+        guard seconds.isFinite else { return "--:--" }
         let whole = Int(seconds.rounded(.down))
         return Duration.seconds(whole).formatted(
             .time(pattern: whole >= 3600 ? .hourMinuteSecond : .minuteSecond)

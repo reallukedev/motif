@@ -69,11 +69,15 @@ struct ServerForYouSection: View {
             .task(id: LoadKey(serverID: server.id, picked: music.discover.pickedArtists, played: feed.tasteArtists)) {
                 await load(force: false)
             }
-            // One more at a time while the last column is in view, as the budget allows: asked
-            // again after each song, or after a try that found none.
-            .task(id: "\(isEndInView).\(songs.count).\(forYou?.canGoOn == true).\(forYou?.isFilling == true)") {
+            // A column at a time while the last is in view, as the budget allows: asked again
+            // after each answer, even one that found nothing.
+            .task(id: "\(isEndInView).\(songs.count).\(forYou?.canGoOn == true).\(music.discover.answers[server.id] ?? 0)") {
                 guard isEndInView else { return }
-                await music.discover.loadMore(for: server.id, shelf: shelf)
+                await music.discover.loadMore(
+                    for: server.id,
+                    shelf: shelf,
+                    want: SuggestionPaging.wanted(showing: songs.count, perColumn: SuggestionShelfPaging.rowsPerColumn)
+                )
             }
         }
     }

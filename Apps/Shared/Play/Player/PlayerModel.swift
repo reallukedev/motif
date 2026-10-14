@@ -73,6 +73,7 @@ final class PlayerModel {
     @ObservationIgnored private var requestsStarting = 0
     /// Set by Previous: going back isn't a verdict on the song being left.
     @ObservationIgnored private var isGoingBack = false
+    @ObservationIgnored private var goingBackCount = 0
 
     /// Sample data: the engine only pretends, and songs play without catalog ids.
     let isDemo: Bool
@@ -240,6 +241,17 @@ final class PlayerModel {
             play(request, from: .songs(title))
             return
         }
+        // The song left paused isn't in the player yet: added songs would play in its place
+        // and its Up Next would be lost. It starts first, and they join its queue.
+        if waitingSession != nil {
+            let resuming = resumeWaitingSession()
+            Task {
+                await resuming?.value
+                guard waitingSession == nil, hasQueue else { return }
+                enqueue(request, next: next, title: title)
+            }
+            return
+        }
         problem = nil
         // What you add plays before Autoplay's picks, as in Music: they make way, and
         // Autoplay follows on after your songs.
@@ -281,7 +293,7 @@ final class PlayerModel {
 
     /// Adds to the end of the queue quietly, for songs still loading behind a playlist.
     func append(_ request: PlayRequest) {
-        guard hasQueue else { return }
+        guard hasQueue, waitingSession == nil else { return }
         Task { try? await engine.enqueue(request, next: false) }
     }
 
@@ -316,12 +328,17 @@ final class PlayerModel {
     /// Lets the engine have the last word if it never reaches what was asked, so the button
     /// can't be left showing something that isn't happening.
     private func settleIntent() {
+        // Only the latest tap's timer settles it: an earlier one could clear a newer intent.
         let asked = intendsToPlay
-        Task {
+        intentSettling?.cancel()
+        intentSettling = Task {
             try? await Task.sleep(for: .seconds(4))
-            if intendsToPlay == asked { intendsToPlay = nil }
+            guard !Task.isCancelled, intendsToPlay == asked else { return }
+            intendsToPlay = nil
         }
     }
+
+    @ObservationIgnored private var intentSettling: Task<Void, Never>?
 
     func skipToNext() {
         guard waitingSession == nil else {
@@ -344,12 +361,14 @@ final class PlayerModel {
             return
         }
         isGoingBack = true
+        goingBackCount += 1
+        let tap = goingBackCount
         Task {
             do { try await engine.skipToPrevious() } catch { report(error) }
             // Previous may only have restarted the song. Either way the next change is
-            // the person's own again after a moment.
+            // the person's own again after a moment, counted from the latest tap.
             try? await Task.sleep(for: .seconds(2))
-            isGoingBack = false
+            if goingBackCount == tap { isGoingBack = false }
         }
     }
 
@@ -532,7 +551,9 @@ final class PlayerModel {
                 }
             } catch {
                 favorites[song.id] = was
-                report(error)
+                report(error, couldnt: isFavorite
+                    ? String(localized: "Couldn't Favorite")
+                    : String(localized: "Couldn't Remove Favorite"))
             }
         }
     }
@@ -578,7 +599,7 @@ final class PlayerModel {
                 try await work()
                 confirm(String(localized: "Added to Library"))
             } catch {
-                report(error)
+                report(error, couldnt: String(localized: "Couldn't Add to Library"))
             }
         }
     }
@@ -770,8 +791,11 @@ final class PlayerModel {
     }
 
     /// Plays the song left paused, from where it was, or a later song of its queue.
-    private func resumeWaitingSession(startingAt index: Int = 0) {
-        guard let session = waitingSession, session.tracks.indices.contains(index) else { return }
+    @discardableResult
+    private func resumeWaitingSession(startingAt index: Int = 0) -> Task<Void, Never>? {
+        // Already starting: a second tap or a song added meanwhile waits on the same start.
+        if let resumingSession { return resumingSession }
+        guard let session = waitingSession, session.tracks.indices.contains(index) else { return nil }
         let tracks = session.tracks
         let request: PlayRequest
         if session.isYourMusic {
@@ -786,7 +810,8 @@ final class PlayerModel {
         let time = index == 0 ? session.time : 0
         var context = session.context ?? .songs(String(localized: "Where You Left Off"))
         let first = MixSong(tracks[index])
-        Task {
+        let task = Task {
+            defer { resumingSession = nil }
             if context.kind == .endless {
                 // Picked up live, so it carries on picking as it did before Tracks closed.
                 guard !(await resumeLive(context, startingWith: first)) else {
@@ -799,7 +824,11 @@ final class PlayerModel {
             await start(request, from: context)
             seekIfStill(on: first.songIdentity, to: time)
         }
+        resumingSession = task
+        return task
     }
+
+    @ObservationIgnored private var resumingSession: Task<Void, Never>?
 
     /// Back to where the song was left, if it's the one that started: one that can't play now
     /// is passed over, and the song after it starts from the top.
@@ -830,34 +859,49 @@ final class PlayerModel {
         pendingSave = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            saveSession()
+            saveCount += 1
+            let save = saveCount
+            guard let session = sessionToSave() else {
+                LastSessionStore.save(nil)
+                return
+            }
+            guard let data = await LastSessionStore.encoded(session),
+                  saveCount == save
+            else { return }
+            LastSessionStore.write(data)
         }
     }
 
+    /// Counts saves, so one encoded in the background can't overwrite a newer one.
+    @ObservationIgnored private var saveCount = 0
+
     /// Keeps what's on, and how far into it, for the next launch. The app calls this as it
-    /// goes to the background or quits; the player calls it as songs change and pause.
+    /// goes to the background or quits, and it's written before this returns; the player
+    /// saves as songs change and pause.
     func saveSession() {
         guard !isDemo else { return }
         pendingSave?.cancel()
         pendingSave = nil
+        saveCount += 1
+        LastSessionStore.save(sessionToSave())
+    }
+
+    /// What to keep for the next launch. Nil for nothing, as after a station, which can't be
+    /// picked up part way.
+    private func sessionToSave() -> LastSession? {
         if var waiting = waitingSession {
             // Opened and left again: the wait starts over from now.
             waiting.savedAt = .now
-            LastSessionStore.save(waiting)
-            return
+            return waiting
         }
-        // Stations can't be picked up part way: the next launch starts with nothing on.
-        guard let current, context?.isStation != true else {
-            LastSessionStore.save(nil)
-            return
-        }
-        LastSessionStore.save(LastSession(
+        guard let current, context?.isStation != true else { return nil }
+        return LastSession(
             tracks: [current] + upNext.prefix(LastSession.keptAhead),
             time: engine.playbackTime,
             contextKind: context?.kind.storedName,
             contextTitle: context?.title,
             savedAt: .now
-        ))
+        )
     }
 
     /// The source was switched while music played: the new player takes over now, as
@@ -986,6 +1030,7 @@ final class PlayerModel {
     @ObservationIgnored var makeAutoplay: ((_ seeds: [PlayerTrack]) async -> LiveMix)?
     /// Autoplay's mix being made.
     @ObservationIgnored private var autoplayStart: Task<Void, Never>?
+    @ObservationIgnored private var autoplayCount = 0
     /// The request Autoplay last tried to follow, so a queue it couldn't follow isn't tried on
     /// every change.
     @ObservationIgnored private var autoplayTried: Int?
@@ -1097,6 +1142,9 @@ final class PlayerModel {
         var mix = mix
         // Before the first picks, which the rest follow.
         mix.blocked = signals.blocked
+        // Tracks Radio starts from what landed at this moment before, and opens by trying a
+        // few directions unless it starts from a song.
+        if context == .tracksRadio { mix.begin(with: TracksRadioSource.habits, probing: first == nil) }
         var songs: [MixSong] = []
         if let first {
             mix.note(picked: first.songIdentity)
@@ -1405,6 +1453,8 @@ final class PlayerModel {
     /// Takes up what the live mix is doing about the songs so far, for Up Next to say. A turn
     /// away after a run of skips is said at once too, so the skips are seen to be heard.
     private func followSteering() {
+        // What Tracks Radio has learned, kept for its next listen. Never from sample data.
+        if !isDemo, let habits = live?.habits() { TracksRadioSource.keep(habits) }
         let now = live?.steering
         guard now != steering else { return }
         steering = now
@@ -1449,8 +1499,11 @@ final class PlayerModel {
         let request = latestRequest
         autoplayTried = request
         let seeds = Array((queuePlayed + [current]).suffix(8))
+        autoplayCount += 1
+        let id = autoplayCount
         autoplayStart = Task {
-            defer { autoplayStart = nil }
+            // One cancelled by endAutoplay can finish after a newer one began: it leaves that be.
+            defer { if autoplayCount == id { autoplayStart = nil } }
             var mix = await makeAutoplay(seeds)
             // Nothing like these at all: not tried again for this queue.
             guard !Task.isCancelled, request == latestRequest, !mix.isEmpty else { return }
@@ -1462,7 +1515,7 @@ final class PlayerModel {
             }
             for seed in seeds { mix.note(picked: seed.songIdentity) }
             mix.blocked = signals.blocked
-        live = mix
+            live = mix
             steering = nil
             moreLikeThis = []
             autoplayFollows = context.title
@@ -1511,7 +1564,7 @@ final class PlayerModel {
                 #endif
                 confirm(String(localized: "Saved to Your Library"))
             } catch {
-                report(error)
+                report(error, couldnt: String(localized: "Couldn't Save Playlist"))
             }
         }
     }
@@ -1625,6 +1678,11 @@ final class PlayerModel {
         if !(error is PlayerProblem), PlaybackFailure(error) == .superseded { return }
         intendsToPlay = nil
         problem = PlayerProblem(error)
+    }
+
+    /// For something other than playing, which leaves what's playing as it is.
+    private func report(_ error: any Error, couldnt title: String) {
+        problem = PlayerProblem(error, couldnt: title)
     }
 }
 

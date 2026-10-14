@@ -196,6 +196,55 @@ struct PlaylistQueueTests {
         #expect(late.addedToPlaylistAt != nil)
     }
 
+    /// A new device drained before iCloud brought the playlist's ID down, and made a second
+    /// "Heard on Radio" that then won on every device.
+    @Test("a playlist already in the library by that name is adopted, not made again")
+    func adoptsExistingPlaylist() async throws {
+        try owed("1")
+        writer.existing = [settings.playlistName: "p.original"]
+
+        await coordinator().drainPendingWrites()
+
+        #expect(writer.created == 0)
+        #expect(settings.playlistID == "p.original")
+        #expect(writer.written == ["1"])
+    }
+
+    @Test("a failed create waits before trying again")
+    func failedCreateBacksOff() async throws {
+        try owed("1")
+        writer.createFails = true
+        let subject = coordinator()
+
+        await subject.drainPendingWrites()
+        await subject.drainPendingWrites()
+        #expect(writer.created == 1)
+
+        writer.createFails = false
+        clock.advance(by: 31)
+        await subject.drainPendingWrites()
+        #expect(writer.written == ["1"])
+    }
+
+    /// Offline, or without a developer token, the Mac searched the catalog on every
+    /// ten-second poll for as long as it stayed that way.
+    @Test("a failed catalog search waits before searching again")
+    func failedSearchBacksOff() async throws {
+        let row = Capture(songID: "", songKey: "k", title: "Nostalgia", artistName: "Lossapardo", deviceID: DeviceIdentity.current)
+        store.context.insert(row)
+        try store.context.save()
+        let resolver = FailingResolver()
+        let subject = coordinator(resolver: resolver)
+
+        await subject.drainPendingWrites()
+        await subject.drainPendingWrites()
+        #expect(resolver.searches == 1)
+
+        clock.advance(by: 31)
+        await subject.drainPendingWrites()
+        #expect(resolver.searches == 2)
+    }
+
     /// Sync can merge a row away while its write is out. Writing to the deleted row trapped.
     @Test("a row deleted while its write is out is left alone, and the next row still goes in")
     func deletedWhileOut() async throws {
@@ -354,6 +403,22 @@ final class ScriptedPlaylistWriter: PlaylistWriter, @unchecked Sendable {
 
     private var _created = 0
     private var _deleted: Set<String> = []
+    private var _existing: [String: String] = [:]
+    private var _createFails = false
+
+    /// Playlists already in the library, by name.
+    var existing: [String: String] {
+        get { lock.withLock { _existing } }
+        set { lock.withLock { _existing = newValue } }
+    }
+    var createFails: Bool {
+        get { lock.withLock { _createFails } }
+        set { lock.withLock { _createFails = newValue } }
+    }
+
+    func existingPlaylist(named name: String) async throws -> String? {
+        lock.withLock { _existing[name] }
+    }
 
     /// How many playlists were created.
     var created: Int { lock.withLock { _created } }
@@ -361,8 +426,9 @@ final class ScriptedPlaylistWriter: PlaylistWriter, @unchecked Sendable {
     func delete(_ playlistID: String) { lock.withLock { _ = _deleted.insert(playlistID) } }
 
     func createPlaylist(name: String, description: String?) async throws -> String {
-        lock.withLock {
+        try lock.withLock {
             _created += 1
+            if _createFails { throw URLError(.timedOut) }
             return _created == 1 ? "p.fake" : "p.fake\(_created)"
         }
     }
@@ -411,5 +477,19 @@ final class CountingArtworkResolver: CatalogResolving, @unchecked Sendable {
         }
     }
 
+    func mostRecentStationName() async throws -> String? { nil }
+}
+
+/// A catalog that can't be reached, counting how often it was asked.
+final class FailingResolver: CatalogResolving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _searches = 0
+    var searches: Int { lock.withLock { _searches } }
+
+    func resolve(_ query: CatalogQuery) async throws -> CatalogCandidate? {
+        lock.withLock { _searches += 1 }
+        throw URLError(.notConnectedToInternet)
+    }
+    func artworkURLs(forSongIDs ids: [String]) async throws -> [String: String] { [:] }
     func mostRecentStationName() async throws -> String? { nil }
 }

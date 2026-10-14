@@ -51,11 +51,11 @@ struct LibraryPlayButtons: View {
         HStack(spacing: 8) {
             if let play {
                 Button("Play", systemImage: "play.fill", action: play)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
             }
             if let shuffle {
                 Button("Shuffle", systemImage: "shuffle", action: shuffle)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
             }
         }
         .controlSize(.regular)
@@ -82,7 +82,7 @@ struct LibraryPlayButtons: View {
             }
         }
         .font(.headline)
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
         .controlSize(.large)
         .sensoryFeedback(.impact(weight: .light), trigger: taps)
@@ -545,7 +545,7 @@ struct LibraryEmptyAppleMusic: View {
                 model.playNavigator.path = NavigationPath()
                 #endif
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
         }
         .libraryStateWidth()
         .padding(.horizontal, PlayMetrics.margin)
@@ -593,9 +593,9 @@ struct LibraryEmptyYourMusic: View {
         ) {
             HStack(spacing: 10) {
                 Button("Import Songs", systemImage: "music.note") { importsFiles = true }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                 Button("Connect a Server", systemImage: "server.rack") { addsServer = true }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
             }
         }
         .libraryStateWidth()
@@ -622,7 +622,7 @@ struct LibraryLoadFailed: View {
             message: String(localized: "Apple Music didn't answer. Check your connection, and that Tracks can use Apple Music.")
         ) {
             Button("Try Again") { Task { await retry() } }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
         }
         .libraryStateWidth()
         .padding(.horizontal, PlayMetrics.margin)

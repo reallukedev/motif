@@ -8,7 +8,7 @@ public enum MediaTransportControl {
     /// Sends one transport command and returns whether the event was delivered.
     ///
     /// Delivered isn't the same as done: Music accepts `next track` on a radio station with
-    /// no error and does nothing (`docs/ProbeResults/macos-transport-2026-09-08.md`). To know
+    /// no error and does nothing (`docs/PlatformNotes.md`). To know
     /// it worked, compare `database ID of current track` before and after.
     @discardableResult
     public static func perform(

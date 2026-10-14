@@ -55,8 +55,9 @@ import TracksCore
 ///     -TracksThroughTheDayAnchor bottom  scroll Through the Day to its foot
 ///     -TracksThroughTheDay YES     open Through the Day from the Play pane (Mac)
 ///     -TracksAppearance light      draw the Mac sheet light whatever the Mac's setting
-///     -TracksNearbyDemo YES        a device nearby playing a song (or "paused", or "control"
-///                                 to show it in the player)
+///     -TracksNearbyDemo YES        a device nearby playing a song, with two seen lately (or
+///                                 "paused", "control" to show it in the player, "many" for
+///                                 three nearby, "away" for only those seen lately, "none")
 ///     -TracksDevices YES           open Your Devices
 ///     -TracksSharePlayDemo host    a pretend SharePlay with sample data (iPhone): "host", or
 ///                                 "guest" and its states (see SharePlayDemo)
@@ -81,6 +82,8 @@ enum LaunchScene {
     static var opensQueue: Bool { value("TracksQueue") == "YES" }
     static var opensQualityDetails: Bool { value("TracksQualityDetails") == "YES" }
     static var opensStage: Bool { value("TracksStage") == "YES" }
+    /// `-TracksHistoryFilter radio`: History opens filtered, for screenshots.
+    static var historyFilter: String? { value("TracksHistoryFilter") }
     static var opensStageControls: Bool { value("TracksStageControls") == "YES" }
     static var opensStageCustomizer: Bool { value("TracksStageCustomize") == "YES" }
     static var opensSleeve: Bool { value("TracksSleeve") == "YES" }
@@ -130,8 +133,26 @@ enum LaunchScene {
 
 extension LaunchScene {
     /// Starts the first mix with sample data, for screenshots of the player. Once per launch.
+    /// `-TracksSiriAsk "Blue from my music"`: resolves a spoken request as Siri's would be and
+    /// logs what it found, to check matching against the sample library.
+    @MainActor
+    static func resolveSiriAsk() {
+        #if DEBUG
+        guard let asked = value("TracksSiriAsk"), !hasResolvedSiriAsk else { return }
+        hasResolvedSiriAsk = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            let found = await MediaRequestResolver.item(for: MediaRequest(name: asked))
+            print("SiriAsk \"\(asked)\" -> \(found.map { "\($0.identifier) \($0.title) \($0.artist ?? "")" } ?? "nothing")")
+        }
+        #endif
+    }
+
+    @MainActor private static var hasResolvedSiriAsk = false
+
     @MainActor
     static func startDemoPlayback(_ model: AppModel) {
+        resolveSiriAsk()
         guard model.isDemoLaunch, let playing = value("TracksDemoPlaying"), !hasStartedDemoPlayback else { return }
         if playing == "station" {
             hasStartedDemoPlayback = true

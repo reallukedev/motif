@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 import SwiftData
 import TracksCore
 
@@ -9,7 +8,7 @@ import TracksCore
 /// view, so opening History costs the same however long the history is.
 struct HistoryScreen: View {
     @Environment(AppModel.self) private var model
-    @State private var filter: HistoryFilter = .all
+    @State private var filter: HistoryFilter = LaunchScene.historyFilter.flatMap(HistoryFilter.init(rawValue:)) ?? .all
     @State private var limit = HistoryPage.size
     @State private var pendingDelete: Capture?
     @State private var isScrobbling = false
@@ -152,8 +151,10 @@ private struct HistoryList: View {
         }
         .onStoreChange(of: context) { storeChanges += 1 }
         // Day headers move at midnight even when no play does.
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in
-            storeChanges += 1
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .NSCalendarDayChanged) {
+                storeChanges += 1
+            }
         }
     }
 

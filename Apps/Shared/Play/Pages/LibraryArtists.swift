@@ -238,10 +238,10 @@ struct LibraryArtistDetail<Albums: View>: View {
                     HStack(spacing: 8) {
                         if let shuffle {
                             Button("Shuffle", systemImage: "shuffle", action: shuffle)
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.glassProminent)
                         }
                         Button("Artist Page", systemImage: "music.microphone", action: open)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.glass)
                             .help("Open \(name)")
                     }
                     .fixedSize()

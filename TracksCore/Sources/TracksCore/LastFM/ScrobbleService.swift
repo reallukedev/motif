@@ -79,6 +79,8 @@ public final class ScrobbleService {
         guard backoff.allows(at: now()) else { return 0 }
 
         var sent = 0
+        // Imports already looked for on Last.fm and not found there.
+        var checked: Set<PersistentIdentifier> = []
         // Up to fifty scrobbles per request.
         while true {
             // Saved first, so every row has the identity it will keep.
@@ -88,6 +90,47 @@ public final class ScrobbleService {
                 limit: LastFMClient.batchLimit
             )
             guard let owed = try? store.context.fetch(descriptor), !owed.isEmpty else { break }
+
+            // Apple's recently-played list covers the whole account, so an import can be a
+            // play another device already scrobbled. Last.fm's own history is the only thing
+            // that knows, whether or not that device's rows have synced here yet.
+            let imports = owed.filter { $0.kind == .imported && !checked.contains($0.persistentModelID) }
+            if !imports.isEmpty {
+                let candidates = imports.map {
+                    ImportedPlay(
+                        id: $0.persistentModelID,
+                        key: HistoryImport.key(title: $0.title, artistName: $0.artistName),
+                        foundAt: $0.capturedAt
+                    )
+                }
+                let window = settings.dedupePolicy.importWindow
+                let earliest = candidates.map(\.foundAt).min() ?? now()
+                let history: [ScrobbledTrack]
+                do {
+                    history = try await client.recentTracks(
+                        session: session,
+                        after: earliest.addingTimeInterval(-window)
+                    ).scrobbles
+                } catch {
+                    // Sending without knowing could scrobble the play twice, so wait.
+                    Log.lastFM.error("Checking Last.fm history failed: \(String(describing: error), privacy: .public)")
+                    lastError = Self.describe(error)
+                    backoff.recordFailure(at: now())
+                    return sent
+                }
+                let found = Self.alreadyScrobbled(candidates, history: history, window: window)
+                checked.formUnion(candidates.map(\.id).filter { !found.contains($0) })
+                if !found.isEmpty {
+                    let stamp = now()
+                    for capture in store.existingCaptures(Array(found)).values {
+                        capture.scrobbledAt = stamp
+                        capture.lastScrobbleError = nil
+                    }
+                    guard (try? store.context.save()) != nil else { return sent }
+                    // Fetched again: the batch has room for rows that were behind these.
+                    continue
+                }
+            }
 
             // Only identities cross the request: the rows may be merged away meanwhile.
             let ids = owed.map(\.persistentModelID)
@@ -162,14 +205,45 @@ public final class ScrobbleService {
         return sent
     }
 
+    /// An import waiting to be sent, as the Last.fm history check sees it.
+    struct ImportedPlay: Sendable {
+        let id: PersistentIdentifier
+        let key: String
+        let foundAt: Date
+    }
+
+    /// The imports Last.fm already has: the same song scrobbled within `window` before the
+    /// import found it. Each scrobble accounts for one import at most.
+    static func alreadyScrobbled(
+        _ imports: [ImportedPlay],
+        history: [ScrobbledTrack],
+        window: TimeInterval
+    ) -> Set<PersistentIdentifier> {
+        var scrobbled: [String: [Date]] = [:]
+        for track in history {
+            scrobbled[HistoryImport.key(title: track.title, artistName: track.artistName), default: []]
+                .append(track.playedAt)
+        }
+        var found: Set<PersistentIdentifier> = []
+        for play in imports {
+            guard let index = scrobbled[play.key]?.firstIndex(where: {
+                $0 <= play.foundAt && play.foundAt.timeIntervalSince($0) <= window
+            }) else { continue }
+            scrobbled[play.key]?.remove(at: index)
+            found.insert(play.id)
+        }
+        return found
+    }
+
     /// Whether a failed request says something about the scrobbles in it, so each is charged
     /// an attempt and eventually given up on.
     ///
-    /// Everything else (no network, a timeout, Last.fm down or rate limiting, the account)
-    /// would fail any request, and charging the rows would throw away listening because of an
-    /// outage.
+    /// Only an error Last.fm itself sent back about the request counts. Everything else (no
+    /// network, a timeout, Last.fm down or rate limiting, the account, a proxy's bare 4xx or a
+    /// page that isn't Last.fm's) would fail any request, and charging the rows would throw
+    /// away listening because of an outage.
     static func isTheScrobblesFault(_ error: any Error) -> Bool {
-        guard let error = error as? LastFMError else { return false }
+        guard let error = error as? LastFMError, case .service = error else { return false }
         return !error.isRetryable && !error.concernsAccount
     }
 

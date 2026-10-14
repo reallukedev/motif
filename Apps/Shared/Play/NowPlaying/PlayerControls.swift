@@ -16,6 +16,7 @@ struct PlayerTransport: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var previousTaps = 0
     @State private var nextTaps = 0
+    @State private var playTaps = 0
 
     var body: some View {
         HStack {
@@ -32,6 +33,7 @@ struct PlayerTransport: View {
             Spacer()
 
             Button {
+                playTaps += 1
                 player.togglePlayPause()
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
@@ -62,6 +64,11 @@ struct PlayerTransport: View {
             .accessibilityLabel("Next")
         }
         .padding(.horizontal, 16)
+        // Each press felt as the button gives: firmer for play and pause, the one that
+        // changes what you hear.
+        .sensoryFeedback(.impact(weight: .medium, intensity: 0.8), trigger: playTaps)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: previousTaps)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: nextTaps)
     }
 }
 
@@ -320,6 +327,7 @@ struct SleepTimerButton: View {
             .contentShape(.rect)
         }
         .accessibilityLabel(player.sleepTimer == nil ? "Sleep Timer" : "Sleep Timer On")
+        .sensoryFeedback(.selection, trigger: player.sleepTimer)
     }
 
     private func label(at date: Date) -> String {
@@ -388,5 +396,58 @@ struct KeepIndicator: View {
 
     private func progress(at date: Date) -> Double {
         KeepStatus.progress(player: player, at: date)
+    }
+}
+
+/// The song's name and artist on the player, as a menu of where they lead, as Music's are:
+/// its album, its artist, and your stats for it.
+struct NowPlayingTitleMenu<Label: View>: View {
+    let track: PlayerTrack
+    let onNavigate: (NowPlayingDestination) -> Void
+    @ViewBuilder let label: () -> Label
+    @Environment(PlayerModel.self) private var player
+    @Environment(YourMusic.self) private var music
+
+    var body: some View {
+        let actions = actions
+        Menu {
+            if let goToAlbum = actions.goToAlbum {
+                Button("Go to Album", systemImage: "square.stack", action: goToAlbum)
+            }
+            if let goToArtist = actions.goToArtist {
+                Button("Go to Artist", systemImage: "music.microphone", action: goToArtist)
+            }
+            if let stats = actions.stats {
+                Button("Your Stats", systemImage: "chart.bar.xaxis", action: stats)
+            }
+        } label: {
+            label()
+                .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .accessibilityHint("Shows the album, the artist and your stats")
+    }
+
+    private var actions: SongActions {
+        let go: (PlayRoute) -> Void = { onNavigate(.play($0)) }
+        var actions: SongActions
+        if let local = track.local {
+            actions = .local(local, music: music, player: player, go: go)
+        } else if let song = track.song {
+            actions = .catalog(song, player: player, go: go)
+        } else {
+            // Known by name alone, as the demo's songs are: your history's pages for them.
+            let artist = StatsCalculator.folded(track.artistName)
+            actions = SongActions()
+            if let album = track.albumTitle.map(StatsCalculator.folded), !album.isEmpty {
+                actions.goToAlbum = { onNavigate(.stats(.album("\(album)\u{1F}\(artist)"))) }
+            }
+            actions.goToArtist = { go(.artistNamed(track.artistName, identity: artist)) }
+        }
+        let identity = track.songIdentity
+        actions.stats = { onNavigate(.stats(.song(identity))) }
+        return actions
     }
 }

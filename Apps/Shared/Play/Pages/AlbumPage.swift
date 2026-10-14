@@ -68,7 +68,7 @@ struct AlbumPage: View {
                 Menu("More", systemImage: "ellipsis") { moreItems(album) }
             }
         }
-        .task { await load() }
+        .task(id: album.id) { await loadOnce() }
         #else
         CollectionMacLayout {
             header(album, context: context)
@@ -76,7 +76,7 @@ struct AlbumPage: View {
             macTracks(album, context: context)
         }
         .navigationTitle(CollectionKind.of(album).title)
-        .task { await load() }
+        .task(id: album.id) { await loadOnce() }
         .task(id: "\(tracks.count).\(music.availabilityGeneration).\(model.musicSource == .yourMusic)") {
             await checkAvailability(album)
         }
@@ -326,6 +326,12 @@ struct AlbumPage: View {
 
     // MARK: Playing
 
+    /// Once per album: coming back to the page keeps what loaded rather than asking again.
+    private func loadOnce() async {
+        guard loaded?.id != album.id else { return }
+        await load()
+    }
+
     private func load() async {
         #if DEBUG
         openSampleArtist()
@@ -339,6 +345,7 @@ struct AlbumPage: View {
             tracks = Array(detailed.tracks ?? [])
             hasLoaded = true
         } catch {
+            guard !Task.isCancelled else { return }
             loadFailed = tracks.isEmpty
         }
     }

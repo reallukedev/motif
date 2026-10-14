@@ -30,7 +30,7 @@ struct ArtistMixCard: View {
                 )
 
                 VStack(spacing: 0) {
-                    ForEach(Array(mix.artists.enumerated()), id: \.element.id) { index, artist in
+                    ForEach(mix.artists.enumerated(), id: \.element.id) { index, artist in
                         NavigationLink(value: Route.artist(artist.id)) {
                             MixRow(
                                 name: Text(artist.name),

@@ -12,8 +12,8 @@ Tracks is a music app for iPhone and Mac. Play Apple Music or your own library, 
 keeps every song you hear, radio included, then turns it into mixes, stations and charts,
 and finds the songs and artists you'll want next. It scrobbles to Last.fm if you like.
 
-It's written in SwiftUI, with SwiftData and CloudKit for storage. There's no server and no
-analytics. Your history stays on your devices and in your private iCloud database.
+It's written in SwiftUI, with SwiftData and CloudKit for storage. There's no Tracks account
+and no analytics. Your history stays on your devices and in your private iCloud database.
 
 Tracks replaces Motif. On a device that has Motif, it brings your Motif history over by
 itself the first time it opens.
@@ -35,7 +35,7 @@ itself the first time it opens.
   <img src="images/screenshot-mac-summary.png" width="820" alt="Tracks on the Mac: the Summary dashboard">
 </p>
 
-All screenshots use the built-in sample data
+All screenshots use the built-in sample data.
 
 ## Features
 
@@ -88,6 +88,10 @@ All screenshots use the built-in sample data
   have, and Lidarr can fetch what you don't.
 - Siri ("Play music in Tracks") and CarPlay. CarPlay needs Apple's CarPlay Audio
   entitlement on a device; see `Config/Tracks.xcconfig`.
+- Your Devices: see what's playing on your iPhone and Mac, control one from the other, and
+  move the music between them, over the local network.
+- Louder at Speed (iPhone, off by default): with your own music playing in the car, the
+  volume follows your speed.
 - SharePlay: passengers add songs to Up Next from their iPhones, invited in Messages or by
   scanning a code on your iPhone or the car's screen. Without Tracks, they join from its App
   Clip. See [SharePlay by code](#shareplay-by-code).
@@ -103,7 +107,7 @@ All screenshots use the built-in sample data
 
 - A sidebar window with a dashboard Summary, a sortable history table with an inspector, and top charts.
 - A menu bar extra with the current song and its cover, playback controls, today's listening and streak, and your last few songs. The status item can show a symbol, the cover, the title, the artist, or a format you write.
-- A Settings window with General, Scrobbling, Radio and Menu Bar panes.
+- A Settings window with General, Play, History, Radio, Last.fm, iCloud, Devices and Menu Bar panes.
 
 ### Widgets & Shortcuts
 
@@ -113,7 +117,7 @@ All screenshots use the built-in sample data
 
 ### Privacy
 
-- There's no Tracks server or account, and the app collects no analytics.
+- There's no Tracks account, and the app collects no analytics. The only server Tracks runs is an optional relay that passes along encrypted SharePlay messages it can't read.
 - Your history is stored on your device and in your private iCloud database.
 - Last.fm is only contacted if you connect an account, and its session key is kept in the Keychain.
 
@@ -153,7 +157,7 @@ The simulator has no Apple Music account, so there is nothing to record. To see 
 1. **Product › Scheme › Edit Scheme… › Run › Arguments**.
 2. Under _Arguments Passed On Launch_, add `-TracksDemoData YES`.
 
-Tracks then fills an in-memory store with invented listening history, so you can explore every screen without an Apple Music account. Nothing it shows is saved, synced or scrobbled. The argument works in either scheme.
+Tracks then fills an in-memory store with invented listening history, so you can explore every screen without an Apple Music account. Nothing it shows is saved, synced or scrobbled. The argument works in Debug builds of either scheme, and a Release build ignores it.
 
 Debug builds understand a few more launch arguments for jumping straight to a screen, listed in [`LaunchScene.swift`](Apps/Shared/App/LaunchScene.swift). `./Tools/screenshots.sh` uses them to capture the App Store screenshots.
 
@@ -171,6 +175,18 @@ A device build, and any Mac build you intend to run, has to be signed with your 
     DEVELOPMENT_TEAM = ABCDE12345
     TRACKS_BUNDLE_ID = com.example.Tracks
     ```
+
+    The template also points two things at your own team, which a build signed by anyone
+    but the maintainer needs: Motif's App Group, which belongs to the maintainer's team, and
+    the iOS entitlements, so they leave out CarPlay, which needs Apple's approval:
+
+    ```
+    TRACKS_MOTIF_APP_GROUP[sdk=iphoneos*] = group.$(TRACKS_BUNDLE_ID).motif
+    TRACKS_IOS_ENTITLEMENTS = Apps/iOS/Resources/Tracks.entitlements
+    ```
+
+    The App Clip names its parent app literally, so also change the identifier in
+    `Apps/Clip/Resources/TracksClip.entitlements` to match yours.
 
     `Local.xcconfig` is gitignored and overrides the maintainer's defaults in
     [`Config/Tracks.xcconfig`](Config/Tracks.xcconfig). Leave the tracked file alone.
@@ -280,7 +296,7 @@ sample sessions with `-TracksClipDemo joined` (also `joining`, `reconnecting`, `
 cd TracksCore && swift test
 ```
 
-About 300 [Swift Testing](https://developer.apple.com/documentation/testing) tests cover the package. Many use values captured from real devices, such as queue entry ids and notification payloads, so if Apple changes its behavior, a test fails.
+More than 1,000 [Swift Testing](https://developer.apple.com/documentation/testing) tests cover the package. Many use values captured from real devices, such as queue entry ids and notification payloads, so if Apple changes its behavior, a test fails.
 
 `swift test` runs them on the Mac only. The iOS capture code is tested in the Simulator, either with ⌘U on the Tracks (iOS) scheme or with `./build.sh test`, which runs both.
 
@@ -298,9 +314,9 @@ Please report security problems privately, as described in [SECURITY.md](SECURIT
 
 ## Privacy Policy
 
-Tracks has no server and collects no analytics. Your listening history is stored on your device, in an App Group container shared with the Tracks widgets, and mirrored to your private iCloud database so your devices stay in sync. The developer can't read it.
+Tracks has no account and collects no analytics. Your listening history is stored on your device, in an App Group container shared with the Tracks widgets, and mirrored to your private iCloud database so your devices stay in sync. The developer can't read it.
 
-Tracks talks to Apple Music for catalog lookups, artwork and the "Heard on Radio" playlist. If you connect Last.fm, it sends the songs it keeps there as scrobbles. Your history isn't sent anywhere else. The full policy is in [PRIVACY.md](PRIVACY.md).
+Tracks talks to Apple Music for catalog lookups, artwork and the "Heard on Radio" playlist. If you connect Last.fm, it sends the songs it keeps there as scrobbles. Your devices running Tracks talk to each other on the local network, and SharePlay by code can pass encrypted messages through a relay. Your history isn't sent anywhere else. The full policy is in [PRIVACY.md](PRIVACY.md).
 
 ## License
 

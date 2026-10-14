@@ -13,15 +13,15 @@ struct TitlebarAccessory<Content: View>: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { attach(from: view, coordinator: context.coordinator) }
+        Task { attach(from: view, coordinator: context.coordinator) }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        context.coordinator.hosting?.rootView = AnyView(content)
+        context.coordinator.hosting?.rootView = content
         context.coordinator.accessory?.isHidden = isHidden
         if context.coordinator.accessory == nil {
-            DispatchQueue.main.async { attach(from: view, coordinator: context.coordinator) }
+            Task { attach(from: view, coordinator: context.coordinator) }
         }
     }
 
@@ -29,12 +29,12 @@ struct TitlebarAccessory<Content: View>: NSViewRepresentable {
 
     final class Coordinator {
         var accessory: NSTitlebarAccessoryViewController?
-        var hosting: NSHostingView<AnyView>?
+        var hosting: NSHostingView<Content>?
     }
 
     private func attach(from view: NSView, coordinator: Coordinator) {
         guard coordinator.accessory == nil, let window = view.window else { return }
-        let hosting = NSHostingView(rootView: AnyView(content))
+        let hosting = NSHostingView(rootView: content)
         // Its own size up front, so the titlebar makes room for it rather than drawing it
         // over the toolbar's end.
         hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)

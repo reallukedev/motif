@@ -124,8 +124,12 @@ final class DriveDetector {
 
     #if os(iOS)
     private func take(_ reading: DriveSense.Reading) {
-        // A reading arriving means the answer to the prompt was yes.
-        access = .allowed
+        // A reading arriving means the answer to the prompt was yes. The week before is read
+        // now: at start() it couldn't be, not yet allowed.
+        if access != .allowed {
+            access = .allowed
+            lookBack()
+        }
         if let drive = sense.take(reading) { remember(drive) }
         update()
     }

@@ -61,6 +61,18 @@ enum TracksRadioSource {
         )
     }
 
+    /// What has landed on Tracks Radio at each part of the day and on drives, kept on this
+    /// device so the next listen starts from it. Genre families, decades and counts only.
+    static var habits: RadioHabits {
+        RadioHabits(stored: UserDefaults.standard.string(forKey: habitsKey) ?? "")
+    }
+
+    static func keep(_ habits: RadioHabits) {
+        UserDefaults.standard.set(habits.stored, forKey: habitsKey)
+    }
+
+    static let habitsKey = "tracksRadioHabits"
+
     /// Keeps the genres the tuner offers ready from launch, and fresh as the history changes,
     /// so the tuner opens with them in place.
     private static func followGenres(library: Library, player: PlayerModel) {

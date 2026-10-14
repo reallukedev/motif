@@ -14,8 +14,11 @@ import os
 /// through the speakers, AirPlay included. The tap hands sound over well before it's heard, so
 /// the picture lands with the sound rather than ahead of it.
 ///
+/// The gain rides each song so a loud master and a quiet one fill the same height, and a gentle
+/// stretch after it spreads bars that keep to a narrow part of it (see ``LevelContrast``).
+///
 /// Apple Music plays in a process Tracks can't hear, so for it there are no levels, and the
-/// visualizer moves gently by the song's feel instead (see ``AmbientLevels``).
+/// visualizer plays back each song's groove instead (see ``GrooveStore``).
 nonisolated final class AudioLevelMeter: @unchecked Sendable {
     static let shared = AudioLevelMeter()
     static let bandCount = 24
@@ -44,6 +47,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     @MainActor private var analyzers: [Int: SpectrumAnalyzer] = [:]
     @MainActor private var window: [Float] = []
     @MainActor private var gain = SpectrumGain()
+    @MainActor private var contrast = LevelContrast()
     @MainActor private var last: (time: CFAbsoluteTime, bands: [Float]?) = (0, nil)
 
     @MainActor private struct Song {
@@ -69,7 +73,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
             // Two songs meeting, gaplessly, add up as sound does.
             total = total.map { zip($0, decibels).map { 10 * log10(pow(10, $0 / 10) + pow(10, $1 / 10)) } } ?? decibels
         }
-        let bands = total.map { gain.levels(for: $0, elapsed: elapsed) }
+        let bands = total.map { contrast.apply(gain.levels(for: $0, elapsed: elapsed), elapsed: elapsed) }
         last = (now, bands)
         return bands
     }
@@ -138,11 +142,14 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     // MARK: - Hearing a song
 
     /// Gives a song's player item a tap that hands its sound to the meter. The item plays just
-    /// as before; the tap only listens.
+    /// as before; the tap only listens. Only before it starts: a mix set on a song already
+    /// playing rebuilds how its sound is made, which can stall or stop it, so a stream whose
+    /// tracks took longer to load than it took to start goes without.
     @MainActor
     static func attach(to item: AVPlayerItem, asset: AVAsset) {
         Task { @MainActor in
             guard let track = try? await asset.loadTracks(withMediaType: .audio).first else { return }
+            if let timebase = item.timebase, CMTimebaseGetRate(timebase) != 0 { return }
             let sound = Sound()
             guard let tap = makeTap(for: sound) else { return }
             let parameters = AVMutableAudioMixInputParameters(track: track)
@@ -150,6 +157,9 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
             let mix = AVMutableAudioMix()
             mix.inputParameters = [parameters]
             item.audioMix = mix
+            // Songs gone are dropped here too, not only when a visualizer draws: with none
+            // showing, each one's few seconds of sound would be kept all day.
+            shared.songs.removeAll { $0.item == nil }
             shared.songs.append(Song(item: item, sound: sound))
         }
     }

@@ -24,9 +24,18 @@ public enum FreshShuffle {
         for item in items.shuffled(using: &random) {
             if recentlyHeard(item) { stale.append(item) } else { fresh.append(item) }
         }
-        let freshOrder = spread(fresh, artist: artist, after: [])
-        let tail = freshOrder.suffix(gap(for: fresh, artist: artist)).map(artist)
-        return freshOrder + spread(stale, artist: artist, after: tail)
+        // The key is worked out once per song. The callers fold names, which is slow enough
+        // that calling it inside the placing loop froze a 2,000 song shuffle for seconds.
+        let keyedFresh = fresh.map { Keyed(item: $0, key: artist($0)) }
+        let keyedStale = stale.map { Keyed(item: $0, key: artist($0)) }
+        let freshOrder = spread(keyedFresh, artist: \.key, after: [])
+        let tail = freshOrder.suffix(gap(for: keyedFresh, artist: \.key)).map(\.key)
+        return (freshOrder + spread(keyedStale, artist: \.key, after: tail)).map(\.item)
+    }
+
+    private struct Keyed<Item> {
+        let item: Item
+        let key: String
     }
 
     /// Greedy: each place takes the first song whose artist isn't among the last few placed,
@@ -44,10 +53,16 @@ public enum FreshShuffle {
             // left than the rest can separate has to go now, or it ends up in a clump at the end.
             var pick: Int?
             var crowded: (index: Int, left: Int)?
+            // When no artist has enough left to crowd, the first free song is the answer and
+            // the rest of the list needn't be read.
+            let mayCrowd = (counts.values.max() ?? 0) * (window + 1) > remaining.count
             for index in remaining.indices {
                 let name = artist(remaining[index])
                 guard !recent.contains(name) else { continue }
-                if pick == nil { pick = index }
+                if pick == nil {
+                    pick = index
+                    if !mayCrowd { break }
+                }
                 let left = counts[name] ?? 0
                 if left > (crowded?.left ?? 0) { crowded = (index, left) }
             }

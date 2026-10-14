@@ -32,7 +32,7 @@ struct PickReasonLabel: View {
         .oldFavorite(lastHeard: .now.addingTimeInterval(-200 * 86_400)), .mostPlayed, .moreOf("Alternative"), .moreLike("Nova Harbor"),
     ]
     VStack(alignment: .leading, spacing: 10) {
-        ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
+        ForEach(reasons.enumerated(), id: \.offset) { _, reason in
             PickReasonLabel(reason: reason)
         }
     }

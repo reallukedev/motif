@@ -222,11 +222,16 @@ struct LibrarySongsList: View {
         // The next page, as the end comes into view. A row of its own, since with explicit
         // songs off the last ones loaded may all be hidden.
         if pager.hasMore, pager.gatherer == nil {
-            LoadingRow()
-                .listRowSeparator(.hidden)
-                // A new identity per page, so it asks again if it's still in view after one.
-                .id(pager.items.count)
-                .onAppear { Task { await pager.loadNext() } }
+            if pager.loadMoreFailed {
+                LoadMoreFailedRow { Task { await pager.loadNext() } }
+                    .listRowSeparator(.hidden)
+            } else {
+                LoadingRow()
+                    .listRowSeparator(.hidden)
+                    // A new identity per page, so it asks again if it's still in view after one.
+                    .id(pager.items.count)
+                    .onAppear { Task { await pager.loadNext() } }
+            }
         }
     }
 }

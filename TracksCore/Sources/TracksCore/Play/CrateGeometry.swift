@@ -166,3 +166,28 @@ public struct CrateRow: Equatable, Sendable {
         }
     }
 }
+
+/// How the crate moves under a trackpad on the Mac, where it follows the fingers itself
+/// rather than riding a scroll view: places are records, and the first is 0.
+public enum CrateFling {
+    /// A position pulled past either end gives less the further it goes, as a scroll view's
+    /// edge does, and never more than half a record.
+    public static func banded(_ raw: Double, last: Double) -> Double {
+        let last = max(0, last)
+        if raw < 0 { return -band(-raw) }
+        if raw > last { return last + band(raw - last) }
+        return raw
+    }
+
+    private static func band(_ over: Double) -> Double {
+        0.5 * (1 - 1 / (over * 1.6 + 1))
+    }
+
+    /// Where a flick lets go and comes to rest: carried on by its speed, in records a second,
+    /// for about a quarter of a second, then onto the nearest record within the row.
+    public static func target(from position: Double, velocity: Double, last: Int) -> Int {
+        guard position.isFinite, velocity.isFinite, last >= 0 else { return 0 }
+        let carried = position + max(-40, min(40, velocity)) * 0.24
+        return min(max(0, Int(carried.rounded())), last)
+    }
+}

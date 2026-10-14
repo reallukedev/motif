@@ -2,7 +2,7 @@ import Foundation
 
 /// The two halves of a `MusicPlayer.Queue.Entry.id`.
 ///
-/// On iOS 27 (see `docs/ProbeResults/`), entry IDs look like `<queue>::<item>`:
+/// On iOS 27 (see `docs/PlatformNotes.md`), entry IDs look like `<queue>::<item>`:
 ///
 /// ```
 /// Jzb4lWyve::STREAM        Apple Music Chill

@@ -9,7 +9,7 @@ public enum ProbeFormat {
         case .none: "‹absent›"
         case let string as String: string.isEmpty ? "‹empty string›" : string
         case let number as NSNumber: number.stringValue
-        case let date as Date: ISO8601DateFormatter().string(from: date)
+        case let date as Date: date.formatted(.iso8601)
         case let some?: String(describing: some)
         }
     }

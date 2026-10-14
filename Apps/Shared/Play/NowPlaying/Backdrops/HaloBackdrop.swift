@@ -19,8 +19,10 @@ func songEnergy(_ track: PlayerTrack?) -> Double {
 /// ``SwiftUI/View/backdropFocus()``), and follows it, gliding, when the cover moves.
 ///
 /// Your own music is heard, band by band. Apple Music plays where Tracks can't hear it, so for
-/// it the rays keep time by the song's feel, as Stage's visualizer does. Paused, the light
-/// settles and the drawing stops. Under Reduce Motion it glows, still, in the cover's colours.
+/// it the rays follow each song's beat and feel, learned from its preview, as Stage's
+/// visualizer does (see ``GrooveStore``); each kick blooms from behind the cover. Paused, the
+/// light settles and the drawing stops. Under Reduce Motion it glows, still, in the cover's
+/// colours.
 ///
 /// Drawn at a third of the size and stretched: soft light looks the same, for a ninth of the
 /// memory and work.
@@ -48,17 +50,18 @@ struct HaloBackdrop: View {
             let light = Light(focus: focus, in: proxy.size)
             TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: false), paused: reduceMotion || isSettled || !isOnScreen)) { context in
                 let now = context.date
-                let bands = reduceMotion
-                    ? [Float](repeating: 0.3, count: AudioLevelMeter.bandCount)
+                let pulse = reduceMotion
+                    ? StagePulse(bands: [Float](repeating: 0.3, count: AudioLevelMeter.bandCount), kick: 0, motion: 0)
                     : levels.next(
                         heard: AudioLevelMeter.shared.current(),
                         time: now.timeIntervalSinceReferenceDate,
-                        energy: energy,
+                        song: SongMoment(player: player, energy: energy),
                         isPlaying: isPlaying,
                         calm: false
                     )
                 let frame = HaloFrame(
-                    bands: bands,
+                    bands: pulse.bands,
+                    kick: Double(pulse.kick),
                     turn: turn.phase(at: now.timeIntervalSinceReferenceDate),
                     bloom: reduceMotion ? 0 : max(0, 1 - now.timeIntervalSince(arrivedAt) / 1.8)
                 )
@@ -98,7 +101,8 @@ struct HaloBackdrop: View {
 
 extension View {
     /// Has ``AudioLevelMeter`` hear your own music while this is shown and on screen, and
-    /// stop when it goes, or when its window or the app does.
+    /// stop when it goes, or when its window or the app does. Meanwhile ``GrooveStore``
+    /// learns the groove of each song that plays, so nothing is fetched while nothing shows.
     func listensToAudio() -> some View {
         modifier(AudioListening())
     }
@@ -106,6 +110,7 @@ extension View {
 
 private struct AudioListening: ViewModifier {
     @Environment(\.isOnScreen) private var isOnScreen
+    @Environment(PlayerModel.self) private var player: PlayerModel?
     @State private var isShown = false
     /// Whether this has asked the meter to listen, so every start has its one stop.
     @State private var isListening = false
@@ -121,6 +126,15 @@ private struct AudioListening: ViewModifier {
                 update()
             }
             .onChange(of: isOnScreen) { update() }
+            .task(id: GrooveRequest(track: player?.current?.id, isListening: isListening)) {
+                guard isListening, let player else { return }
+                GrooveStore.shared.follow(player.current, isDemo: player.isDemo)
+            }
+    }
+
+    private struct GrooveRequest: Hashable {
+        let track: String?
+        let isListening: Bool
     }
 
     private func update() {
@@ -162,6 +176,8 @@ private struct Light: Equatable {
 
 private struct HaloFrame {
     let bands: [Float]
+    /// The kick, 0 to 1, as it lands and falls away.
+    let kick: Double
     /// Seconds of turning, for the colours' slow sweep.
     let turn: Double
     /// 1 as a song arrives, to 0.
@@ -200,12 +216,13 @@ private struct HaloLight: View, Animatable {
         let bass = Double(bands.prefix(4).reduce(0, +)) / 4
         let loudness = Double(bands.reduce(0, +)) / Double(max(1, bands.count))
 
+        let kick = frame.kick
         // A wide, dim wash behind it all, breathing with the song as a whole.
-        let wash = side * (0.95 + 0.12 * loudness)
+        let wash = side * (0.95 + 0.12 * loudness + 0.05 * kick)
         context.fill(
             Path(ellipseIn: CGRect(x: centre.x - wash, y: centre.y - wash, width: wash * 2, height: wash * 2)),
             with: .radialGradient(
-                Gradient(colors: [colors[1].opacity(0.45), colors[2].opacity(0.18), .clear]),
+                Gradient(colors: [colors[1].opacity(0.45 + 0.1 * kick), colors[2].opacity(0.18), .clear]),
                 center: centre, startRadius: 0, endRadius: wash
             )
         )
@@ -245,12 +262,12 @@ private struct HaloLight: View, Animatable {
         }
 
         context.blendMode = .plusLighter
-        // Light from right behind the cover, swelling with the bass.
-        let glow = edge * (1.15 + 0.4 * bass)
+        // Light from right behind the cover, swelling with the bass and blooming on the kick.
+        let glow = edge * (1.15 + 0.4 * bass + 0.3 * kick)
         context.fill(
             Path(ellipseIn: CGRect(x: centre.x - glow, y: centre.y - glow, width: glow * 2, height: glow * 2)),
             with: .radialGradient(
-                Gradient(colors: [colors[3].mix(with: .white, by: 0.2).opacity(0.25 + 0.35 * bass), .clear]),
+                Gradient(colors: [colors[3].mix(with: .white, by: 0.2 + 0.2 * kick).opacity(0.25 + 0.35 * bass + 0.2 * kick), .clear]),
                 center: centre, startRadius: edge * 0.5, endRadius: glow
             )
         )

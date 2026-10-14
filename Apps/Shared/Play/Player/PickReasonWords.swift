@@ -15,6 +15,7 @@ extension LiveMix.Reason {
         case .mostPlayed: String(localized: "One of your most played")
         case .moreOf(let genre): String(localized: "More \(genre), since you let one play")
         case .moreLike(let artist): String(localized: "More like \(artist)")
+        case .probing: String(localized: "Trying a few directions to start")
         }
     }
 
@@ -27,6 +28,7 @@ extension LiveMix.Reason {
         case .oldFavorite: "clock.arrow.circlepath"
         case .mostPlayed: "flame"
         case .moreOf, .moreLike: "scope"
+        case .probing: "arrow.triangle.branch"
         }
     }
 

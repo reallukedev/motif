@@ -16,6 +16,7 @@ struct NowPlayingView: View {
     /// Tracks Radio's tuning, from Up Next or the song's menu. Presented from here, outside the
     /// stage's dark look, so the sheet reads as Settings does.
     @State private var showsTuner = LaunchScene.opensRadioTunerFromQueue
+    @State private var showsDevices = false
     /// Turns of the sleeve, for the haptic: only the person turns it.
     @State private var turns = 0
     @State private var tint: Color?
@@ -42,6 +43,9 @@ struct NowPlayingView: View {
         // Lit from the cover, wherever the layout puts it.
         .nowPlayingBackdrop(cover: player.current?.cover, tint: tint, isPlaying: player.isPlaying)
         .sheet(isPresented: $showsTuner) { RadioTunerSheet() }
+        .sheet(isPresented: $showsDevices) {
+            DevicesSheet { showsDevices = false }
+        }
         .coverTint(of: player.current?.cover, into: $tint)
         .onChange(of: player.hasQueue) { _, hasQueue in
             if !hasQueue { dismiss() }
@@ -195,14 +199,21 @@ struct NowPlayingView: View {
     private func details(_ track: PlayerTrack) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(track.title)
-                    .font(.title2.bold())
-                    .lineLimit(2)
-                Text(track.artistName)
-                    .font(.title3)
-                    // Strong enough to read on the brightest moving backgrounds.
-                    .foregroundStyle(.white.opacity(0.82))
-                    .lineLimit(1)
+                // A tap on the name or the artist offers the album and the artist, as Music's do.
+                NowPlayingTitleMenu(track: track, onNavigate: navigate) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(track.title)
+                            .font(.title2.bold())
+                            .lineLimit(2)
+                        Text(track.artistName)
+                            .font(.title3)
+                            // Strong enough to read on the brightest moving backgrounds.
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(1)
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 PlayCountLine(track: track)
                     .padding(.top, 4)
             }
@@ -252,6 +263,7 @@ struct NowPlayingView: View {
                     .frame(width: 44, height: 44)
                     .accessibilityLabel("AirPlay")
                 Spacer()
+                NowPlayingDevicesButton { showsDevices = true }
                 pageToggle(isOn: showsQueue, systemImage: "list.bullet", label: showsQueue ? "Hide Up Next" : "Up Next") {
                     withAnimation(reduceMotion ? nil : PlayMotion.panel) { showsQueue.toggle() }
                 }

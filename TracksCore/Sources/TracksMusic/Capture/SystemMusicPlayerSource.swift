@@ -11,7 +11,7 @@ import TracksCore
 /// `currentEntry` hasn't updated yet when the change fires, hence
 /// ``MusicPlayerReading/settleDelay``.
 @MainActor
-public final class SystemMusicPlayerSource: NowPlayingSource, @unchecked Sendable {
+public final class SystemMusicPlayerSource: NowPlayingSource {
     /// Where observations go: set by ``start()``, cleared by ``stop()``. Behind a lock
     /// because both are nonisolated and must hand back or finish a stream straight away,
     /// before the main actor gets round to the observation task.

@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 import TracksCore
 
@@ -105,32 +106,56 @@ extension MixSong {
 struct DeleteConfirmation: ViewModifier {
     @Binding var capture: Capture?
     @Environment(AppModel.self) private var model
+    /// What the dialog shows, copied when it opens: a merge or iCloud can delete the row while
+    /// it's up, and a deleted row can't be read.
+    @State private var pending: Pending?
+
+    private struct Pending {
+        let id: PersistentIdentifier
+        let title: String
+        let artistName: String
+        let wasScrobbled: Bool
+    }
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(
-            "Delete \(capture?.title ?? "")?",
-            isPresented: Binding(
-                get: { capture != nil },
-                set: { if !$0 { capture = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: capture
-        ) { capture in
-            Button("Delete This Play", role: .destructive) {
-                try? model.store?.deletePlay(capture)
+        content
+            .onChange(of: capture, initial: true) {
+                pending = capture.map {
+                    Pending(id: $0.persistentModelID, title: $0.title, artistName: $0.artistName, wasScrobbled: $0.scrobbledAt != nil)
+                }
             }
-            Button("Remove Song from History", role: .destructive) {
-                // Taken out of the row before the task, which may outlive it.
-                let (title, artistName) = (capture.title, capture.artistName)
-                Task { _ = try? await model.store?.forgetSong(title: title, artistName: artistName) }
+            .confirmationDialog(
+                "Delete \(pending?.title ?? "")?",
+                isPresented: Binding(
+                    get: { pending != nil },
+                    set: { if !$0 { capture = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: pending
+            ) { pending in
+                Button("Delete This Play", role: .destructive) {
+                    deletePlay(pending.id)
+                }
+                Button("Remove Song from History", role: .destructive) {
+                    let (title, artistName) = (pending.title, pending.artistName)
+                    Task { _ = try? await model.store?.forgetSong(title: title, artistName: artistName) }
+                }
+            } message: { pending in
+                if pending.wasScrobbled {
+                    Text("Removing the whole song also stops Tracks recovering it from Recently Played. Scrobbles already sent stay on Last.fm.")
+                } else {
+                    Text("Removing the whole song also stops Tracks recovering it from Recently Played.")
+                }
             }
-        } message: { capture in
-            if capture.scrobbledAt != nil {
-                Text("Removing the whole song also stops Tracks recovering it from Recently Played. Scrobbles already sent stay on Last.fm.")
-            } else {
-                Text("Removing the whole song also stops Tracks recovering it from Recently Played.")
-            }
-        }
+    }
+
+    /// Deletes the play if it's still there: looked up again, not the row the dialog opened on.
+    private func deletePlay(_ id: PersistentIdentifier) {
+        guard let store = model.store else { return }
+        var descriptor = FetchDescriptor<Capture>(predicate: #Predicate { $0.persistentModelID == id })
+        descriptor.fetchLimit = 1
+        guard let capture = try? store.context.fetch(descriptor).first else { return }
+        try? store.deletePlay(capture)
     }
 }
 

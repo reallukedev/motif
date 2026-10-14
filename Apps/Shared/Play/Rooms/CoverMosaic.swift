@@ -23,7 +23,7 @@ struct CoverMosaic: View {
                     .foregroundStyle(.white.opacity(0.18))
                     .rotationEffect(.degrees(-10))
             } else {
-                ForEach(Array(Self.places(for: layout, side: side).enumerated()).reversed(), id: \.offset) { index, place in
+                ForEach(Self.places(for: layout, side: side).enumerated().reversed(), id: \.offset) { index, place in
                     slot(index: index, place: place)
                 }
             }

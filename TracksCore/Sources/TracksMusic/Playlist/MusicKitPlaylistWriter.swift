@@ -49,6 +49,10 @@ public struct MusicKitPlaylistWriter: PlaylistWriter {
         }
     }
 
+    public func existingPlaylist(named name: String) async throws -> String? {
+        try await listPlaylists().first { $0.name == name }?.id
+    }
+
     /// Library playlists, as (id, name) pairs.
     public func listPlaylists() async throws -> [(id: String, name: String)] {
         let (data, _) = try await perform(AppleMusicPlaylistRequestBuilder.listPlaylists())
@@ -89,6 +93,10 @@ public struct MusicKitPlaylistWriter: PlaylistWriter {
         } catch let error as MusicTokenRequestError {
             // The fallback needs the same tokens and would fail the same way.
             throw Self.configurationError(for: error)
+        } catch let error as URLError where request.httpMethod == "POST" {
+            // A timeout or a dropped connection can come after Apple has done the work, and
+            // sending it again would add the song twice or make a second playlist.
+            throw PlaylistWriteError.transient(statusCode: nil, message: "MusicDataRequest failed: \(error)")
         } catch {
             return try await performViaURLSession(request, primaryError: error)
         }

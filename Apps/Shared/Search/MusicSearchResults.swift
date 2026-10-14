@@ -90,7 +90,7 @@ struct MusicSearchResults: View {
             for: query,
             artist: results.artists.first?.name,
             album: results.albums.first?.title,
-            hasSong: !results.songs.isEmpty
+            song: results.songs.first?.title
         )
         return switch kind {
         case .artist: results.artists.first.map(TopResult.artist)

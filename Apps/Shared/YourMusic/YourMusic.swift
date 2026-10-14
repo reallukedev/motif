@@ -9,7 +9,12 @@ import TracksCore
 @Observable
 final class YourMusic {
     /// Everything: files, and every song on your servers.
-    private(set) var index = LocalLibraryIndex.empty
+    private(set) var index = LocalLibraryIndex.empty {
+        didSet { indexRevision &+= 1 }
+    }
+    /// Bumped with each new ``index``, for pages that sort it off the main actor to know
+    /// when to again.
+    private(set) var indexRevision = 0
     private(set) var isScanning = false
     /// True once the files have been read at least once, so "none" can be told from "not yet".
     private(set) var hasScanned = false
@@ -36,7 +41,9 @@ final class YourMusic {
     /// Songs found by searching a server, which its last sync didn't bring in.
     @ObservationIgnored private var foundOnServers: [String: LocalTrack] = [:]
     /// Songs being looked for, by song. See ``check(title:artist:album:)``.
-    @ObservationIgnored private var checks: [String: Task<Void, Never>] = [:]
+    /// Smart playlists' songs as last matched, by playlist. See ``songs(in:facts:factsRevision:)``.
+    @ObservationIgnored var smartPlaylistSongs: [UUID: SmartPlaylistSongs] = [:]
+    @ObservationIgnored private var checks: [String: (generation: Int, task: Task<Void, Never>)] = [:]
     /// What each server said when asked for a song, by server and search. See ``songs(on:matching:)``.
     @ObservationIgnored private var serverAnswers: [String: ServerAnswer] = [:]
     /// Kept between launches, so songs looked for last time are answered straight away.
@@ -66,10 +73,20 @@ final class YourMusic {
         #if DEBUG
         if isDemo { return }
         #endif
-        files = FileScanner.loadCache()
         serverAnswers = (savedAnswers.load() ?? [:]).filter { Date.now.timeIntervalSince($0.value.at) < Self.answersLast }
-        rebuild()
+        // The files as last read, read off the main actor: a big folder takes a moment.
+        loadingFiles = Task { [self] in
+            files = await Self.loadFileCache()
+            loadingFiles = nil
+            await rebuild()
+        }
         followServersAndDownloads()
+        // Without this, a server out of reach at launch stayed so until pulled to refresh.
+        network.onChange = { [weak self] in
+            guard let self else { return }
+            forgetUnavailable()
+            Task { await self.servers.networkChanged() }
+        }
     }
 
     /// The files on this iPhone.
@@ -215,7 +232,7 @@ final class YourMusic {
         }
         if isPlayable(track) { return track }
         // A server's copy out of reach: a file of the same song will do.
-        return index.tracks.first { $0.identity == identity && isPlayable($0) }
+        return index.tracks(withIdentity: identity).first(where: isPlayable)
     }
 
     // MARK: - Songs from outside
@@ -290,13 +307,19 @@ final class YourMusic {
         // Its own task, so a row that stops looking, as every row does when a server connects
         // or a sync ends, doesn't leave the song unanswered; a second look waits for the first.
         if let running = checks[identity] {
-            await running.value
+            await running.task.value
+            // Begun before a server or Lidarr came along, its answer may be out of date.
+            if running.generation != availabilityGeneration {
+                await check(title: title, artist: artist, album: album)
+            }
             return
         }
-        let running = Task { await lookFor(title: title, artist: artist, album: album, identity: identity, generation: generation) }
-        checks[identity] = running
+        let running = Task {
+            await lookFor(title: title, artist: artist, album: album, identity: identity, generation: generation)
+            checks[identity] = nil
+        }
+        checks[identity] = (generation, running)
         await running.value
-        checks[identity] = nil
     }
 
     private func lookFor(title: String, artist: String, album: String?, identity: String, generation: Int) async {
@@ -380,7 +403,7 @@ final class YourMusic {
         for server in servers.onlineServers {
             await servers.sync(server.id)
         }
-        rebuild()
+        await rebuild()
         let identity = HistoryImport.key(title: title, artistName: artist)
         guard let track = track(for: HistorySong(songID: "", title: title, artistName: artist)) else {
             // Still in Lidarr, still to be downloaded: the row keeps its button to try again.
@@ -411,7 +434,7 @@ final class YourMusic {
         var tracks = find()
         if tracks.isEmpty {
             for server in servers.onlineServers { await servers.sync(server.id) }
-            rebuild()
+            await rebuild()
             tracks = find()
         }
         guard !tracks.isEmpty else {
@@ -433,7 +456,9 @@ final class YourMusic {
             page.tracks = index.notIncluded(page.tracks)
             return page
         }
-        let page = newToYou(await servers.search(query, isFull: isFull))
+        var page = newToYou(await servers.search(query, isFull: isFull))
+        // Servers answer in their own order, "Café Night" before "Café": closest first.
+        page.tracks = LocalLibraryIndex.ranked(page.tracks, for: query)
         // Not an empty answer, which is also what a server that couldn't be reached gives.
         if isFull, !page.tracks.isEmpty, !Task.isCancelled {
             if fullSearchAnswers.count >= 30 {
@@ -463,7 +488,9 @@ final class YourMusic {
 
     /// The next page of a search of your servers.
     func searchServers(_ query: String, after page: ServerSearchPage) async -> ServerSearchPage {
-        newToYou(await servers.search(query, after: page))
+        var next = newToYou(await servers.search(query, after: page))
+        next.tracks = LocalLibraryIndex.ranked(next.tracks, for: query)
+        return next
     }
 
     /// A page of search results with what's in your music already left out, remembered so
@@ -581,18 +608,20 @@ final class YourMusic {
         }
         isScanning = true
         defer { isScanning = false }
+        await loadingFiles?.value
         repeat {
             needsRescan = false
             let scanned = await FileScanner.scan(previous: files)
             files = scanned
+            await rebuild()
             hasScanned = true
-            rebuild()
             let snapshot = scanned
             Task.detached(priority: .utility) { FileScanner.saveCache(snapshot) }
         } while needsRescan
     }
 
     @ObservationIgnored private var needsRescan = false
+    @ObservationIgnored private var clearImport: Task<Void, Never>?
 
     /// Copies songs in from Files, then reads them.
     func importItems(_ urls: [URL]) async {
@@ -600,8 +629,11 @@ final class YourMusic {
         await scan()
         // Said once the songs are in the library, not before.
         lastImport = result
-        Task {
+        // A newer import's confirmation gets its own four seconds.
+        clearImport?.cancel()
+        clearImport = Task {
             try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
             lastImport = nil
         }
     }
@@ -611,7 +643,7 @@ final class YourMusic {
         guard case .file(let path) = track.origin else { return }
         try? FileManager.default.removeItem(at: LibraryFolders.music.appending(path: path))
         files[path] = nil
-        rebuild()
+        Task { await rebuild() }
         let snapshot = files
         Task.detached(priority: .utility) { FileScanner.saveCache(snapshot) }
     }
@@ -621,15 +653,43 @@ final class YourMusic {
 
     // MARK: - Keeping the index
 
-    private func rebuild() {
-        let fileTracks = files.values.map(\.track)
-        let serverTracks = servers.catalogs.values.flatMap(\.self)
+    @ObservationIgnored private var loadingFiles: Task<Void, Never>?
+    @ObservationIgnored private var rebuilding: Task<Void, Never>?
+    @ObservationIgnored private var rebuildsAgain = false
+
+    /// Builds the index again, off the main actor, from the songs as they are now. Asked while
+    /// one is building, it builds once more after it, for everyone who asked in between, so a
+    /// burst of downloads finishing is a couple of builds, not one each. Returns once the
+    /// index has what was there when it was asked.
+    private func rebuild() async {
+        rebuildsAgain = true
+        if rebuilding == nil {
+            rebuilding = Task { [self] in
+                while rebuildsAgain {
+                    rebuildsAgain = false
+                    let (files, catalogs, downloaded) = (files.values.map(\.track), servers.catalogs, downloads.tracks)
+                    index = await Self.makeIndex(files: files, catalogs: catalogs, downloaded: downloaded)
+                    // Songs that weren't here may be now.
+                    forgetUnavailable()
+                }
+                rebuilding = nil
+            }
+        }
+        await rebuilding?.value
+    }
+
+    @concurrent
+    nonisolated private static func makeIndex(files: [LocalTrack], catalogs: [String: [LocalTrack]], downloaded: [LocalTrack]) async -> LocalLibraryIndex {
+        let serverTracks = catalogs.values.flatMap(\.self)
         // A download whose server is gone still plays.
         let known = Set(serverTracks.map(\.id))
-        let orphans = downloads.tracks.filter { !known.contains($0.id) }
-        index = LocalLibraryIndex(tracks: fileTracks + serverTracks + orphans)
-        // Songs that weren't here may be now.
-        forgetUnavailable()
+        let orphans = downloaded.filter { !known.contains($0.id) }
+        return LocalLibraryIndex(tracks: files + serverTracks + orphans)
+    }
+
+    @concurrent
+    nonisolated private static func loadFileCache() async -> [String: FileScanner.CachedFile] {
+        FileScanner.loadCache()
     }
 
     private func followServersAndDownloads() {
@@ -637,17 +697,17 @@ final class YourMusic {
         // and the model would keep each other alive.
         follower = Task { [weak self, servers, downloads] in
             let changes = Observations {
-                SourceKey(catalogs: servers.catalogs.mapValues(\.count), downloads: downloads.items.count)
+                SourceKey(catalogs: servers.catalogRevision, downloads: downloads.items.count)
             }
             for await _ in changes {
                 guard let self else { return }
-                self.rebuild()
+                await self.rebuild()
             }
         }
     }
 
     private struct SourceKey: Equatable {
-        let catalogs: [String: Int]
+        let catalogs: Int
         let downloads: Int
     }
 

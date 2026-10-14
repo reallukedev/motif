@@ -4,34 +4,43 @@ import Foundation
 
 @Suite("Search's Top Result")
 struct SearchTopResultTests {
-    @Test("a name typed in full: the artist's before the album's, the album's before an artist being typed", arguments: [
-        ("Mara Solis", "Mara Solis", "Mara Solis", SearchTopKind.artist),
-        ("tides", "Tidesman", "Tides", .album),
-        ("TIDÉS", "Tidesman", "Tides", .album),
-        ("tide", "Tidesman", "Tides", .artist),
+    @Test("the best matching name wins: the whole name, then its start, then a later word", arguments: [
+        // Typed in full: an artist's before an album's, an album's before a song's.
+        ("Mara Solis", "Mara Solis", "Mara Solis", String?("Mara Solis"), SearchTopKind.artist),
+        ("tides", "Tidesman", "Tides", "Tide Pool", .album),
+        ("TIDÉS", "Tidesman", "Tides", nil, .album),
+        ("satellite", "Satellite Kids", "Orbit", "Satellite", .song),
+        // Being typed from the start: the artist, then the album, then the song.
+        ("tide", "Tidesman", "Tides", "Tide Pool", .artist),
+        ("midn", "Mara Solis", "Midnight Bakery", "Driftwood", .album),
+        ("drift", "Amara Vale", "Driftwood", "Driftwood", .album),
+        ("hori", "Mara Solis", "Midnight Bakery", "Horizon Line", .song),
+        // A later word, from three letters, loses to any name being typed from its start.
+        ("bake", "Mara Solis", "Midnight Bakery", "Driftwood", .album),
+        ("sol", "Mara Solís", "Solstice", "Driftwood", .album),
     ])
-    func fullNames(query: String, artist: String, album: String, expected: SearchTopKind) {
-        #expect(SearchRanking.topKind(for: query, artist: artist, album: album, hasSong: true) == expected)
+    func bestMatch(query: String, artist: String, album: String, song: String?, expected: SearchTopKind) {
+        #expect(SearchRanking.topKind(for: query, artist: artist, album: album, song: song) == expected)
     }
 
     @Test("an artist's name being typed, or typed with more after it, ignoring case and accents")
     func artistBeingTyped() {
-        #expect(SearchRanking.topKind(for: "mara so", artist: "Mara Solís", album: nil, hasSong: true) == .artist)
-        #expect(SearchRanking.topKind(for: "mara solis live", artist: "Mara Solís", album: nil, hasSong: true) == .artist)
+        #expect(SearchRanking.topKind(for: "mara so", artist: "Mara Solís", album: nil, song: "Driftwood") == .artist)
+        #expect(SearchRanking.topKind(for: "mara solis live", artist: "Mara Solís", album: nil, song: "Driftwood") == .artist)
         // A later word of the name, once there's enough of it to mean something.
-        #expect(SearchRanking.topKind(for: "sol", artist: "Mara Solís", album: nil, hasSong: true) == .artist)
-        #expect(SearchRanking.topKind(for: "so", artist: "Mara Solís", album: nil, hasSong: true) == .song)
+        #expect(SearchRanking.topKind(for: "sol", artist: "Mara Solís", album: nil, song: "Driftwood") == .artist)
+        #expect(SearchRanking.topKind(for: "so", artist: "Mara Solís", album: nil, song: "Driftwood") == .song)
         // Only on a word's boundary: "maras" isn't more of "Mara".
-        #expect(SearchRanking.topKind(for: "maras", artist: "Mara", album: nil, hasSong: true) == .song)
+        #expect(SearchRanking.topKind(for: "maras", artist: "Mara", album: nil, song: "Driftwood") == .song)
     }
 
-    @Test("otherwise the first song, and nothing without one or without a query")
+    @Test("with no name matching, the first song, and nothing without one or without a query")
     func fallsBack() {
-        #expect(SearchRanking.topKind(for: "ocean", artist: "Mara Solis", album: "Tides", hasSong: true) == .song)
-        #expect(SearchRanking.topKind(for: "ocean", artist: "Mara Solis", album: "Tides", hasSong: false) == nil)
-        #expect(SearchRanking.topKind(for: "  ", artist: "Mara Solis", album: nil, hasSong: true) == nil)
-        // An artist without a name never matches everything.
-        #expect(SearchRanking.topKind(for: "x", artist: "", album: "", hasSong: false) == nil)
+        #expect(SearchRanking.topKind(for: "ocean", artist: "Mara Solis", album: "Tides", song: "Driftwood") == .song)
+        #expect(SearchRanking.topKind(for: "ocean", artist: "Mara Solis", album: "Tides", song: nil) == nil)
+        #expect(SearchRanking.topKind(for: "  ", artist: "Mara Solis", album: nil, song: "Driftwood") == nil)
+        // A name that's empty never matches everything.
+        #expect(SearchRanking.topKind(for: "x", artist: "", album: "", song: nil) == nil)
     }
 }
 

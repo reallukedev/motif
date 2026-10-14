@@ -98,6 +98,20 @@ final class Playlists {
     }
 }
 
+/// A smart playlist's songs, with what they were worked out from.
+struct SmartPlaylistSongs {
+    struct Key: Equatable {
+        let rules: SmartRules
+        let seed: UInt64
+        let index: Int
+        let downloads: Int
+        let facts: Int
+    }
+
+    let key: Key
+    let songs: [LocalTrack]
+}
+
 /// Songs on their way into a playlist, for the sheet that asks which.
 struct PlaylistPick: Identifiable {
     let id = UUID()
@@ -108,14 +122,21 @@ extension YourMusic {
     /// A playlist's songs as they are in your music now: one you fill yourself, its songs in
     /// order, each as the library has it since the last sync; a smart one, whichever of yours
     /// match its rules.
-    /// - Parameter facts: what's known of each song's plays, by identity, for rules that ask.
-    func songs(in playlist: TracksPlaylist, facts: [String: SongFacts]) -> [LocalTrack] {
+    /// - Parameters:
+    ///   - facts: what's known of each song's plays, by identity, for rules that ask.
+    ///   - factsRevision: the history revision `facts` were counted from. Given, a smart
+    ///     playlist's songs are kept until it, the rules, the day or the library change, so
+    ///     the rows and tiles that show it don't match the whole library on every redraw.
+    func songs(in playlist: TracksPlaylist, facts: [String: SongFacts], factsRevision: Int? = nil) -> [LocalTrack] {
         if let rules = playlist.rules {
-            return rules.songs(
-                from: tracks(for: rules.source),
-                facts: facts,
-                seed: FreshShuffle.dailySeed(for: .now, salt: playlist.id.uuidString)
-            )
+            let seed = FreshShuffle.dailySeed(for: .now, salt: playlist.id.uuidString)
+            let key = factsRevision.map {
+                SmartPlaylistSongs.Key(rules: rules, seed: seed, index: indexRevision, downloads: downloads.items.count, facts: $0)
+            }
+            if let key, let kept = smartPlaylistSongs[playlist.id], kept.key == key { return kept.songs }
+            let songs = rules.songs(from: tracks(for: rules.source), facts: facts, seed: seed)
+            if let key { smartPlaylistSongs[playlist.id] = SmartPlaylistSongs(key: key, songs: songs) }
+            return songs
         }
         return playlist.entries.map { current($0.track) }
     }

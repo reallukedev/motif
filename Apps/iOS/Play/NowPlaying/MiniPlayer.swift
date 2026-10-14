@@ -8,6 +8,7 @@ struct MiniPlayer: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     @State private var nextTaps = 0
+    @State private var playTaps = 0
 
     var body: some View {
         if let track = player.current {
@@ -35,6 +36,7 @@ struct MiniPlayer: View {
                 .accessibilityHint("Opens Now Playing")
 
                 Button {
+                    playTaps += 1
                     player.togglePlayPause()
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
@@ -70,6 +72,8 @@ struct MiniPlayer: View {
             .padding(.horizontal, 12)
             // The bar's height is the system's; bigger type would only be cut off.
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .sensoryFeedback(.impact(weight: .medium, intensity: 0.8), trigger: playTaps)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: nextTaps)
         }
     }
 

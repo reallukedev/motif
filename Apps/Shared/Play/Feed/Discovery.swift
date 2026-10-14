@@ -89,6 +89,9 @@ final class Discovery {
     /// even one that found nothing new. A step that couldn't reach Apple Music doesn't count,
     /// so an offline list doesn't ask over and over.
     private(set) var expansions = 0
+    /// The last step out couldn't reach Apple Music. Shelves offer Try Again rather than wait
+    /// on it: asking again by themselves would ask over and over while offline.
+    private(set) var expandFailed = false
     /// How many suggested songs the Suggested Songs shelf has opened up to so far, a page at a
     /// time as it's scrolled to its end. Keep Exploring carries on from the one after.
     var shelfReach = Discovery.shelfPage
@@ -167,6 +170,7 @@ final class Discovery {
         fromYourArtists = []
         artists = []
         canExpand = true
+        expandFailed = false
         shelfReach = Self.shelfPage
 
         #if DEBUG
@@ -227,6 +231,7 @@ final class Discovery {
         guard hasSeeded, canExpand, !isExpanding else { return }
         let generation = generation
         isExpanding = true
+        expandFailed = false
         // Only this walk's step says it's done: a reseed may have started another.
         defer { if generation == self.generation { isExpanding = false } }
 
@@ -249,6 +254,7 @@ final class Discovery {
                 guard !found.isEmpty else {
                     // Apple Music couldn't be reached: keep these artists for the next try.
                     frontier.insert(contentsOf: step, at: 0)
+                    expandFailed = true
                     return
                 }
                 for (artist, root) in step {

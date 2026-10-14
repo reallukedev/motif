@@ -3,7 +3,7 @@ import TracksCore
 
 /// What was on when Tracks last closed: the song, where it had got to, and what was due after
 /// it, so the next launch can open on it, paused, rather than on nothing.
-struct LastSession: Codable {
+nonisolated struct LastSession: Codable, Sendable {
     /// The song that was on, then Up Next.
     var tracks: [PlayerTrack]
     /// How far into the first one.
@@ -16,7 +16,7 @@ struct LastSession: Codable {
     /// thousands would make every save slow for songs rarely reached.
     static let keptAhead = 200
 
-    var context: PlayContext? {
+    @MainActor var context: PlayContext? {
         guard let contextTitle else { return nil }
         let kind: PlayContext.Kind = switch contextKind {
         case "album": .album
@@ -72,9 +72,21 @@ enum LastSessionStore {
             try? FileManager.default.removeItem(at: url)
             return
         }
+        guard let data = try? JSONEncoder().encode(session) else { return }
+        write(data)
+    }
+
+    /// A long queue of songs, each with its artwork, is slow to encode: off the main actor
+    /// for the saves made while playing.
+    @concurrent
+    static func encoded(_ session: LastSession) async -> Data? {
+        try? JSONEncoder().encode(session)
+    }
+
+    static func write(_ data: Data) {
         do {
             try FileManager.default.createDirectory(at: URL.applicationSupportDirectory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(session).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch {
             // Losing a paused song is a small thing; the next save tries again.
         }

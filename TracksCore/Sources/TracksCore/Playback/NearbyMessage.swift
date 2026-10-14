@@ -58,8 +58,10 @@ public struct NearbyState: Codable, Sendable, Equatable {
         var theirs = other
         mine.sentAt = .distantPast
         theirs.sentAt = .distantPast
-        // A second either way is the same place in the song.
-        if let a = mine.position, let b = theirs.position, abs(a - b) < 1.5, isPlaying == other.isPlaying {
+        // A second either way is the same place in the song, once each is moved on to the
+        // same moment: a song playing on is the same, a seek isn't.
+        if let a = position(at: max(sentAt, other.sentAt)), let b = other.position(at: max(sentAt, other.sentAt)),
+           abs(a - b) < 1.5, isPlaying == other.isPlaying {
             mine.position = nil
             theirs.position = nil
         }
@@ -69,8 +71,9 @@ public struct NearbyState: Codable, Sendable, Equatable {
 
 /// What your devices say to each other.
 public enum NearbyMessage: Codable, Sendable, Equatable {
-    /// The first thing each side says: who it is.
-    case hello(id: String, name: String, platform: String)
+    /// The first thing each side says: who it is. `kind` is a ``NearbyDeviceKind``'s wire
+    /// name, missing from devices that came before it.
+    case hello(id: String, name: String, platform: String, kind: String? = nil)
     case state(NearbyState)
     case command(TransportCommand)
     /// Asks the other to pause, as the song moves here.

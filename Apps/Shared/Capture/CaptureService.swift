@@ -251,7 +251,7 @@ public final class CaptureService {
             for await observation in observations {
                 if Task.isCancelled { return }
                 let decision = await coordinator.handle(observation)
-                await MainActor.run { self.record(decision, observation: observation) }
+                self.record(decision, observation: observation)
                 self.scrobbleSoon()
             }
         }
@@ -502,6 +502,9 @@ public final class CaptureService {
     /// without the capture loop running, which on iOS is most of the time.
     @discardableResult
     public func captureCurrentSong() async -> CaptureDecision {
+        // Paused history keeps nothing, whoever asks. The intent has no reason of its own for
+        // this yet, so it reads as nothing playing.
+        guard !isPaused else { return .ignore(.notPlaying) }
         guard let observation = await currentObservation() else {
             return .ignore(.unidentifiable)
         }

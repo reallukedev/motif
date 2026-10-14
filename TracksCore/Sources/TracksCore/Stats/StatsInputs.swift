@@ -24,7 +24,8 @@ public struct CaptureStat: Sendable, Equatable {
     /// song heard on both would otherwise show up twice in a chart.
     public let songIdentity: String
     public let artistIdentity: String
-    /// Album and artist together, since plenty of artists have an album called "Home".
+    /// Album and artist together, since plenty of artists have an album called "Home". The
+    /// artist without anyone featured, so "Umbra feat. Yuki Tanabe" counts on Umbra's album.
     public let albumIdentity: String?
 
     public init(
@@ -54,7 +55,29 @@ public struct CaptureStat: Sendable, Equatable {
         self.songIdentity = HistoryImport.key(title: title, artistName: artistName)
         self.artistIdentity = StatsCalculator.folded(artistName)
         let album = albumTitle.map(StatsCalculator.folded) ?? ""
-        self.albumIdentity = album.isEmpty ? nil : "\(album)\u{1F}\(artistIdentity)"
+        self.albumIdentity = album.isEmpty ? nil : "\(album)\u{1F}\(Self.leadArtistIdentity(artistIdentity))"
+    }
+
+    /// The ``albumIdentity`` of a song on an album, or nil when the album has no name.
+    public static func albumIdentity(title: String, artistName: String) -> String? {
+        let album = StatsCalculator.folded(title)
+        guard !album.isEmpty else { return nil }
+        return "\(album)\u{1F}\(leadArtistIdentity(StatsCalculator.folded(artistName)))"
+    }
+
+    /// An album identity built from a song's own artist, as a link to an album may be, made
+    /// the one plays are grouped by.
+    public static func canonicalAlbumIdentity(_ id: String) -> String {
+        guard let separator = id.lastIndex(of: "\u{1F}") else { return id }
+        let artist = String(id[id.index(after: separator)...])
+        return id[..<separator] + "\u{1F}" + leadArtistIdentity(artist)
+    }
+
+    /// A folded artist without anyone featured on the song.
+    static func leadArtistIdentity(_ artistIdentity: String) -> String {
+        // Every marker has an "f" in it; most names can skip the search.
+        guard artistIdentity.utf8.contains(UInt8(ascii: "f")) else { return artistIdentity }
+        return LocalTrack.leadArtist(of: artistIdentity)
     }
 
     /// The same play under another station name, without folding its names again.

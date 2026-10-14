@@ -17,6 +17,13 @@ public nonisolated struct SpectrumLayout: Equatable, Sendable {
     public let excess: [Double]
 
     public init(size: Int, sampleRate: Double, bandCount: Int, low: Double = 40, high: Double = 16_000) {
+        // A stream that reports 0 Hz, or no bands, has nothing to lay out. Both used to trap.
+        guard size > 1, bandCount > 0, sampleRate > 0, sampleRate.isFinite else {
+            bins = []
+            centres = []
+            excess = []
+            return
+        }
         let binWidth = sampleRate / Double(size)
         let nyquist = size / 2
         let top = min(high, sampleRate / 2 * 0.95)
@@ -45,7 +52,9 @@ public nonisolated struct SpectrumLayout: Equatable, Sendable {
     /// low band, short enough that a drum still lands as a hit.
     public static func size(for sampleRate: Double) -> Int {
         var size = 1024
-        while Double(size) < sampleRate * 0.085 { size *= 2 }
+        guard sampleRate.isFinite else { return size }
+        // Capped, so a nonsense rate can't double the size past what an Int holds.
+        while Double(size) < sampleRate * 0.085, size < 1 << 20 { size *= 2 }
         return size
     }
 }
@@ -77,6 +86,7 @@ public nonisolated final class SpectrumAnalyzer {
 
     public init?(size: Int, sampleRate: Double, bandCount: Int, tilt: Float = 2) {
         guard size >= 256, size & (size - 1) == 0,
+              sampleRate > 0, sampleRate.isFinite, bandCount > 0,
               let setup = vDSP_DFT_zrop_CreateSetup(nil, vDSP_Length(size), .FORWARD) else { return nil }
         self.size = size
         self.sampleRate = sampleRate
@@ -206,12 +216,12 @@ public nonisolated struct LevelSmoother: Equatable, Sendable {
     }
 }
 
-/// Bands for music Tracks can't hear, such as Apple Music, which plays in a process of its own.
+/// Bands for music Tracks can't hear and hasn't learned the groove of yet (see ``Groove``):
+/// Apple Music with no preview, offline, or in the moment before its preview is heard.
 ///
-/// It doesn't pretend to hear it: no beat, since the song's tempo isn't known and a made-up one
-/// would land between the real beats, and nothing that jumps the way sound would. Just a slow
-/// swell that rolls across the bands and breathes, a little quicker and fuller for a lively
-/// song, so a screen left showing it still says something's playing.
+/// It doesn't pretend to hear it, and nothing jumps the way a drum would: a slow swell that
+/// rolls across the bands and breathes, a little quicker and fuller for a lively song, and in
+/// ``pulsing(at:energy:count:)`` a soft beat at the tempo the song's feel suggests.
 public nonisolated enum AmbientLevels {
     public static func levels(at time: Double, energy: Double, count: Int) -> [Float] {
         let energy = min(1, max(0, energy))
@@ -228,6 +238,62 @@ public nonisolated enum AmbientLevels {
             let body = 1 - 0.4 * place
             let level = 0.16 + reach * body * swell * (0.75 + 0.25 * breath)
             return Float(level)
+        }
+    }
+
+    /// The tempo a song of this `energy` is most likely felt at, for the moments before its
+    /// own is known: about 85 beats a minute for the calmest, 128 for the liveliest.
+    public static func tempo(energy: Double) -> Double {
+        84 + 44 * min(1, max(0, energy))
+    }
+
+    /// A soft beat, 0 to 1, at the tempo the song's `energy` suggests: a rounded swell rather
+    /// than a hit, since it can't know where the song's own beats fall.
+    public static func beat(at time: Double, energy: Double) -> Float {
+        let phase = time * tempo(energy: energy) / 60
+        let swing = 0.5 + 0.5 * cos(2 * .pi * (phase - phase.rounded(.down)))
+        return Float(pow(swing, 4))
+    }
+
+    /// The swell, with a soft beat in the low bands at the tempo the song's feel suggests, so
+    /// a song whose groove isn't known yet still moves like music rather than a tide.
+    public static func pulsing(at time: Double, energy: Double, count: Int) -> [Float] {
+        let swell = levels(at: time, energy: energy, count: count)
+        let beat = beat(at: time, energy: energy) * Float(0.14 + 0.1 * min(1, max(0, energy)))
+        return swell.enumerated().map { index, level in
+            let place = count > 1 ? Float(index) / Float(count - 1) : 0
+            return min(1, level + beat * (1 - place) * (1 - place))
+        }
+    }
+}
+
+/// Spreads bars that keep to a narrow part of the height over more of it, gently, so a quiet or
+/// heavily compressed master still moves from low to high. It follows the loudest bar quickly
+/// and the music's usual level slowly, and does nothing near silence.
+public nonisolated struct LevelContrast: Equatable, Sendable {
+    private var ceiling: Float = 0
+    private var usual: Float = 0
+    /// The most it ever stretches.
+    public var maximumGain: Float = 2
+
+    public init() {}
+
+    public mutating func apply(_ levels: [Float], elapsed: Double) -> [Float] {
+        guard !levels.isEmpty else { return levels }
+        let elapsed = min(max(elapsed, 0), 0.5)
+        let loudest = levels.max() ?? 0
+        let average = levels.reduce(0, +) / Float(levels.count)
+        // Up at once to the loudest bar, down over several seconds, so a quiet verse after a
+        // loud chorus is still a little quieter.
+        ceiling = loudest > ceiling ? loudest : ceiling + (loudest - ceiling) * Float(1 - exp(-elapsed / 4))
+        usual += (average - usual) * Float(1 - exp(-elapsed / 2))
+        let lift = 0.5 * min(usual, ceiling)
+        let gain = min(maximumGain, 0.95 / max(0.05, ceiling - lift))
+        // Near silence, leave it be.
+        let weight = min(1, max(0, (ceiling - 0.08) / 0.12))
+        return levels.map { level in
+            let stretched = min(1, max(0, (level - lift) * gain))
+            return level + (stretched - level) * weight
         }
     }
 }

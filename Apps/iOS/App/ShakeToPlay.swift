@@ -8,9 +8,12 @@ extension Notification.Name {
 
 extension UIWindow {
     /// Shakes reach the window when nothing closer takes them, as a text field does for Undo.
+    /// Only the app's own key window counts, never CarPlay's or the keyboard's.
     open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         super.motionEnded(motion, with: event)
-        guard motion == .motionShake else { return }
+        guard motion == .motionShake, isKeyWindow,
+              windowScene?.session.role == .windowApplication
+        else { return }
         NotificationCenter.default.post(name: .tracksDidShake, object: nil)
     }
 }

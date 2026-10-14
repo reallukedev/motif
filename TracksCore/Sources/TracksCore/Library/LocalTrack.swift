@@ -100,9 +100,10 @@ public struct LocalTrack: Codable, Sendable, Hashable, Identifiable {
 
     /// The artist before any "feat.", "ft." or "featuring".
     static func leadArtist(of artist: String) -> String {
-        let lowered = artist.lowercased()
         let markers = [" feat. ", " feat ", " ft. ", " ft ", " featuring ", " (feat. ", " (feat ", " (ft. ", " (featuring ", " [feat. "]
-        guard let cut = markers.compactMap({ lowered.range(of: $0)?.lowerBound }).min() else { return artist }
+        // Searched in the name itself: lowercasing can change its length ("İ"), so an index
+        // into a lowered copy can land elsewhere in the original.
+        guard let cut = markers.compactMap({ artist.range(of: $0, options: .caseInsensitive)?.lowerBound }).min() else { return artist }
         let lead = artist[..<cut].trimmingCharacters(in: .whitespaces)
         return lead.isEmpty ? artist : lead
     }

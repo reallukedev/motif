@@ -91,7 +91,10 @@ public struct SessionPolicy: Sendable, Equatable {
         // An unknown station counts as the same one, so a missing name doesn't split the session.
         guard let observedStation else { return .current }
         guard let openSessionStation else { return .current }
-        return observedStation == openSessionStation ? .current : .startNew
+        // Folded, as the store matches stations, so a stray space or a change of case in
+        // the name Apple reports doesn't split one listen in two.
+        return StatsCalculator.folded(observedStation) == StatsCalculator.folded(openSessionStation)
+            ? .current : .startNew
     }
 }
 

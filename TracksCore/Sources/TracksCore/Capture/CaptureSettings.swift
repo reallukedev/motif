@@ -16,6 +16,7 @@ public struct CaptureSettings: Sendable {
     static let legacyMinimumListenKey = "minimumListenSeconds"
     public static let importsRecentlyPlayedKey = "importsRecentlyPlayed"
     public static let forgottenSongsKey = "forgottenSongs"
+    public static let forgottenSongDatesKey = "forgottenSongDates"
     public static let passedOverSongsKey = "passedOverSongs"
     public static let scrobblesToLastFMKey = "scrobblesToLastFM"
     public static let scrobblesImportedKey = "scrobblesImported"
@@ -210,6 +211,45 @@ public struct CaptureSettings: Sendable {
     public var forgottenSongs: Set<String> {
         get { Set(defaults.stringArray(forKey: Self.forgottenSongsKey) ?? []) }
         nonmutating set { defaults.set(Array(newValue).sorted(), forKey: Self.forgottenSongsKey) }
+    }
+
+    /// When each song in ``forgottenSongs`` was last forgotten, kept beside it as
+    /// ``PassedOverSongs``-style entries so two devices' copies join with a union.
+    ///
+    /// A key of its own, so a build that only knows ``forgottenSongs`` reads that unchanged.
+    /// Songs forgotten before this existed have no date and stay forgotten for good.
+    public var forgottenSongDates: [String: Date] {
+        var dates: [String: Date] = [:]
+        for entry in defaults.stringArray(forKey: Self.forgottenSongDatesKey) ?? [] {
+            guard let (at, key) = PassedOverSongs.parse(entry) else { continue }
+            dates[key] = max(dates[key] ?? at, at)
+        }
+        return dates
+    }
+
+    /// Adds a song to ``forgottenSongs`` and notes when.
+    public func noteForgotten(_ songKey: String, at date: Date = .now) {
+        forgottenSongs.insert(songKey)
+        var entries = Set(defaults.stringArray(forKey: Self.forgottenSongDatesKey) ?? [])
+        entries.insert(PassedOverSongs.entry(songKey, at: date))
+        defaults.set(entries.sorted(), forKey: Self.forgottenSongDatesKey)
+    }
+
+    /// Whether a play of a forgotten song, dated `playedAt`, still counts as forgotten.
+    ///
+    /// Only plays from before the song was forgotten, plus `grace` for lists like Apple's
+    /// recently played that keep showing it for a while. Forgetting a song used to block every
+    /// later play of it on every device for good.
+    static func isForgotten(
+        _ songKey: String,
+        playedAt: Date,
+        forgotten: Set<String>,
+        dates: [String: Date],
+        grace: TimeInterval = 0
+    ) -> Bool {
+        guard forgotten.contains(songKey) else { return false }
+        guard let forgottenAt = dates[songKey] else { return true }
+        return playedAt < forgottenAt.addingTimeInterval(grace)
     }
 
     /// Songs Tracks’ player moved on from before they counted, on any of the user's devices.

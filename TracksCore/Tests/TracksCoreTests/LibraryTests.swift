@@ -335,6 +335,15 @@ struct LocalLibraryTests {
         #expect(LocalTrack.leadArtist(of: "Crosby, Stills & Nash") == "Crosby, Stills & Nash")
     }
 
+    @Test("a name that grows when lowercased is cut at its own marker", arguments: [
+        ("İSMAİL YK feat. Nova Harbor", "İSMAİL YK"),
+        ("ȺȺȺȺȺȺȺȺ ft. X", "ȺȺȺȺȺȺȺȺ"),
+        ("İİİİİİİİİİİİ FEAT. Y", "İİİİİİİİİİİİ"),
+    ])
+    func leadArtistKeepsItsLength(artist: String, lead: String) {
+        #expect(LocalTrack.leadArtist(of: artist) == lead)
+    }
+
     @Test("a song credits each artist on it by their whole name")
     func credits() {
         #expect(LocalTrack.creditedArtists(of: "Umbra feat. Yuki Tanabe & Mara Solis").isSuperset(of: ["umbra", "yuki tanabe", "mara solis"]))

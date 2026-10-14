@@ -669,4 +669,30 @@ struct ScrobbleRuleTests {
         await handle(subject, song("Kept"), after: 91)
         #expect(try owed() == ["Kept"])
     }
+
+    /// The watch is only in memory. When iOS ended Tracks while Music kept playing, the song
+    /// stayed held for good.
+    @Test("a held song still playing after a relaunch is scrobbled")
+    func heldSongSurvivesRelaunch() async throws {
+        await handle(coordinator(), song("Kept"), after: 0)
+        #expect(try owed().isEmpty)
+
+        await handle(coordinator(), song("Kept"), after: 100)
+        #expect(try owed() == ["Kept"])
+    }
+
+    @Test("a held song isn't released after a relaunch when something else is playing")
+    func relaunchOnAnotherSong() async throws {
+        await handle(coordinator(), song("Kept"), after: 0)
+        await handle(coordinator(), song("Next"), after: 100)
+        #expect(try owed().isEmpty)
+    }
+
+    /// More time than the song lasts means it didn't just keep playing.
+    @Test("a held song heard again long after isn't released by the relaunch")
+    func relaunchLongAfter() async throws {
+        await handle(coordinator(), song("Kept"), after: 0)
+        await handle(coordinator(), song("Kept"), after: 600)
+        #expect(try owed().isEmpty)
+    }
 }

@@ -11,15 +11,25 @@ final class NetworkStatus {
     /// Cellular, or a hotspot: where downloads wait unless allowed.
     private(set) var isExpensive = false
 
+    /// Called when the connection comes back or moves, from Wi-Fi to cellular or one network
+    /// to another: a server only reachable on one of them may have come or gone.
+    @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let monitor = NWPathMonitor()
+    /// The interfaces in use at the last look, so a path updated with nothing new is let be.
+    @ObservationIgnored private var interfaces: [String]?
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
             let expensive = path.isExpensive
+            let interfaces = path.availableInterfaces.map(\.name)
             Task { @MainActor in
-                self?.isOnline = online
-                self?.isExpensive = expensive
+                guard let self else { return }
+                let moved = self.interfaces != nil && (online != self.isOnline || interfaces != self.interfaces)
+                self.isOnline = online
+                self.isExpensive = expensive
+                self.interfaces = interfaces
+                if moved, online { self.onChange?() }
             }
         }
         monitor.start(queue: DispatchQueue(label: "com.luke.tracks.network"))

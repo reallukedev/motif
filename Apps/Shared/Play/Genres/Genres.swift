@@ -264,7 +264,7 @@ struct CoverFan: View {
     var body: some View {
         let side = (height * 0.44).rounded()
         ZStack(alignment: .topTrailing) {
-            ForEach(Array(covers.prefix(3).enumerated().reversed()), id: \.offset) { index, cover in
+            ForEach(covers.prefix(3).enumerated().reversed(), id: \.offset) { index, cover in
                 CoverImage(cover: cover, size: side)
                     .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                     .rotationEffect(.degrees(-Double(index) * 8), anchor: .bottom)

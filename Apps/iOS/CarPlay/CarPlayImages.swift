@@ -78,18 +78,31 @@ enum CarPlayImages {
     @MainActor
     final class Late {
         private var setters: [(UIImage) -> Void] = []
+        /// Pictures that arrived before their tiles or rows were made, applied once they are.
+        private var pending: [Int: UIImage] = [:]
 
         func attach(_ elements: [CPListImageRowItemElement]) {
-            setters = elements.map { element in { element.image = $0 } }
+            attach(setters: elements.map { element in { element.image = $0 } })
         }
 
         func attach(_ rows: [CPListItem]) {
-            setters = rows.map { row in { row.setImage($0) } }
+            attach(setters: rows.map { row in { row.setImage($0) } })
         }
 
         func set(_ index: Int, _ image: UIImage) {
-            guard setters.indices.contains(index) else { return }
+            guard setters.indices.contains(index) else {
+                if setters.isEmpty { pending[index] = image }
+                return
+            }
             setters[index](image)
+        }
+
+        private func attach(setters: [(UIImage) -> Void]) {
+            self.setters = setters
+            for (index, image) in pending where setters.indices.contains(index) {
+                setters[index](image)
+            }
+            pending = [:]
         }
     }
 

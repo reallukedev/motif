@@ -266,7 +266,7 @@ struct YourMusicSearchResults: View {
             for: query,
             artist: found.artists.first?.name,
             album: found.albums.first?.displayTitle,
-            hasSong: song != nil
+            song: song?.title
         )
         return switch kind {
         case .artist: found.artists.first.map(TopMatch.artist)

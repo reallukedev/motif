@@ -87,6 +87,9 @@ private struct PeriodSwipe: ViewModifier {
     @Binding var selection: Date?
     /// Where the bar on show was tapped, so a second tap on it puts the total back.
     @State private var tappedX: CGFloat?
+    /// Swipes that changed the period, each felt as a page turns; one at either end, firmer.
+    @State private var turns = 0
+    @State private var stops = 0
 
     func body(content: Content) -> some View {
         if let paging {
@@ -115,11 +118,19 @@ private struct PeriodSwipe: ViewModifier {
                                     selection = nil
                                     tappedX = nil
                                     // Content follows the finger: swiping right brings in the past.
-                                    if across > 0 { paging.goBack() } else { paging.goForward() }
+                                    let goesBack = across > 0
+                                    guard goesBack ? paging.canGoBack : paging.canGoForward else {
+                                        stops += 1
+                                        return
+                                    }
+                                    turns += 1
+                                    if goesBack { paging.goBack() } else { paging.goForward() }
                                 }
                         )
                 }
             }
+            .sensoryFeedback(.selection, trigger: turns)
+            .sensoryFeedback(.impact(flexibility: .rigid, intensity: 0.5), trigger: stops)
         } else {
             content.chartXSelection(value: $selection)
         }

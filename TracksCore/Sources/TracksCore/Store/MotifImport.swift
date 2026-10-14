@@ -114,6 +114,27 @@ public enum MotifImport {
     @MainActor
     public static func run(into store: TracksStore) async throws -> Outcome {
         guard let source = motifStoreURL else { throw Failure.noMotifHistory }
+        // Claimed before the import rather than after, so another device with Motif that
+        // launches meanwhile is less likely to bring the same history over too.
+        let name = deviceName
+        let cloud = NSUbiquitousKeyValueStore.default
+        let earlierClaim = cloud.string(forKey: cloudKey)
+        cloud.set(name, forKey: cloudKey)
+        cloud.synchronize()
+        do {
+            return try await importHistory(from: source, into: store, claimedAs: name)
+        } catch {
+            // Hand the claim back, so another device can still do it.
+            if cloud.string(forKey: cloudKey) == name {
+                if let earlierClaim { cloud.set(earlierClaim, forKey: cloudKey) } else { cloud.removeObject(forKey: cloudKey) }
+                cloud.synchronize()
+            }
+            throw error
+        }
+    }
+
+    @MainActor
+    private static func importHistory(from source: URL, into store: TracksStore, claimedAs name: String) async throws -> Outcome {
         let copy = try await copyStore(at: source)
         defer { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
 
@@ -139,24 +160,52 @@ public enum MotifImport {
         copySettings()
         CloudSync.defaults.set(Date.now, forKey: finishedAtKey)
         CloudSync.defaults.set(outcome.plays, forKey: importedCountKey)
-        NSUbiquitousKeyValueStore.default.set(deviceName, forKey: cloudKey)
+        NSUbiquitousKeyValueStore.default.set(name, forKey: cloudKey)
         return outcome
     }
 
     /// Copies the store and its write-ahead log into a fresh temporary folder.
-    nonisolated static func copyStore(at source: URL) async throws -> URL {
-        try await Task.detached(priority: .utility) {
+    ///
+    /// The three files are copied one after another, so Motif writing in between would give
+    /// a copy that doesn't open, or one missing its latest plays, and the import would then
+    /// be marked done. The copy is only kept if no file changed while it was made.
+    @concurrent nonisolated static func copyStore(at source: URL) async throws -> URL {
+        for _ in 0..<3 {
+            let before = fileStates(of: source)
             let folder = FileManager.default.temporaryDirectory
                 .appending(path: "MotifImport-\(UUID().uuidString)", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let destination = folder.appending(path: "default.store")
-            for suffix in ["", "-wal", "-shm"] {
-                let from = URL(filePath: source.path(percentEncoded: false) + suffix)
-                guard FileManager.default.fileExists(atPath: from.path(percentEncoded: false)) else { continue }
-                try FileManager.default.copyItem(at: from, to: URL(filePath: destination.path(percentEncoded: false) + suffix))
+            do {
+                for suffix in storeSuffixes {
+                    let from = URL(filePath: source.path(percentEncoded: false) + suffix)
+                    guard FileManager.default.fileExists(atPath: from.path(percentEncoded: false)) else { continue }
+                    try FileManager.default.copyItem(at: from, to: URL(filePath: destination.path(percentEncoded: false) + suffix))
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: folder)
+                throw error
             }
-            return destination
-        }.value
+            if fileStates(of: source) == before { return destination }
+            try? FileManager.default.removeItem(at: folder)
+            try await Task.sleep(for: .seconds(1))
+        }
+        throw Failure.unreadable(String(localized: "Motif was busy. Quit Motif and try again."))
+    }
+
+    nonisolated static let storeSuffixes = ["", "-wal", "-shm"]
+
+    /// Size and modification date of the store and its log, to tell whether either changed.
+    /// The shared-memory index is left out: SQLite rebuilds it from the log, and readers
+    /// touch it.
+    nonisolated static func fileStates(of store: URL) -> [String] {
+        ["", "-wal"].map { suffix in
+            let path = store.path(percentEncoded: false) + suffix
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else { return "-" }
+            let size = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSinceReferenceDate ?? -1
+            return "\(size)@\(modified)"
+        }
     }
 
     /// The part that does the work, separate from where the files are so tests can give it

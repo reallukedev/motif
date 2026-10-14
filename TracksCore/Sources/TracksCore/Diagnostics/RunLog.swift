@@ -14,6 +14,12 @@ public struct RunLog: Sendable {
     static let recordKey = "TracksRunRecord"
     static let noticeKey = "TracksUnexpectedQuit"
     static let relaunchesKey = "TracksWatchdogRelaunches"
+    /// Whether the watchdog reopens the app. Off until the person turns it on in Settings.
+    public static let reopensKey = "TracksReopensAfterUnexpectedQuit"
+
+    /// Input this recent when the app ended means the person was at the Mac, most likely
+    /// ending it themselves with Force Quit. macOS reclaims apps that sit idle.
+    public static let recentInput: TimeInterval = 15
 
     /// How many times the watchdog will reopen the app within ``relaunchWindow``. A crash at
     /// launch would otherwise reopen it forever.
@@ -101,12 +107,21 @@ public struct RunLog: Sendable {
 
     // MARK: - The watchdog
 
+    /// Whether the watchdog should run and reopen the app, as the person chose.
+    public var reopensAutomatically: Bool {
+        get { defaults.bool(forKey: Self.reopensKey) }
+        nonmutating set { defaults.set(newValue, forKey: Self.reopensKey) }
+    }
+
     /// What the watchdog should do now that the app it was watching has gone.
     public enum Termination: Sendable, Equatable {
         /// Quit on purpose. Leave it closed.
         case quit
         /// Ended some other way. Reopen it.
         case reopen
+        /// Ended some other way, but reopening is off, or the person was at the Mac and most
+        /// likely ended it themselves. Leave it closed.
+        case leftClosed
         /// Ended some other way, but it has been reopened too often lately. Leave it closed.
         case gaveUp
         /// Not the run this log knows about, such as an older copy. Leave it alone.
@@ -117,11 +132,23 @@ public struct RunLog: Sendable {
     ///
     /// Only the run whose record is current counts: a watchdog left over from an earlier run
     /// mustn't reopen the app because some other copy of it exited.
-    public func recordTermination(processID: Int32, now: Date = .now) -> Termination {
+    ///
+    /// - Parameter secondsSinceInput: how long the Mac had been left alone when the app ended,
+    ///   if known. Under ``recentInput`` the app stays closed, so Force Quit is respected.
+    public func recordTermination(
+        processID: Int32,
+        secondsSinceInput: TimeInterval? = nil,
+        now: Date = .now
+    ) -> Termination {
         guard var current = record, current.processID == processID else { return .unknown }
         guard !current.endedCleanly else { return .quit }
 
         current.stoppedAt = now
+        let personWasThere = secondsSinceInput.map { $0 < Self.recentInput } ?? false
+        guard reopensAutomatically, !personWasThere else {
+            record = current
+            return .leftClosed
+        }
         let recent = relaunches.filter { now.timeIntervalSince($0) < Self.relaunchWindow }
         guard recent.count < Self.maxRelaunches else {
             record = current

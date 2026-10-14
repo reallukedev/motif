@@ -67,6 +67,15 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     /// The entry told to the server as playing, and whether its play has been counted.
     private var serverScrobble: (entryID: String, counted: Bool)?
     private var artworkTask: Task<Void, Never>?
+    /// Whether the person means it to be playing: set by playing, cleared by pausing. A call or
+    /// a stalled stream pauses the player without changing it, so playing carries on after.
+    private var isMeantToPlay = false
+    /// The song whose stream dropped, being loaded again, and how often it has been.
+    private var retried: (entryID: String, tries: Int)?
+    /// Waiting a moment before loading it again: the player shows it loading meanwhile.
+    private var recovering: (entryID: String, task: Task<Void, Never>)?
+    /// Waits for a song loaded again to be ready, to carry on from where it was.
+    private var resumeObservation: NSKeyValueObservation?
 
     init(music: YourMusic, capture: PushedNowPlayingSource) {
         self.music = music
@@ -90,7 +99,8 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         })
         notifications.append(center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
             let item = note.object as? AVPlayerItem
-            MainActor.assumeIsolated { self?.itemFailed(item) }
+            let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? NSError
+            MainActor.assumeIsolated { self?.itemFailed(item, error: error) }
         })
         #if os(iOS)
         notifications.append(center.addObserver(forName: AVAudioSession.didBecomeInactiveNotification, object: nil, queue: .main) { [weak self] note in
@@ -106,10 +116,13 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         })
         notifications.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
             let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
-            // Headphones out: stop, as every player does, rather than play from the speaker.
-            if reason == .oldDeviceUnavailable {
-                MainActor.assumeIsolated { self?.pause() }
-            }
+            guard reason == .oldDeviceUnavailable else { return }
+            // Headphones out: stop, as every player does, rather than play from the speaker. Not
+            // for a car or an AirPlay speaker dropping out for a moment.
+            let previous = (note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription)?.outputs.map(\.portType) ?? []
+            let current = AVAudioSession.sharedInstance().currentRoute.outputs.map(\.portType)
+            guard RoutePause.shouldPause(previous: previous, current: current, isPrivate: Self.privateOutputs.contains) else { return }
+            MainActor.assumeIsolated { self?.pause() }
         })
         #endif
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 10), queue: .main) { [weak self] _ in
@@ -230,6 +243,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     }
 
     func pause() {
+        isMeantToPlay = false
         // Paused while waiting for a song to arrive: it doesn't start by itself when it does.
         if awaitingArrival != nil {
             awaitingArrival = nil
@@ -247,6 +261,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             loadItems(startPlaying: true)
             return
         }
+        isMeantToPlay = true
         player.play()
     }
 
@@ -258,6 +273,7 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             index = 0
         } else {
             // Past the end: stop on the last song, back at its start.
+            isMeantToPlay = false
             player.pause()
             await player.seek(to: .zero)
             ranOut = true
@@ -328,7 +344,10 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     }
 
     func moveUpNext(from offsets: IndexSet, to destination: Int) {
+        // A list drawn before the queue changed can ask for songs no longer there.
+        guard entries.indices.contains(index) else { return }
         var rest = Array(entries[(index + 1)...])
+        guard let last = offsets.last, last < rest.count, (0...rest.count).contains(destination) else { return }
         rest.move(fromOffsets: offsets, toOffset: destination)
         entries = Array(entries[...index]) + rest
         if !isShuffled { unshuffled = entries }
@@ -342,6 +361,9 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     private func loadItems(startPlaying: Bool) {
         awaitingArrival = nil
         ranOut = false
+        isMeantToPlay = startPlaying
+        stopRecovering()
+        if retried?.entryID != (entries.indices.contains(index) ? entries[index].id : nil) { retried = nil }
         player.removeAllItems()
         itemEntries = [:]
         itemObservations = [:]
@@ -443,6 +465,8 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         else { return }
         currentItemID = ObjectIdentifier(item)
         awaitingArrival = nil
+        stopRecovering()
+        retried = nil
         // Items that have played are gone from the player; forget them.
         let queued = Set(player.items().map(ObjectIdentifier.init))
         itemEntries = itemEntries.filter { queued.contains($0.key) }
@@ -455,6 +479,9 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         onChange?()
         publish()
         updateNowPlayingInfo()
+        // Queued behind the last song, it failed while it waited, when nothing was listening
+        // for it: it would sit here, never playing.
+        if item.status == .failed { itemFailed(item) }
     }
 
     private func itemFinished(_ item: ObjectIdentifier?) {
@@ -473,20 +500,22 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             ranOut = true
             return
         }
-        // The next song couldn't be queued behind this one, as it couldn't be reached then:
-        // move on to it now, which skips it if it still can't play.
-        if !itemEntries.values.contains(entries[next].id) {
+        // The next song couldn't be queued behind this one, as it couldn't be reached then, or
+        // it failed while it waited: move on to it now, which skips it if it still can't play.
+        let isQueued = player.items().contains { itemEntries[ObjectIdentifier($0)] == entries[next].id && $0.status != .failed }
+        if !isQueued {
             index = next
             loadItems(startPlaying: true)
         }
     }
 
-    private func itemFailed(_ item: AVPlayerItem?) {
+    private func itemFailed(_ item: AVPlayerItem?, error: NSError? = nil) {
         // Word of a failure can arrive after the queue was cleared or replaced.
         guard let item, ObjectIdentifier(item) == currentItemID, item !== lastFailedItem,
               entries.indices.contains(index)
         else { return }
         lastFailedItem = item
+        if retry(item, error: error ?? item.error) { return }
         // A song found for you that its server couldn't preview, often because it couldn't find
         // it anywhere to stream, but is fetching the file for: wait here for it, not skip past.
         let track = entries[index].track
@@ -499,10 +528,82 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         skipPastFailure()
     }
 
+    /// A song streaming from a server that stopped part way, its connection dropped or the
+    /// server slow to answer: loaded again after a moment, carrying on from where it got to,
+    /// rather than skipped. False when it's been tried enough, or won't play however often.
+    private func retry(_ item: AVPlayerItem, error: (any Error)?) -> Bool {
+        let entry = entries[index]
+        let tries = retried?.entryID == entry.id ? retried?.tries ?? 0 : 0
+        let isStream = entry.track.isFromServer && !music.downloads.isDownloaded(entry.track.id)
+        guard case .retry(let delay) = StreamRetry.step(after: error, isStream: isStream, tried: tries) else { return false }
+        retried = (entry.id, tries + 1)
+        let time = item.currentTime()
+        stopRecovering()
+        let task = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, self.recovering?.entryID == entry.id,
+                  self.entries.indices.contains(self.index), self.entries[self.index].id == entry.id
+            else { return }
+            self.reload(from: time)
+        }
+        recovering = (entry.id, task)
+        updateStatus()
+        return true
+    }
+
+    private func stopRecovering() {
+        recovering?.task.cancel()
+        recovering = nil
+        resumeObservation = nil
+    }
+
+    /// Loads the current song again and carries on from `time`, playing if it's meant to be.
+    private func reload(from time: CMTime) {
+        recovering = nil
+        player.removeAllItems()
+        itemEntries = [:]
+        itemObservations = [:]
+        currentItemID = nil
+        guard let item = makeItem(entries[index]) else {
+            // Still out of reach: on to the next that can play.
+            onChange?()
+            publish()
+            if isMeantToPlay { skipPastFailure() } else { updateStatus() }
+            return
+        }
+        let id = ObjectIdentifier(item)
+        currentItemID = id
+        player.insert(item, after: nil)
+        refreshNext()
+        if time.isNumeric, time.seconds > 1 {
+            // Once it's ready, to where it was, then on: seeking sooner isn't allowed.
+            resumeObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+                guard item.status == .readyToPlay else { return }
+                Self.onMain {
+                    guard let self, let current = self.player.currentItem, ObjectIdentifier(current) == id, self.resumeObservation != nil else { return }
+                    self.resumeObservation = nil
+                    current.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                        Self.onMain {
+                            guard let self, self.currentItemID == id, self.isMeantToPlay else { return }
+                            self.player.play()
+                        }
+                    }
+                }
+            }
+        } else if isMeantToPlay {
+            player.play()
+        }
+        updateStatus()
+        onChange?()
+        publish()
+        updateNowPlayingInfo()
+    }
+
     /// A song that couldn't play: on to the next, unless a run of them couldn't either.
     private func skipPastFailure() {
         failuresInARow += 1
         guard failuresInARow < entries.count, failuresInARow < 10 else {
+            isMeantToPlay = false
             player.pause()
             onNotice?(String(localized: "Couldn't Play These Songs"))
             return
@@ -530,6 +631,8 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
         let next: PlayerStatus = if entries.isEmpty {
             .stopped
         } else if let awaitingArrival, entries.indices.contains(index), entries[index].id == awaitingArrival {
+            .loading
+        } else if let recovering, entries.indices.contains(index), entries[index].id == recovering.entryID {
             .loading
         } else {
             switch player.timeControlStatus {
@@ -568,16 +671,21 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
     private var wasPlayingBeforeInterruption = false
 
     private func interruptionBegan() {
-        wasPlayingBeforeInterruption = status == .playing
+        // Meant, not what the player says: it may have paused already by the time word comes.
+        wasPlayingBeforeInterruption = isMeantToPlay
     }
 
     private func interruptionEnded(shouldResume: Bool) {
-        if wasPlayingBeforeInterruption, shouldResume {
+        // Paused by hand during the interruption: it stays paused.
+        if wasPlayingBeforeInterruption, isMeantToPlay, shouldResume {
             try? AVAudioSession.sharedInstance().setActive(true)
             player.play()
         }
         wasPlayingBeforeInterruption = false
     }
+
+    /// Outputs heard by the listener alone, which going away pauses the music.
+    nonisolated private static let privateOutputs: Set<AVAudioSession.Port> = [.headphones, .bluetoothA2DP, .bluetoothLE, .bluetoothHFP]
     #endif
 
     // MARK: - Being the player
@@ -635,11 +743,15 @@ final class LocalPlayerEngine: NSObject, PlayerEngine {
             loadItems(startPlaying: true)
             return
         }
+        isMeantToPlay = true
         player.play()
     }
 
     /// Hands everything back, for Apple Music to take over.
     func deactivate() {
+        isMeantToPlay = false
+        stopRecovering()
+        retried = nil
         player.pause()
         player.removeAllItems()
         itemEntries = [:]

@@ -50,8 +50,8 @@ public final class PlaybackController {
         let playable = items.filter { !$0.songID.isEmpty }
         guard !playable.isEmpty else {
             lastError = items.count == 1
-                ? "That song hasn't been identified yet."
-                : "None of those songs have been identified yet."
+                ? String(localized: "That song hasn’t been identified yet.")
+                : String(localized: "None of those songs have been identified yet.")
             return
         }
         lastError = nil
@@ -65,7 +65,7 @@ public final class PlaybackController {
 
     private func play(_ captures: [Capture]) async {
         guard !captures.isEmpty else {
-            lastError = "Nothing to play back yet."
+            lastError = String(localized: "Nothing to play back yet.")
             return
         }
         lastError = nil
@@ -184,11 +184,11 @@ public final class PlaybackController {
             return PlaybackFailure(error).words
         }
         return switch playbackError {
-        case .nothingToPlay: "Those songs are no longer available in the catalog."
+        case .nothingToPlay: String(localized: "Those songs are no longer available in the catalog.")
         case .notSubscribed: PlaybackFailure.noSubscription.words
         // The player has already said it plainly.
         case .failed(let words): words
-        case .openedInMusic: "Opened in Music."
+        case .openedInMusic: String(localized: "Opened in Music.")
         }
     }
 }

@@ -553,8 +553,15 @@ public final class TracksStore {
             HistoryImport.key(title: $0.title, artistName: $0.artistName)
         })
         // Don't bring back songs the user removed, or ones Tracks’ player skipped: Apple
-        // lists a song the moment it starts.
-        known.formUnion(settings.forgottenSongs)
+        // lists a song the moment it starts. A song forgotten a while ago that turns up again
+        // was played again.
+        let forgotten = settings.forgottenSongs
+        let forgottenDates = settings.forgottenSongDates
+        known.formUnion(forgotten.filter {
+            CaptureSettings.isForgotten(
+                $0, playedAt: now, forgotten: forgotten, dates: forgottenDates, grace: PassedOverSongs.memory
+            )
+        })
         known.formUnion(settings.passedOverSongs.keys(since: cutoff))
 
         // The anchor moves only once this list has been dealt with. It used to move before
@@ -626,9 +633,17 @@ public final class TracksStore {
                 kind: $0.kind
             )
         }
-        let new = LastFMHistory.newPlays(
-            in: scrobbles, known: known, forgotten: settings.forgottenSongs, policy: policy
-        )
+        // Scrobbles carry their real dates, so only plays from before the song was forgotten
+        // stay out.
+        let forgotten = settings.forgottenSongs
+        let forgottenDates = settings.forgottenSongDates
+        let wanted = scrobbles.filter {
+            !CaptureSettings.isForgotten(
+                HistoryImport.key(title: $0.title, artistName: $0.artistName),
+                playedAt: $0.playedAt, forgotten: forgotten, dates: forgottenDates
+            )
+        }
+        let new = LastFMHistory.newPlays(in: wanted, known: known, forgotten: [], policy: policy)
         guard !new.isEmpty else { return 0 }
 
         var inserted: [Capture] = []
@@ -680,7 +695,7 @@ public final class TracksStore {
             HistoryImport.key(title: $0.title, artistName: $0.artistName) == identity
         }
         for row in rows { context.delete(row) }
-        settings.forgottenSongs.insert(identity)
+        settings.noteForgotten(identity)
         if !rows.isEmpty { try context.save() }
         return rows.count
     }
@@ -698,8 +713,7 @@ public final class TracksStore {
             HistoryImport.key(title: $0.title, artistName: $0.artistName) == identity
         }
         for row in rows { context.delete(row) }
-        // Nonmutating setter, so this writes through to UserDefaults.
-        settings.forgottenSongs.insert(identity)
+        settings.noteForgotten(identity)
         if !rows.isEmpty { try context.save() }
         return rows.count
     }
@@ -752,6 +766,12 @@ public final class TracksStore {
         for group in groups.values where group.count > 1 {
             let ordered = group.sorted { ($0.firstSeenAt, $0.name) < ($1.firstSeenAt, $1.name) }
             guard let survivor = ordered.first else { continue }
+            // Two exact copies (Motif's history brought over on two devices at once) can't be
+            // told apart, so each device could keep a different one and delete the other's,
+            // leaving neither. Both stay.
+            if ordered.count > 1, (ordered[1].firstSeenAt, ordered[1].name) == (survivor.firstSeenAt, survivor.name) {
+                continue
+            }
 
             for duplicate in ordered.dropFirst() {
                 // Move the sessions this device knows about. Any it doesn't are left without
@@ -845,6 +865,13 @@ public final class TracksStore {
                 for cluster in Self.playClusters(remaining, policy: policy) {
                     let ranked = cluster.sorted(by: Self.isPreferredSurvivor)
                     let survivor = ranked[0]
+                    // Exact copies, such as Motif's history brought over on two devices at
+                    // once, tie, and each device would keep its own and delete the other's.
+                    // Leaving a duplicate is better than losing the play everywhere.
+                    if ranked.count > 1, !Self.isPreferredSurvivor(survivor, over: ranked[1]) {
+                        kept.append(contentsOf: ranked)
+                        continue
+                    }
                     for duplicate in ranked.dropFirst() {
                         Self.absorb(duplicate, into: survivor)
                         context.delete(duplicate)

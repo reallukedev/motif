@@ -16,6 +16,7 @@ struct YourMusicScreen: View {
     @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
+    @AppStorage(NearbyDevices.storageKey) private var showsDevices = true
     @State private var showsSettings = LaunchScene.opensPlaySettings
     @State private var importMode: ImportMode?
     @State private var addsServer = false
@@ -80,7 +81,7 @@ struct YourMusicScreen: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(iOS)
-                if NearbyDevices.isOn { DevicesButton() }
+                if showsDevices { DevicesButton() }
                 #endif
                 Menu("Add Music", systemImage: "plus") {
                     Button("Import Songs", systemImage: "music.note") { importMode = .files }
@@ -530,7 +531,7 @@ private struct LibraryList: View {
     /// Only what's under way: "3 downloading".
     private func status(of list: YourMusicList) -> String? {
         guard list == .downloads else { return nil }
-        let active = music.downloads.progress.count
+        let active = music.downloads.downloading.count
         return active > 0 ? String(localized: "\(active) downloading") : nil
     }
 

@@ -276,7 +276,7 @@ struct ChartStats: View {
             HStack(alignment: .top, spacing: 28) {
                 lead
                 Divider().frame(height: 44)
-                ForEach(Array(others.enumerated()), id: \.offset) { _, stat in
+                ForEach(others.enumerated(), id: \.offset) { _, stat in
                     small(stat)
                 }
                 Spacer(minLength: 0)

@@ -224,7 +224,7 @@ struct LiveMixTests {
         #expect(favourite > once * 2)
     }
 
-    @Test("skipping an artist makes them rarer for the rest of the listen")
+    @Test("skipping an artist makes them rarer for a while, never gone")
     func skipsSteer() {
         let songs = (0..<60).map { song("S\($0)", artist: "Artist \($0 % 6)") }
         func plays(ofArtist0 skipping: Bool) -> Int {
@@ -234,7 +234,11 @@ struct LiveMixTests {
                 return count + draw(&mix, 12).filter { $0.artistName == "Artist 0" }.count
             }
         }
-        #expect(plays(ofArtist0: true) * 2 < plays(ofArtist0: false))
+        let skipped = plays(ofArtist0: true)
+        let unskipped = plays(ofArtist0: false)
+        #expect(Double(skipped) < Double(unskipped) * 0.85)
+        // A skip is a nudge: the artist still comes round.
+        #expect(Double(skipped) > Double(unskipped) * 0.3)
     }
 
     @Test("new finds take their share, and skipping them shrinks it")

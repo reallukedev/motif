@@ -15,6 +15,17 @@ struct FreshShuffleTests {
         }
     }
 
+    /// Callers fold the artist's name, and asking inside the placing loop made a long
+    /// shuffle quadratic in folds.
+    @Test("the artist key is worked out once per song")
+    func foldsOnce() {
+        let input = songs(["A": 40, "B": 30, "C": 20, "D": 10])
+        var calls = 0
+        let output = FreshShuffle.order(input, artist: { calls += 1; return $0.artist }, recentlyHeard: { $0.artist == "D" }, seed: 3)
+        #expect(output.count == input.count)
+        #expect(calls == input.count)
+    }
+
     @Test("keeps every song exactly once", arguments: [1, 7, 42, 2026] as [UInt64])
     func permutation(seed: UInt64) {
         let input = songs(["A": 5, "B": 4, "C": 3, "D": 1])

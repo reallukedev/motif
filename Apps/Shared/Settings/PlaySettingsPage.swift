@@ -22,7 +22,6 @@ struct PlaySettingsPage: View {
     @AppStorage(PlayPreferences.radioDeletesAfterPlayingKey) private var radioDeletesAfterPlaying = false
     @AppStorage(PlayPreferences.shakeToPlayKey) private var shakeToPlay = true
     @AppStorage(QuickSwitch.storageKey) private var quickSwitch = false
-    @AppStorage(NearbyDevices.storageKey) private var showsNearby = true
     @AppStorage(SuggestionMode.storageKey) private var suggestionMode = SuggestionMode.everything
     @AppStorage(OfflineMode.storageKey) private var isOfflineModeOn = false
     @Environment(DownloadedSongs.self) private var downloads
@@ -281,14 +280,8 @@ struct PlaySettingsPage: View {
     private var devicesSection: some View {
         Section {
             Toggle("Shake to Play", isOn: $shakeToPlay)
-            Toggle("Your Other Devices", isOn: $showsNearby)
-                .onChange(of: showsNearby) { _, on in
-                    if on { model.nearby.start() } else { model.nearby.stop() }
-                }
-        } header: {
-            Text("Devices")
         } footer: {
-            Text(PlaySettingsWords.devicesFooter(showsNearby: showsNearby, shakeToPlay: shakeToPlay, needsLocalNetwork: model.nearby.needsLocalNetwork))
+            Text(PlaySettingsWords.shakeFooter(shakeToPlay))
                 .contentTransition(.opacity)
         }
     }

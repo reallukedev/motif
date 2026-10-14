@@ -56,6 +56,8 @@
 	<key>INIntentsSupported</key>
 	<array>
 		<string>INPlayMediaIntent</string>
+		<string>INUpdateMediaAffinityIntent</string>
+		<string>INAddMediaIntent</string>
 	</array>
 	<key>INSupportedMediaCategories</key>
 	<array>
@@ -76,6 +78,10 @@
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Tracks plays Apple Music and reads what's playing so it can keep your listening history, scrobble it to Last.fm, and save songs you hear on the radio to your library.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).playing</string>
+	</array>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_tracks._tcp</string>

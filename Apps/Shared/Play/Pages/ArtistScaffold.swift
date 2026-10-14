@@ -75,6 +75,8 @@ struct ArtistScaffold<Sections: View, More: View>: View {
                     .font(.headline)
                     .lineLimit(1)
                     .opacity(showsTitle ? 1 : 0)
+                    // The name is read once, in the picture, until this one shows.
+                    .accessibilityHidden(!showsTitle)
                     .animation(PlayMotion.value, value: showsTitle)
             }
             ToolbarItem(placement: .primaryAction) {
@@ -225,7 +227,7 @@ struct ArtistScaffold<Sections: View, More: View>: View {
         .frame(height: 280)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Up under the toolbar too, as Music's artist pages are.
-        .background(CoverStage(tint: picture == nil ? nil : tint, deepens: false).ignoresSafeArea(edges: .top))
+        .background { CoverStage(tint: picture == nil ? nil : tint, deepens: false).ignoresSafeArea(edges: .top) }
     }
     #endif
 

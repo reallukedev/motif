@@ -86,7 +86,7 @@ struct PlayInTracksIntent: AudioPlaybackIntent {
         // Siri runs this with no one looking at the phone, so a permission prompt would sit
         // there unanswered. Say what's needed instead.
         guard model.musicSource == .yourMusic || MusicAuthorization.currentStatus == .authorized else {
-            throw PlayIntentError.problem(PlayerProblem.accessDenied.message)
+            throw PlayIntentError.appleMusicAccess
         }
         await model.prepareForPlaying()
         await TracksPlayback.start(choice, model: model)
@@ -172,6 +172,19 @@ enum TracksPlayback {
 enum PlayIntentError: Error, CustomLocalizedStringResourceConvertible {
     case sampleData
     case problem(String)
+
+    /// Apple Music access can't be asked for from Siri, with no one looking at the screen:
+    /// what to do instead, depending on whether it was ever asked.
+    @MainActor static var appleMusicAccess: PlayIntentError {
+        MusicAuthorization.currentStatus == .notDetermined
+            ? .problem(String(localized: "Open Tracks and allow Apple Music access, then ask again."))
+            : .problem(PlayerProblem.accessDenied.message)
+    }
+
+    /// The error for a problem playing, from Siri or Shortcuts.
+    @MainActor static func playing(_ problem: PlayerProblem) -> PlayIntentError {
+        problem == .accessDenied ? appleMusicAccess : .problem(problem.message)
+    }
 
     var localizedStringResource: LocalizedStringResource {
         switch self {

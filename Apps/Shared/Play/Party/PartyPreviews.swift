@@ -54,6 +54,6 @@ private struct PartyPreview: View {
     @Previewable @State var vibe = PartyVibe.backyard
     PartyVibeChips(selection: $vibe, vibes: PartyVibe.allCases)
         .padding(.vertical, 20)
-        .background(PartyField(vibe: vibe))
+        .background { PartyField(vibe: vibe) }
 }
 #endif

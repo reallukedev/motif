@@ -41,6 +41,9 @@ struct MacRootView: View {
                         .playDestinations()
                 }
             }
+            // The title bar is the page's own: no band of material across the top, every page
+            // showing through it, as Music's does.
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             // Under the full player, the page and its bar stop ticking.
             .environment(\.isOnScreen, isOnScreen && !isShowingFullPlayer)
             .environment(playerWindow)
@@ -111,7 +114,7 @@ struct MacRootView: View {
             // Connect button in reach wherever you are.
             .background {
                 TitlebarAccessory(isHidden: isShowingFullPlayer) {
-                    DevicesButton()
+                    DevicesButton(opensAtLaunch: true)
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
                         .controlSize(.extraLarge)
@@ -160,7 +163,12 @@ struct MacRootView: View {
                 LaunchScene.openMix(model)
             }
             // Through the Mac's one voice: Music may be the player your devices are shown.
-            .onPlayingChange(of: model.player) { Task { await NearbyMac.tell(model) } }
+            .onPlayingChange(of: model.player) {
+                model.updateHandoff()
+                Task { await NearbyMac.tell(model) }
+            }
+            // A song picked up from another of your devices through Handoff.
+            .onContinueUserActivity(NowPlayingHandoff.activityType) { model.continueHandoff($0) }
             #if DEBUG
             .onChange(of: player.hasQueue) { _, hasQueue in
                 if hasQueue, LaunchScene.opensStage { openWindow(id: StageWindow.id) }

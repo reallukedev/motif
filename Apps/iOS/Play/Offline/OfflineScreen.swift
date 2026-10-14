@@ -130,7 +130,7 @@ struct OfflineScreen: View {
             }
             .padding(.bottom, 8)
 
-            ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+            ForEach(songs.enumerated(), id: \.element.id) { index, song in
                 Button {
                     player.play(songs.request(startingAt: index), from: context)
                 } label: {

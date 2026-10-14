@@ -156,6 +156,9 @@ public final class CaptureCoordinator {
     }
 
     private var scrobbleWatch: ScrobbleWatch?
+    /// Whether the first observation since launch has been checked for a play an earlier
+    /// run was still watching.
+    private var hasLookedForHeldPlay = false
 
     /// Holds a new play out of the scrobble queue until it has played long enough, by
     /// ``ScrobblePolicy``. With a share of 0 every song is kept the moment it's seen, skips
@@ -185,6 +188,10 @@ public final class CaptureCoordinator {
     /// playing, and lets it be scrobbled once that's enough. A different song playing ends
     /// the watch: whatever the play reached by then is all it gets.
     private func followScrobbleWatch(_ observation: NowPlayingObservation, now: Date) {
+        if !hasLookedForHeldPlay {
+            hasLookedForHeldPlay = true
+            if scrobbleWatch == nil { scrobbleWatch = heldPlayStillPlaying(observation, now: now) }
+        }
         guard var watch = scrobbleWatch else { return }
         if watch.isPlaying { watch.played += max(0, now.timeIntervalSince(watch.lastSeen)) }
         watch.lastSeen = now
@@ -203,6 +210,43 @@ public final class CaptureCoordinator {
         } else {
             scrobbleWatch = watch
         }
+    }
+
+    /// The watch an earlier run left behind, when the song it held back is still playing.
+    ///
+    /// The watch lives in memory, so when iOS ended Tracks in the background while Music
+    /// kept playing, the play stayed held for good and the song never scrobbled. Dedupe keeps
+    /// the same song from being captured again, so nothing else would start a new watch.
+    /// The time since it was kept counts as played, as long as that fits inside the song.
+    private func heldPlayStillPlaying(_ observation: NowPlayingObservation, now: Date) -> ScrobbleWatch? {
+        guard observation.isCapturable,
+              let needs = ScrobblePolicy().requiredPlayback(forDuration: observation.duration)
+        else { return nil }
+        let songKey = observation.catalogSongID ?? Self.metadataKey(for: observation)
+        let deviceID = DeviceIdentity.current
+        let imported = CaptureKind.imported.rawValue
+        var descriptor = FetchDescriptor<Capture>(
+            predicate: #Predicate {
+                $0.songKey == songKey && $0.capturedByDeviceID == deviceID && $0.kindRawValue != imported
+            },
+            sortBy: [SortDescriptor(\.capturedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        guard let capture = try? store.context.fetch(descriptor).first,
+              capture.lastScrobbleError == ScrobblePolicy.notPlayedEnoughReason,
+              capture.isHeldFromScrobbling
+        else { return nil }
+        let elapsed = now.timeIntervalSince(capture.capturedAt)
+        let length = observation.duration.flatMap { $0 > 0 ? $0 : nil } ?? CaptureSettings.assumedSongLength
+        guard elapsed >= 0, elapsed <= length else { return nil }
+        return ScrobbleWatch(
+            id: capture.persistentModelID,
+            songKey: songKey,
+            needs: needs,
+            played: elapsed,
+            lastSeen: now,
+            isPlaying: true
+        )
     }
 
     /// Identity for a track with no catalog ID yet (macOS, before the search runs).
@@ -225,6 +269,9 @@ public final class CaptureCoordinator {
     /// Leaves the Apple Music API alone for a while after writes fail for reasons that aren't
     /// any one song's fault.
     private(set) var writeBackoff = RetryBackoff()
+    /// The same for catalog searches and artwork lookups, which otherwise went out on every
+    /// ten-second poll while offline or without a token.
+    private(set) var lookupBackoff = RetryBackoff()
     /// The clock, replaceable so tests can step past the backoff.
     var now: () -> Date = { .now }
 
@@ -389,7 +436,7 @@ public final class CaptureCoordinator {
 
     /// macOS has no catalog ID until we search for one.
     private func resolveMissingCatalogIDs() async {
-        guard let catalogResolver else { return }
+        guard let catalogResolver, lookupBackoff.allows(at: now()) else { return }
         try? store.context.save()
         let unresolved = ((try? store.context.fetch(TracksStore.awaitingCatalogID())) ?? []).map {
             (
@@ -413,8 +460,10 @@ public final class CaptureCoordinator {
                 // this song, so it isn't an attempt, and every other row would fail the same
                 // way. The next drain tries again. Kept on the row so the probe can show why.
                 liveCapture(row.id)?.lastPlaylistWriteError = "Catalog search failed: \(error)"
+                lookupBackoff.recordFailure(at: now())
                 break
             }
+            lookupBackoff.reset()
             // Gone, or given an ID some other way, while the search was out.
             guard let capture = liveCapture(row.id), capture.songID.isEmpty else { continue }
             guard let match else {
@@ -445,7 +494,7 @@ public final class CaptureCoordinator {
     ///   there was nothing to ask or the request failed.
     @discardableResult
     private func backfillArtwork() async -> (asked: Int, filled: Int)? {
-        guard let catalogResolver else { return nil }
+        guard let catalogResolver, lookupBackoff.allows(at: now()) else { return nil }
         let excluded = currentArtworkMisses()
         try? store.context.save()
         let missing = ((try? store.context.fetch(
@@ -454,7 +503,10 @@ public final class CaptureCoordinator {
         guard !missing.isEmpty else { return nil }
 
         let songIDs = Array(Set(missing.map(\.songID)))
-        guard let urls = try? await catalogResolver.artworkURLs(forSongIDs: songIDs) else { return nil }
+        guard let urls = try? await catalogResolver.artworkURLs(forSongIDs: songIDs) else {
+            lookupBackoff.recordFailure(at: now())
+            return nil
+        }
 
         let rows = store.existingCaptures(missing.map(\.id))
         var filled = 0
@@ -504,6 +556,8 @@ public final class CaptureCoordinator {
     @discardableResult
     public func backfillAllArtwork() async -> Int {
         settings.artworkMisses = [:]
+        // Asked for by the person, so it tries now rather than waiting out an earlier failure.
+        lookupBackoff.reset()
         var total = 0
         // Every pass either fills its rows or sets their songs aside, so the next reaches
         // different ones, and the loop ends when nothing is left or a request fails. The
@@ -516,16 +570,29 @@ public final class CaptureCoordinator {
     }
 
     /// Creates the playlist on first use and remembers its ID.
+    ///
+    /// One already in the library with the same name is adopted instead. A new device often
+    /// drains before iCloud has brought the synced ID down, and a create whose answer was lost
+    /// still made the playlist; either way a second one would split the history.
     private func ensurePlaylist() async -> String? {
         if let existing = settings.playlistID { return existing }
+        let name = settings.playlistName
         do {
-            let id = try await playlistWriter.createPlaylist(
-                name: settings.playlistName,
-                description: "Songs Tracks captured from Apple Music Radio."
-            )
+            let id: String
+            if let found = try await playlistWriter.existingPlaylist(named: name) {
+                id = found
+            } else {
+                id = try await playlistWriter.createPlaylist(
+                    name: name,
+                    description: "Songs Tracks captured from Apple Music Radio."
+                )
+            }
+            // Synced down while the request was out: that one wins.
+            if let synced = settings.playlistID { return synced }
             settings.playlistID = id
             return id
         } catch {
+            writeBackoff.recordFailure(at: now())
             return nil
         }
     }

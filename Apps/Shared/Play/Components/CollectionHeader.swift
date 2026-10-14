@@ -302,14 +302,14 @@ struct CollectionHeader<Cover: View, More: View>: View {
                 stageLabel("Play", systemImage: "play.fill", iconOnly: iconsOnly)
                     .frame(minWidth: iconsOnly ? nil : 74)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .tint(fieldTint ?? .accentColor)
             .help("Play")
             Button(action: shuffle) {
                 stageLabel("Shuffle", systemImage: "shuffle", iconOnly: iconsOnly)
                     .frame(minWidth: iconsOnly ? nil : 74)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
             .help("Shuffle")
             Menu {
                 more
@@ -318,7 +318,7 @@ struct CollectionHeader<Cover: View, More: View>: View {
                     .labelStyle(.iconOnly)
             }
             .menuIndicator(.hidden)
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .fixedSize()
             .help("More")

@@ -33,7 +33,7 @@ private struct StageWindowContent: View {
     var body: some View {
         StageView { close() }
             .frame(minWidth: 640, minHeight: 400)
-            .background(WindowReader(window: $window))
+            .background { WindowReader(window: $window) }
             .onChange(of: window) { _, window in
                 guard let window, !window.styleMask.contains(.fullScreen) else { return }
                 window.collectionBehavior.insert(.fullScreenPrimary)

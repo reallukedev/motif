@@ -22,6 +22,8 @@ final class LastFMHistorySync {
     private let store: TracksStore
     private let settings: CaptureSettings
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// Which run is current, so a stopped run still unwinding can't write over a new one.
+    @ObservationIgnored private var runID = UUID()
 
     init(store: TracksStore, settings: CaptureSettings = CaptureSettings()) {
         self.store = store
@@ -65,36 +67,37 @@ final class LastFMHistorySync {
         }
         phase = .importing(LastFMHistoryImporter.Report())
         let importer = LastFMHistoryImporter(client: client, session: session, store: store, settings: settings)
+        let id = UUID()
+        runID = id
         task = Task {
+            var ending = Phase.idle
             do {
                 try await importer.run { [weak self] report in
-                    self?.phase = .importing(report)
-                    self?.readProgress()
+                    guard let self, self.runID == id else { return }
+                    self.phase = .importing(report)
+                    self.readProgress()
                 }
-                phase = .idle
             } catch is CancellationError {
-                phase = .idle
             } catch {
                 // Stop cancels a request in flight, which URLSession reports as its own error.
                 let wasStopped = Task.isCancelled || (error as? URLError)?.code == .cancelled
-                phase = wasStopped ? .idle : .failed(ScrobbleService.describe(error))
+                if !wasStopped { ending = .failed(ScrobbleService.describe(error)) }
             }
+            guard runID == id else { return }
+            phase = ending
             readProgress()
             task = nil
         }
     }
 
-    /// Stops a run. What it has read so far stays, and the next run picks up from there.
+    /// Stops a run at once, so a new one can start straight away. What it has read so far
+    /// stays, and the next run picks up from there.
     func stop() {
         task?.cancel()
-    }
-
-    /// Forgets how far imports got, for when the account is disconnected. The plays stay.
-    func forgetProgress() {
-        task?.cancel()
-        settings.lastFMHistoryProgress = nil
+        task = nil
+        runID = UUID()
         phase = .idle
-        progress = nil
+        readProgress()
     }
 
     /// Picks up a change of account.

@@ -139,7 +139,7 @@ struct CollectionTable<SongMenu: View>: View {
 
     var body: some View {
         LazyVStack(spacing: 0) {
-            ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+            ForEach(tracks.enumerated(), id: \.element.id) { index, track in
                 row(track, index: index)
             }
         }

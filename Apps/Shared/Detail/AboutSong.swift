@@ -97,7 +97,7 @@ enum SongAboutLookup {
     static func about(for profile: SongProfile, model: AppModel) async -> SongAbout? {
         let song = profile.song
         var about: SongAbout
-        if let track = model.yourMusic.index.tracks.first(where: { $0.identity == song.id }) {
+        if let track = model.yourMusic.index.tracks(withIdentity: song.id).first {
             about = SongAbout(track: track)
         } else if let found = await catalogSong(id: song.songID, isDemo: model.isDemoLaunch, tally: song) {
             about = SongAbout(song: found)
@@ -155,7 +155,7 @@ struct AboutSongSection: View {
             SectionHeader("About This Song")
             Card(padding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(parts.enumerated()), id: \.element) { index, part in
+                    ForEach(parts.enumerated(), id: \.element) { index, part in
                         if index > 0 {
                             Divider().padding(.leading, Metrics.cardPadding)
                         }

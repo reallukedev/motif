@@ -76,7 +76,7 @@ public enum TracksPlayerContext {
 /// without the app on screen. And since Tracks queued the music itself, each observation states
 /// whether it came from a station rather than leaving it to ``RadioHeuristic``.
 @MainActor
-public final class ApplicationMusicPlayerSource: NowPlayingSource, @unchecked Sendable {
+public final class ApplicationMusicPlayerSource: NowPlayingSource {
     private nonisolated let continuation = Mutex<AsyncStream<NowPlayingObservation>.Continuation?>(nil)
     private var task: Task<Void, Never>?
 

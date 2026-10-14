@@ -9,7 +9,7 @@ struct Card<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(CardBackground())
+            .background { CardBackground() }
     }
 }
 

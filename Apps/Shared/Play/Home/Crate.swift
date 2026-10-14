@@ -71,6 +71,8 @@ struct Crate: View {
     @FocusState private var isFocused: Bool
     #if os(macOS)
     @State private var isHovering = false
+    /// The crate's place under the fingers, which moves it on the Mac.
+    @State private var motion = CrateMotion()
     #endif
 
     /// Every record in order: the leading songs, the mixes, the trailing songs.
@@ -85,7 +87,11 @@ struct Crate: View {
         let items = items
         let current = items.first { $0.id == front } ?? (front.map(CrateEnd.isEnd) == true ? nil : cards.first)
         VStack(spacing: Self.detailsGap) {
+            #if os(macOS)
+            macFlow(items)
+            #else
             flow(items)
+            #endif
             Group {
                 if let current {
                     CrateDetails(record: record(for: current), showsTuner: $showsTuner)
@@ -94,7 +100,12 @@ struct Crate: View {
                     CrateEndDetails()
                 }
             }
-            .transition(.opacity)
+            // The old details go at once and the new ones fade in, so flipping through never
+            // shows two sets of words over each other.
+            .transition(.asymmetric(
+                insertion: .opacity.animation(.easeOut(duration: 0.16).delay(0.03)),
+                removal: .opacity.animation(.linear(duration: 0.05))
+            ))
             if cards.count > 1 || !items.isEmpty && items.count > cards.count {
                 // The mixes, one dot each: from among the songs none is filled, and a dot
                 // brings you back.
@@ -198,6 +209,7 @@ struct Crate: View {
 
     // MARK: - The flow
 
+    #if os(iOS)
     private func flow(_ items: [ForYouCard]) -> some View {
         // Taken out for the fan, which is worked out off the main actor as the crate scrolls.
         let (side, spacing, stillness) = (self.side, Self.spacing, reduceMotion)
@@ -349,7 +361,101 @@ struct Crate: View {
             }
         }
         .accessibilityAction { openFront(items) }
-        #if os(macOS)
+    }
+
+    #endif
+
+    #if os(macOS)
+    /// The crate on the Mac: the records follow two fingers on the trackpad as Cover Flow's
+    /// did, a flick carries on by its speed and settles on a record, and each record felt
+    /// as it reaches the middle. A swipe up or down passes through to the page.
+    private func macFlow(_ items: [ForYouCard]) -> some View {
+        macControls(macStage(items), items: items)
+    }
+
+    private func macStage(_ items: [ForYouCard]) -> some View {
+        let (side, spacing, stillness) = (self.side, Self.spacing, reduceMotion)
+        let depth = CrateFan.depth(width: width, side: side)
+        let row = row(items)
+        let firstRecord = row.hasLeadingEnd ? 1 : 0
+        return CrateStage(motion: motion, places: row.places, depth: depth) { place, distance in
+            Group {
+                switch row.slot(at: place) {
+                case .record(let index):
+                    macRecord(items[index], side: side)
+                case .leadingEnd:
+                    macEnd(CrateEnd.leading, side: side)
+                case .trailingEnd:
+                    macEnd(CrateEnd.trailing, side: side)
+                case nil:
+                    EmptyView()
+                }
+            }
+            .modifier(CrateFanModifier(distance: distance, side: side, depth: depth, reduceMotion: stillness))
+        }
+        .frame(height: side + Self.shadowRoom * 2)
+        .opacity(isPlaced ? 1 : 0)
+        .mask { Self.edgeFade }
+        .padding(.vertical, -Self.shadowRoom)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onAppear {
+            motion.pitch = side + spacing
+            motion.start()
+        }
+        .onDisappear { motion.stop() }
+        .onChange(of: side + spacing) { _, pitch in motion.pitch = pitch }
+        // Flipped by hand: the record passing through the middle is the one chosen.
+        .onChange(of: motion.place) { _, place in
+            guard motion.isDriven, let id = id(atPlace: place) else { return }
+            front = id
+            hasMoved = true
+        }
+        .onChange(of: motion.isMoving) { _, isMoving in
+            isScrolling = isMoving
+            guard !isMoving else { return }
+            // At rest, the record in the middle is the one chosen, however it got there.
+            if let id = id(atPlace: motion.place), id != front {
+                front = id
+                hasMoved = true
+            }
+            deal()
+        }
+        // A mouse's wheel turned sideways: a record a notch, from the crate as it is now.
+        .onChange(of: motion.wheelNotches) { old, new in
+            step(new > old ? 1 : -1)
+        }
+        // The cards can change under the one chosen, as the history arrives and songs are
+        // dealt to either side: it stays in the middle without a slide.
+        .onChange(of: "\(items.map(\.id).joined(separator: ","))|\(showsLeadingEnd)|\(leadID ?? "")", initial: true) {
+            if !hasMoved || !(items.contains { $0.id == front } || front.map(CrateEnd.isEnd) == true) {
+                front = leadID ?? cards.first?.id
+            }
+            motion.last = max(0, row.places - 1)
+            if let front, let place = place(of: front) { motion.jump(to: place) }
+            if !isPlaced {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { isPlaced = true }
+            }
+        }
+        .onChange(of: firstRecord) {
+            if let front, let place = place(of: front) { motion.jump(to: place) }
+        }
+    }
+
+    /// The crate's keys, hover arrows, focus ring and accessibility on the Mac.
+    private func macControls(_ content: some View, items: [ForYouCard]) -> some View {
+        content
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("For You")
+        .accessibilityValue(frontCard(items).map { record(for: $0).accessibilityTitle } ?? String(localized: "Finding More Songs"))
+        .accessibilityHint(frontCard(items).map { record(for: $0).frontHint } ?? "")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: step(1)
+            case .decrement: step(-1)
+            @unknown default: break
+            }
+        }
+        .accessibilityAction { openFront(items) }
         // The keyboard flips through the crate, as the arrows did in Cover Flow.
         .focusable()
         .focused($isFocused)
@@ -376,11 +482,38 @@ struct Crate: View {
                     .allowsHitTesting(false)
             }
         }
-        .onHover { isHovering = $0 }
-        #endif
+        .onHover { hovering in
+            isHovering = hovering
+            motion.isHovering = hovering
+        }
     }
 
-    #if os(macOS)
+    /// A record on the Mac: in front, a click opens or plays it; beside it, brings it to the
+    /// front.
+    private func macRecord(_ card: ForYouCard, side: CGFloat) -> some View {
+        let record = record(for: card)
+        let isFront = front == card.id
+        return Button {
+            if isFront { open(record) } else { move(to: card.id) }
+        } label: {
+            record.cover(side)
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.26), radius: Self.shadowRadius, y: Self.shadowDrop)
+        }
+        .buttonStyle(CrateCoverStyle(isFront: isFront))
+        .frame(width: side, height: side)
+        .contextMenu { CrateMenu(record: record, showsTuner: $showsTuner) }
+        .padding(.vertical, Self.shadowRoom)
+    }
+
+    private func macEnd(_ id: String, side: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: CoverImage.radius(for: side), style: .continuous)
+            .fill(Color.placeholderFill)
+            .overlay { ProgressView().controlSize(.large) }
+            .frame(width: side, height: side)
+            .padding(.vertical, Self.shadowRoom)
+    }
+
     /// Arrows at either side of the front record while the pointer is over the crate.
     private func hoverArrows(_ items: [ForYouCard]) -> some View {
         HStack {
@@ -441,10 +574,15 @@ struct Crate: View {
 
     /// Brings a record to the front, sliding the crate along to it.
     private func choose(_ id: String, animation: Animation) {
+        #if os(macOS)
+        front = id
+        if let place = place(of: id) { motion.slide(to: place, reduceMotion: reduceMotion) }
+        #else
         withAnimation(reduceMotion ? nil : animation) {
             front = id
             position.scrollTo(id: id, anchor: .center)
         }
+        #endif
     }
 
     private func frontCard(_ items: [ForYouCard]) -> ForYouCard? {
@@ -658,9 +796,13 @@ struct CratePlaceholder: View {
                     Label("Play", systemImage: "play.fill")
                         .frame(minWidth: 96)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
+                #if os(macOS)
+                .controlSize(.extraLarge)
+                #else
                 .controlSize(.large)
+                #endif
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .hidden()
                 .overlay { Capsule().fill(Color.placeholderFill) }
@@ -806,13 +948,13 @@ private struct CrateDetails: View {
                         .contentTransition(.symbolEffect(.replace))
                         .frame(minWidth: 96)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .disabled(!record.canPlay)
 
                 if let shuffle = record.shuffle {
                     Button("Shuffle", systemImage: "shuffle", action: shuffle)
                         .labelStyle(.iconOnly)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
                         .disabled(!record.canPlay)
                         .help("Shuffle")
@@ -827,13 +969,18 @@ private struct CrateDetails: View {
                         .labelStyle(.iconOnly)
                 }
                 .menuIndicator(.hidden)
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .fixedSize()
                 .help("More")
             }
             .buttonBorderShape(.capsule)
+            // The Mac's large glass circles are a size smaller than the Play capsule beside them.
+            #if os(macOS)
+            .controlSize(.extraLarge)
+            #else
             .controlSize(.large)
+            #endif
             // Buttons stop growing where they'd crowd each other off the row; their words are
             // already the largest on the page.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -909,7 +1056,7 @@ private struct CrateEndDetails: View {
                 Label("Play", systemImage: "play.fill")
                     .frame(minWidth: 96)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .disabled(true)
@@ -938,7 +1085,7 @@ private struct CrateFavoriteButton: View {
         }
         .labelStyle(.iconOnly)
         .contentTransition(.symbolEffect(.replace))
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .sensoryFeedback(.success, trigger: starred)
         .help(isFavorite ? "Undo Favorite" : "Favorite")
@@ -1301,3 +1448,322 @@ struct MosaicCover: View {
         CoverImage(cover: cover, size: side, isBare: true)
     }
 }
+
+#if os(macOS)
+/// Where the crate is on the Mac, in records, and what moves it: two fingers on the trackpad,
+/// a flick's carry, a spring to the record chosen. Kept apart from the crate so that only the
+/// records redraw as it moves, frame by frame.
+@MainActor
+@Observable
+final class CrateMotion {
+    /// The place in the middle, fractional while moving.
+    private(set) var position: Double = 0
+    /// The record nearest the middle.
+    private(set) var place = 0
+    /// Moving by hand or by a flick's carry, rather than resting or sliding to a record chosen.
+    private(set) var isDriven = false
+    /// Anything moving it at all.
+    private(set) var isMoving = false
+    /// Where a slide began, so the records it passes stay drawn on the way.
+    @ObservationIgnored private(set) var from: Double = 0
+
+    @ObservationIgnored var pitch: CGFloat = 280
+    @ObservationIgnored var last = 0
+    @ObservationIgnored var isHovering = false
+    /// A mouse wheel's notches turned sideways over the crate, counted up for each one toward
+    /// the later records and down for each toward the earlier.
+    private(set) var wheelNotches = 0
+
+    @ObservationIgnored private var raw: Double = 0
+    @ObservationIgnored private var isTracking = false
+    @ObservationIgnored private var axis: Axis?
+    @ObservationIgnored private var ignoresMomentum = false
+    @ObservationIgnored private var samples: [(time: TimeInterval, position: Double)] = []
+    @ObservationIgnored private var monitor: Any?
+    @ObservationIgnored private var spring: CrateSpring?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            let scroll = CrateScrollEvent(event)
+            let consumed = MainActor.assumeIsolated { self?.handle(scroll) ?? false }
+            return consumed ? nil : event
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        spring?.stop()
+        spring = nil
+        settle()
+    }
+
+    /// Straight there, unseen: the row changed under the record in front.
+    func jump(to place: Int) {
+        guard !isTracking, spring == nil || !isDriven else { return }
+        spring?.stop()
+        spring = nil
+        set(Double(place))
+        from = position
+        settle()
+    }
+
+    /// Slides to a record chosen with a click or a key.
+    func slide(to place: Int, reduceMotion: Bool) {
+        isTracking = false
+        isDriven = false
+        self.place = place
+        if reduceMotion {
+            jump(to: place)
+            return
+        }
+        animate(to: place, velocity: spring?.velocity ?? 0)
+    }
+
+    // MARK: - The trackpad
+
+    /// Whether the crate takes a scroll, rather than the page.
+    private func handle(_ event: CrateScrollEvent) -> Bool {
+        // Fingers down on the trackpad over the crate: a new gesture, whichever way it goes.
+        if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
+            guard isHovering else {
+                isTracking = false
+                return false
+            }
+            if !isTracking { begin() }
+        }
+        if isTracking, !event.phase.isEmpty {
+            if axis == nil {
+                let (dx, dy) = (abs(event.dx), abs(event.dy))
+                if dx > dy { axis = .horizontal } else if dy > dx { axis = .vertical }
+            }
+            let ends = event.phase.contains(.ended) || event.phase.contains(.cancelled)
+            guard axis == .horizontal else {
+                if ends || axis == .vertical { end(flicking: false) }
+                return false
+            }
+            move(by: event.dx, at: event.time)
+            if ends {
+                ignoresMomentum = true
+                end(flicking: true)
+            }
+            return true
+        }
+        // The trackpad's own carry after a flick, which the crate makes itself.
+        if ignoresMomentum, !event.momentum.isEmpty {
+            if event.momentum.contains(.ended) || event.momentum.contains(.cancelled) { ignoresMomentum = false }
+            return true
+        }
+        ignoresMomentum = false
+        // A mouse's wheel turned sideways, or with Shift held: a record a notch.
+        if !event.isPrecise, isHovering, abs(event.dx) > abs(event.dy) {
+            wheelNotches += event.dx > 0 ? -1 : 1
+            return true
+        }
+        return false
+    }
+
+    private func begin() {
+        spring?.stop()
+        spring = nil
+        isTracking = true
+        axis = nil
+        raw = position
+        samples = []
+        from = position
+    }
+
+    private func move(by delta: CGFloat, at time: TimeInterval) {
+        guard pitch > 0 else { return }
+        if !isDriven {
+            isDriven = true
+            isMoving = true
+        }
+        // The records follow the fingers: fingers to the right bring the earlier ones in.
+        raw -= Double(delta / pitch)
+        let wasPastEnd = position < 0 || position > Double(last)
+        set(CrateFling.banded(raw, last: Double(last)))
+        let isPastEnd = position < 0 || position > Double(last)
+        if isPastEnd, !wasPastEnd { CrateHaptics.play(.end) }
+        samples.append((time, position))
+        samples.removeAll { time - $0.time > 0.1 }
+    }
+
+    private func end(flicking: Bool) {
+        isTracking = false
+        axis = nil
+        guard flicking, isDriven else {
+            // Fingers that rested on a moving crate stopped it: on to the nearest record.
+            let nearest = min(max(0, Int(position.rounded())), last)
+            if abs(position - Double(nearest)) > 0.001 {
+                animate(to: nearest, velocity: 0)
+            } else {
+                settle()
+            }
+            return
+        }
+        var velocity = 0.0
+        if let first = samples.first, let latest = samples.last, latest.time - first.time > 0.008 {
+            velocity = (latest.position - first.position) / (latest.time - first.time)
+        }
+        animate(to: CrateFling.target(from: position, velocity: velocity, last: last), velocity: velocity)
+    }
+
+    private func animate(to target: Int, velocity: Double) {
+        spring?.stop()
+        from = position
+        isMoving = true
+        let spring = CrateSpring(position: position, velocity: velocity, target: Double(target)) { [weak self] value, done in
+            guard let self else { return }
+            self.set(value)
+            if done {
+                self.spring = nil
+                self.from = self.position
+                self.settle()
+            }
+        }
+        self.spring = spring
+        spring.start()
+    }
+
+    private func set(_ value: Double) {
+        position = value
+        let nearest = min(max(0, Int(value.rounded())), last)
+        guard nearest != place else { return }
+        place = nearest
+        if isDriven, isTracking || spring != nil { CrateHaptics.play(.detent) }
+    }
+
+    private func settle() {
+        isDriven = false
+        isMoving = false
+    }
+}
+
+/// What the crate needs of a scroll event, read on the spot.
+private struct CrateScrollEvent: Sendable {
+    let phase: NSEvent.Phase
+    let momentum: NSEvent.Phase
+    let dx: CGFloat
+    let dy: CGFloat
+    let isPrecise: Bool
+    let time: TimeInterval
+
+    init(_ event: NSEvent) {
+        phase = event.phase
+        momentum = event.momentumPhase
+        dx = event.scrollingDeltaX
+        dy = event.scrollingDeltaY
+        isPrecise = event.hasPreciseScrollingDeltas
+        time = event.timestamp
+    }
+}
+
+/// A critically damped spring run on the display's refresh, so each frame of a slide or a
+/// flick's carry lands where it should and the record on top changes as it passes.
+@MainActor
+private final class CrateSpring: NSObject {
+    private var position: Double
+    private(set) var velocity: Double
+    private let target: Double
+    private let update: (Double, Bool) -> Void
+    private var link: CADisplayLink?
+    private var lastTime: CFTimeInterval?
+
+    /// About a third of a second to rest, without overshooting a record.
+    private static let stiffness = 320.0
+    private static let damping = 2 * stiffness.squareRoot() * 0.95
+
+    init(position: Double, velocity: Double, target: Double, update: @escaping (Double, Bool) -> Void) {
+        self.position = position
+        self.velocity = velocity
+        self.target = target
+        self.update = update
+    }
+
+    func start() {
+        guard let screen = NSScreen.main else {
+            update(target, true)
+            return
+        }
+        let link = screen.displayLink(target: self, selector: #selector(tick(_:)))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let now = link.targetTimestamp
+        let dt = min(1.0 / 30, max(0, now - (lastTime ?? link.timestamp)))
+        lastTime = now
+        // Small steps keep a stiff spring steady whatever the refresh rate.
+        let steps = max(1, Int((dt / 0.004).rounded(.up)))
+        let h = dt / Double(steps)
+        for _ in 0..<steps {
+            let force = -Self.stiffness * (position - target) - Self.damping * velocity
+            velocity += force * h
+            position += velocity * h
+        }
+        if abs(position - target) < 0.001, abs(velocity) < 0.02 {
+            stop()
+            update(target, true)
+        } else {
+            update(position, false)
+        }
+    }
+}
+
+/// The records near the middle, each turned and stacked by how far it is from it. Reads the
+/// crate's motion itself, so a frame of movement redraws only this.
+private struct CrateStage<Record: View>: View {
+    let motion: CrateMotion
+    let places: Int
+    let depth: Double
+    @ViewBuilder let record: (_ place: Int, _ distance: Double) -> Record
+
+    var body: some View {
+        let position = motion.position
+        let reach = depth + 1.5
+        let lowest = max(0, Int((min(position, motion.from) - reach).rounded(.down)))
+        let highest = min(places - 1, Int((max(position, motion.from) + reach).rounded(.up)))
+        ZStack {
+            if lowest <= highest {
+                ForEach(lowest...highest, id: \.self) { place in
+                    let distance = Double(place) - position
+                    record(place, distance)
+                        .zIndex(-abs(distance))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// The fan as real transforms rather than a visual effect, so a click lands on the record
+/// where it's drawn.
+private struct CrateFanModifier: ViewModifier {
+    let distance: Double
+    let side: CGFloat
+    let depth: Double
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        let a = min(abs(distance), depth + 1)
+        let sign: Double = distance < 0 ? -1 : 1
+        let near = min(a, 1)
+        let far = max(0, a - 1)
+        content
+            .rotation3DEffect(.degrees(reduceMotion ? 0 : -sign * near * 12), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
+            .scaleEffect(CrateFan.scale(a))
+            .brightness(max(-0.4, -0.1 * near - 0.07 * far))
+            .opacity(min(1, max(0, depth + 1 - abs(distance))))
+            .offset(x: sign * CrateFan.reach(a) * side)
+            .allowsHitTesting(abs(distance) < depth + 0.5)
+    }
+}
+#endif

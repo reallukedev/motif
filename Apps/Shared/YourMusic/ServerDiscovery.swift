@@ -80,9 +80,13 @@ final class ServerDiscovery {
     @ObservationIgnored private unowned let music: YourMusic
     @ObservationIgnored private var seen = Set<String>()
     @ObservationIgnored private var failuresInARow = 0
-    @ObservationIgnored private var forYouLoads: [String: (seeds: [String], task: Task<Void, Never>)] = [:]
-    /// Going on from the next artist, per server: one at a time.
-    @ObservationIgnored private var goingOn: [String: Task<Void, Never>] = [:]
+    /// A first load under way, per server: it clears itself as it ends.
+    @ObservationIgnored private var forYouLoads: [String: (id: UUID, seeds: [String], task: Task<Void, Never>)] = [:]
+    /// Going on from the next artist, per server: one at a time, cleared as it ends.
+    @ObservationIgnored private var goingOn: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    /// Counts each time a shelf going on has had its answer, per server, even one that found
+    /// nothing: a shelf whose end is still in view asks again after each.
+    private(set) var answers: [String: Int] = [:]
     /// How often each server may be asked to go on: a few at once, then one every few
     /// seconds, however fast the shelves are scrolled.
     @ObservationIgnored private var budgets: [String: RequestBudget] = [:]
@@ -190,7 +194,9 @@ final class ServerDiscovery {
             await loading.task.value
             return
         }
+        let id = UUID()
         let task = Task {
+            defer { if forYouLoads[serverID]?.id == id { forYouLoads[serverID] = nil } }
             // What's on show stays until the new picks are ready; an empty shelf fills as they come.
             var fresh = ForYou(from: Array(seeds.prefix(ServerMix.seedCount)), queue: seeds, loadedAt: .now, picked: picked)
             let replaces = forYou[serverID].map { !$0.songs.isEmpty || !$0.suggested.isEmpty } ?? false
@@ -212,33 +218,44 @@ final class ServerDiscovery {
         }
         // From other artists: the old load stops, rather than finishing over this one.
         forYouLoads[serverID]?.task.cancel()
-        forYouLoads[serverID] = (seeds, task)
+        forYouLoads[serverID] = (id, seeds, task)
         await task.value
-        if forYouLoads[serverID]?.seeds == seeds { forYouLoads[serverID] = nil }
     }
 
-    /// Finds more for a shelf that's been scrolled to its end: shows the next song already
+    /// Finds more for a shelf that's been scrolled to its end: shows the next songs already
     /// found, and goes on from the next artist only when those run out, as the server's budget
-    /// allows. One song a call: the shelf asks again while its end is in view, so songs come
-    /// one by one as covers are there, and stop coming when it's scrolled away.
-    func loadMore(for serverID: String, shelf: Shelf) async {
-        guard var current = forYou[serverID], current.canGoOn, forYouLoads[serverID] == nil else { return }
-        if let running = goingOn[serverID] {
-            await running.value
-            return
+    /// allows. Up to `want` songs a call, each shown as its cover is there; the shelf asks
+    /// again while its end is in view, and stops when it's scrolled away. A first load, or
+    /// another shelf going on, is waited for first, rather than the call coming to nothing.
+    func loadMore(for serverID: String, shelf: Shelf, want: Int = SuggestionShelfPaging.rowsPerColumn) async {
+        while true {
+            if let loading = forYouLoads[serverID] {
+                await loading.task.value
+            } else if let running = goingOn[serverID] {
+                await running.task.value
+            } else {
+                break
+            }
+            guard !Task.isCancelled else { return }
         }
+        // With no server to ask, going on would find nothing, and be asked again at once.
+        guard var current = forYou[serverID], current.canGoOn, music.servers.client(for: serverID) != nil else { return }
+        let id = UUID()
         let task = Task {
+            defer {
+                if goingOn[serverID]?.id == id { goingOn[serverID] = nil }
+                answers[serverID, default: 0] += 1
+            }
             current.isFilling = true
             forYou[serverID] = current
-            current = await goOn(from: current, for: shelf, serverID: serverID, publishing: true, want: 1)
+            current = await goOn(from: current, for: shelf, serverID: serverID, publishing: true, want: max(1, want))
             current.isFilling = false
             // Picks made while this went on, as when they were made again, win.
             guard forYou[serverID]?.from == current.from else { return }
             forYou[serverID] = current
         }
-        goingOn[serverID] = task
+        goingOn[serverID] = (id, task)
         await task.value
-        goingOn[serverID] = nil
     }
 
     /// Adds up to `want` songs to one shelf, each shown as soon as its cover is there. From songs
@@ -246,8 +263,9 @@ final class ServerDiscovery {
     /// first: a few of their songs, songs like them, and the new artists those bring, who join
     /// the end of the queue so it never runs dry. Songs by artists you know wait for Picked for
     /// You, with any of theirs you have and haven't heard; the rest wait for Suggested Songs and
-    /// Keep Exploring. Covers are checked one song at a time, and songs whose covers the server
-    /// couldn't find are left out: the server is only asked about songs about to show.
+    /// Keep Exploring. Covers are checked for as many songs as are still wanted, a few at once,
+    /// and songs whose covers the server couldn't find are left out: the server is only asked
+    /// about songs about to show.
     private func goOn(from start: ForYou, for shelf: Shelf, serverID: String, publishing: Bool, want: Int = columnSize) async -> ForYou {
         var feed = start
         var shown = 0
@@ -258,7 +276,7 @@ final class ServerDiscovery {
                 add(find.songs, from: find.artist, includingYours: false, to: &feed, serverID: serverID)
             }
             let waiting = shelf == .picks ? feed.waitingPicks : feed.waitingOthers
-            guard let next = waiting.first else {
+            guard !waiting.isEmpty else {
                 // With no artist to go on from, or none the budget allows yet, a slower search
                 // still going brings songs sooner: its songs join the lists as it ends.
                 if let oldest = lateSearches[serverID]?.first {
@@ -273,15 +291,16 @@ final class ServerDiscovery {
                 goneOn += 1
                 continue
             }
-            if shelf == .picks { feed.waitingPicks.removeFirst() } else { feed.waitingOthers.removeFirst() }
-            guard await hasCover(next) else { continue }
+            let batch = Array(waiting.prefix(want - shown))
+            if shelf == .picks { feed.waitingPicks.removeFirst(batch.count) } else { feed.waitingOthers.removeFirst(batch.count) }
+            let found = await withCovers(batch)
             switch shelf {
-            case .picks: feed.songs.append(next)
-            case .suggested: feed.suggested.append(next)
-            case .further: feed.further.append(next)
+            case .picks: feed.songs += found
+            case .suggested: feed.suggested += found
+            case .further: feed.further += found
             }
-            shown += 1
-            if publishing { forYou[serverID] = feed }
+            shown += found.count
+            if publishing, !found.isEmpty { forYou[serverID] = feed }
         }
         if publishing { forYou[serverID] = feed }
         return feed
@@ -361,6 +380,21 @@ final class ServerDiscovery {
     private func hasCover(_ song: LocalTrack) async -> Bool {
         guard case .server = song.artwork, let url = music.artworkURL(song.artwork) else { return !song.isFromServer }
         return await ArtworkImages.shared.hasCover(url)
+    }
+
+    /// The songs with covers to show, in order, checked a few at once: covers on disk answer at
+    /// once, and a server's are still fetched one at a time by ``ArtworkImages``.
+    private func withCovers(_ songs: [LocalTrack]) async -> [LocalTrack] {
+        let checks = songs.indices.map { index -> (index: Int, url: URL?, otherwise: Bool) in
+            let song = songs[index]
+            guard case .server = song.artwork, let url = music.artworkURL(song.artwork) else { return (index, nil, !song.isFromServer) }
+            return (index, url, false)
+        }
+        let kept = await SuggestionPaging.kept(checks) { check in
+            guard let url = check.url else { return check.otherwise }
+            return await ArtworkImages.shared.hasCover(url)
+        }
+        return kept.map { songs[$0.index] }
     }
 
     /// Fetches the first of a list's covers now, the ones on screen when it appears; the rest

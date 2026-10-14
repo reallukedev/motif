@@ -76,12 +76,29 @@ struct ScrobbleResponseTests {
         #expect(try LastFMClient.scrobbleOutcomes(from: json, sent: 2) == [.accepted, .accepted])
     }
 
-    /// Guessing which were ignored would mark the wrong rows.
-    @Test("entries that can't be lined up, with some ignored, are unreadable")
-    func unalignedWithIgnored() {
+    /// Last.fm took the batch. Treating it as unreadable sent it again, scrobbling every
+    /// accepted entry twice.
+    @Test("entries that can't be lined up, with some ignored, still count as taken")
+    func unalignedWithIgnored() throws {
         let json: [String: Any] = ["scrobbles": ["scrobble": [String: Any](), "@attr": ["ignored": 1, "accepted": 1]]]
+        #expect(try LastFMClient.scrobbleOutcomes(from: json, sent: 2) == [.accepted, .accepted])
+    }
+
+    /// A 200 that doesn't mention the scrobbles used to mark them all sent.
+    @Test("a response without a scrobbles report is unreadable")
+    func missingReport() {
         #expect(throws: LastFMError.malformedResponse) {
-            try LastFMClient.scrobbleOutcomes(from: json, sent: 2)
+            try LastFMClient.scrobbleOutcomes(from: [:], sent: 2)
+        }
+    }
+
+    @Test("a 200 that isn't JSON is unreadable, not a success")
+    func htmlBody() async {
+        await #expect(throws: LastFMError.malformedResponse) {
+            try await client(answering: "<html><body>Sign in to Wi-Fi</body></html>").submit(
+                [Scrobble(artist: "BANKS", track: "Love Is Unkind", playedAt: played)],
+                session: session
+            )
         }
     }
 
@@ -150,6 +167,11 @@ struct ScrobbleDrainTests {
             .status(200, body: #"{"error":16,"message":"There was a temporary error processing your request."}"#),
             .status(200, body: #"{"error":29,"message":"Rate Limit Exceeded"}"#),
             .status(403, body: #"{"error":9,"message":"Invalid session key - Please re-authenticate"}"#),
+            // A captive portal, a proxy or an edge error page, none of which are Last.fm.
+            .status(200, body: "<html>Sign in to Wi-Fi</html>"),
+            .status(200, body: "{}"),
+            .status(403, body: "<html>Forbidden</html>"),
+            .status(404, body: ""),
             .offline,
         ]
     )
@@ -192,11 +214,33 @@ struct ScrobbleDrainTests {
         await service.drain()
         #expect(lastFM.requests.count == 1)
 
+        // Each failure in a row doubles the wait: 30, then 60, then 120 seconds.
+        for (failure, wait) in [(2, 30.0), (3, 60.0)] {
+            clock.advance(by: wait - 0.5)
+            await service.drain()
+            #expect(lastFM.requests.count == failure - 1)
+            clock.advance(by: 0.5)
+            await service.drain()
+            #expect(lastFM.requests.count == failure)
+        }
+        clock.advance(by: 119.5)
+        await service.drain()
+        #expect(lastFM.requests.count == 3)
+
         lastFM.acceptEverything()
-        clock.advance(by: 31)
+        clock.advance(by: 0.5)
         #expect(await service.drain() == 1)
         #expect(rows[0].scrobbledAt != nil)
         #expect(service.lastError == nil)
+
+        // A success clears the wait, so the next failure waits 30 seconds again.
+        try owed("Two")
+        lastFM.fail(with: .status(503, body: "{}"))
+        await service.drain()
+        #expect(lastFM.requests.count == 5)
+        clock.advance(by: 30)
+        await service.drain()
+        #expect(lastFM.requests.count == 6)
     }
 
     /// Too old (3) is about the scrobble and will never pass. It used to be marked scrobbled.
@@ -277,6 +321,77 @@ struct ScrobbleDrainTests {
         #expect(late.scrobbledAt != nil)
     }
 
+    /// Apple's recently-played list covers the whole account, so the iPhone imported songs
+    /// the Mac had already scrobbled and sent them again.
+    @Test("an import Last.fm already has from another device is not sent again")
+    func importAlreadyScrobbled() async throws {
+        let found = base.addingTimeInterval(3 * 60 * 60)
+        let imported = Capture(
+            songID: "1", title: "Love Is Unkind", artistName: "BANKS",
+            kind: .imported, capturedAt: found, deviceID: DeviceIdentity.current
+        )
+        let fresh = Capture(
+            songID: "2", title: "You", artistName: "Mk.gee",
+            kind: .imported, capturedAt: found, deviceID: DeviceIdentity.current
+        )
+        store.context.insert(imported)
+        store.context.insert(fresh)
+        try store.context.save()
+        lastFM.history = [(title: "Love Is Unkind", artist: "BANKS", playedAt: base)]
+        lastFM.acceptEverything()
+
+        #expect(await service().drain() == 1)
+
+        let sentTitles = lastFM.scrobbleRequests.flatMap { fields in
+            fields.filter { $0.key.hasPrefix("track[") }.map(\.value)
+        }
+        #expect(sentTitles == ["You"])
+        #expect(imported.scrobbledAt != nil)
+        #expect(fresh.scrobbledAt != nil)
+    }
+
+    @Test("an import is held when Last.fm's history can't be read")
+    func importWaitsForHistory() async throws {
+        let imported = Capture(
+            songID: "1", title: "Love Is Unkind", artistName: "BANKS",
+            kind: .imported, capturedAt: base, deviceID: DeviceIdentity.current
+        )
+        store.context.insert(imported)
+        try store.context.save()
+        lastFM.fail(with: .offline)
+
+        await service().drain()
+
+        #expect(lastFM.scrobbleRequests.isEmpty)
+        #expect(imported.scrobbledAt == nil)
+        #expect(imported.scrobbleAttempts == 0)
+    }
+
+    @Test("a scrobble only accounts for one import of the same song")
+    func oneScrobbleOneImport() throws {
+        let store = try TracksStore(inMemory: true)
+        let rows = (0..<2).map { _ in
+            Capture(songID: "1", title: "You", artistName: "Mk.gee", kind: .imported, capturedAt: base)
+        }
+        for row in rows { store.context.insert(row) }
+        try store.context.save()
+        let plays = rows.map {
+            ScrobbleService.ImportedPlay(
+                id: $0.persistentModelID,
+                key: HistoryImport.key(title: $0.title, artistName: $0.artistName),
+                foundAt: base
+            )
+        }
+        let history = [ScrobbledTrack(title: "you", artistName: "MK.GEE", playedAt: base.addingTimeInterval(-60))]
+
+        let found = ScrobbleService.alreadyScrobbled(plays, history: history, window: 24 * 60 * 60)
+        #expect(found.count == 1)
+        // Outside the window, or after the import found it, is a different play.
+        #expect(ScrobbleService.alreadyScrobbled(plays, history: history, window: 30).isEmpty)
+        let later = [ScrobbledTrack(title: "You", artistName: "Mk.gee", playedAt: base.addingTimeInterval(60))]
+        #expect(ScrobbleService.alreadyScrobbled(plays, history: later, window: 24 * 60 * 60).isEmpty)
+    }
+
     /// Sync can merge a row away while its scrobble is out. Writing to the deleted row trapped.
     @Test("a row deleted while its scrobble is out is skipped")
     func deletedWhileOut() async throws {
@@ -319,6 +434,18 @@ final class FakeLastFM: @unchecked Sendable {
     private var respond: @Sendable (Int) throws -> (Int, String) = { _ in (200, "{}") }
     private var _gate: Gate?
     private var _delay: Duration?
+    private var _history: [(title: String, artist: String, playedAt: Date)] = []
+
+    /// What `user.getRecentTracks` lists, newest first.
+    var history: [(title: String, artist: String, playedAt: Date)] {
+        get { lock.withLock { _history } }
+        set { lock.withLock { _history = newValue } }
+    }
+
+    /// The `track.scrobble` requests, leaving out history lookups.
+    var scrobbleRequests: [[String: String]] {
+        requests.filter { $0["method"] == "track.scrobble" }
+    }
 
     /// The decoded form of every request, in order.
     var requests: [[String: String]] { lock.withLock { _requests } }
@@ -361,6 +488,12 @@ final class FakeLastFM: @unchecked Sendable {
             }
             if let delay { try? await Task.sleep(for: delay) }
             await gate?.wait()
+            if fields["method"] == "user.getRecentTracks" {
+                // Fails the way a scrobble would, otherwise lists the history.
+                let (status, body) = try respond(0)
+                let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+                return (Data((status == 200 ? Self.recentTracks(history) : body).utf8), response)
+            }
             let count = fields.keys.filter { $0.hasPrefix("timestamp[") }.count
             let (status, body) = try respond(count)
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
@@ -377,6 +510,13 @@ final class FakeLastFM: @unchecked Sendable {
         let scrobble = entries.count == 1 ? entries[0] : "[\(entries.joined(separator: ","))]"
         let ignored = codes.filter { $0 != 0 }.count
         return ##"{"scrobbles":{"scrobble":\##(scrobble),"@attr":{"ignored":\##(ignored),"accepted":\##(codes.count - ignored)}}}"##
+    }
+
+    static func recentTracks(_ tracks: [(title: String, artist: String, playedAt: Date)]) -> String {
+        let entries = tracks.map { track in
+            ##"{"name":"\##(track.title)","artist":{"#text":"\##(track.artist)"},"date":{"uts":"\##(Int(track.playedAt.timeIntervalSince1970))"}}"##
+        }
+        return ##"{"recenttracks":{"track":[\##(entries.joined(separator: ","))],"@attr":{"total":"\##(tracks.count)","totalPages":"1"}}}"##
     }
 
     private static func decode(_ body: Data) -> [String: String] {

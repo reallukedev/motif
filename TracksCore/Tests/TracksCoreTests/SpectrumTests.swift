@@ -4,6 +4,15 @@ import Foundation
 
 @Suite("Spectrum layout")
 struct SpectrumLayoutTests {
+    /// A stream reporting 0 Hz, or a caller asking for no bands, used to trap.
+    @Test("A nonsense rate or no bands lays out nothing", arguments: [(0.0, 24), (.nan, 24), (.infinity, 24), (44_100, 0)])
+    func nothingToLayOut(sampleRate: Double, bands: Int) {
+        let layout = SpectrumLayout(size: 4096, sampleRate: sampleRate, bandCount: bands)
+        #expect(layout.bins.isEmpty)
+        #expect(SpectrumAnalyzer(size: 4096, sampleRate: sampleRate, bandCount: bands) == nil)
+        #expect(SpectrumLayout.size(for: sampleRate) >= 1024)
+    }
+
     @Test("Every band has bins of its own, in order", arguments: [22_050.0, 44_100, 48_000, 96_000])
     func distinctBands(sampleRate: Double) {
         let size = SpectrumLayout.size(for: sampleRate)

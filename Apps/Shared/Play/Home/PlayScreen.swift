@@ -14,6 +14,7 @@ struct PlayScreen: View {
     @AppStorage(PlayPreferences.layoutKey) private var storedLayout = ""
     @AppStorage(PlayPreferences.tracksRadioKey) private var isRadioOn = true
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
+    @AppStorage(NearbyDevices.storageKey) private var showsDevices = true
     @State private var showsSubscriptionOffer = false
     @State private var showsSettings = LaunchScene.opensPlaySettings
     @State private var showsEditor = LaunchScene.opensEditPlay
@@ -36,10 +37,22 @@ struct PlayScreen: View {
                     }
 
                     if feed.appleMusicState == .failed {
+                        #if os(iOS)
                         Label("Couldn't reach Apple Music. Pull down to try again.", systemImage: "wifi.exclamationmark")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, PlayMetrics.margin)
+                        #else
+                        // No pull to refresh on the Mac.
+                        HStack(spacing: 10) {
+                            Label("Couldn't reach Apple Music.", systemImage: "wifi.exclamationmark")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Button("Try Again") { Task { await reload() } }
+                                .controlSize(.small)
+                        }
+                        .padding(.horizontal, PlayMetrics.margin)
+                        #endif
                     }
 
                     // Past everything else, suggestions for as long as you scroll, straight
@@ -67,7 +80,7 @@ struct PlayScreen: View {
         // On the Mac, Settings is the app menu's.
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if NearbyDevices.isOn { DevicesButton() }
+                if showsDevices { DevicesButton(opensAtLaunch: true) }
                 Button("Settings", systemImage: "gearshape") { showsSettings = true }
             }
         }
@@ -79,10 +92,7 @@ struct PlayScreen: View {
             PlayLayoutEditor()
         }
         .refreshCommand()
-        .refreshable {
-            await feed.loadAppleMusic(force: true)
-            await feed.loadFromYourArtists(force: true)
-        }
+        .refreshable { await reload() }
         .task(id: model.musicAuthorization) {
             await feed.loadAppleMusic()
         }
@@ -98,6 +108,11 @@ struct PlayScreen: View {
     }
 
     private var layout: PlayLayout { PlayLayout(stored: storedLayout) }
+
+    private func reload() async {
+        await feed.loadAppleMusic(force: true)
+        await feed.loadFromYourArtists(force: true)
+    }
 
     #if os(macOS)
     private static let topPadding: CGFloat = 20
@@ -207,7 +222,7 @@ struct PlayScreen: View {
             ) {
                 if feed.subscription?.canBecomeSubscriber == true {
                     Button("Try Apple Music") { showsSubscriptionOffer = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 }
             }
         }
@@ -231,7 +246,7 @@ struct PlayScreen: View {
                 message: String(localized: "Search for a song, or open your library. Tracks keeps every song you play here, and makes mixes from them as you listen.")
             ) {
                 Button("Search Apple Music") { model.beginSearch(in: .appleMusic) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
             }
             .padding(.horizontal, PlayMetrics.margin)
         } else {
@@ -381,13 +396,13 @@ struct PlayAccessCard: View {
                         isRequesting = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .disabled(isRequesting)
             } else {
                 Button("Open Settings") {
                     if let url = SystemSettingsLink.musicAccess { openURL(url) }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
             }
         }
         .onAppear(perform: model.refreshMusicAuthorization)

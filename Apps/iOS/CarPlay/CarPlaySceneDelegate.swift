@@ -242,18 +242,42 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             // access, or your own music changes.
             let music = model.yourMusic
             let key = model.musicSource == .yourMusic
-                ? "yourMusic.\(music.index.albums.count).\(music.playlists.all.count).\(music.downloads.items.isEmpty)"
-                : "appleMusic.\(MusicAuthorization.currentStatus)"
-            guard libraryBuiltFor != key else { return }
+                ? "yourMusic.\(music.index.albums.count).\(music.playlists.all.count).\(music.downloads.items.isEmpty).\(MusicAuthorization.currentStatus)"
+                : "appleMusic.\(MusicAuthorization.currentStatus).\(music.hasMusic)"
+            let libraryKey = "\(key).\(model.player.current == nil)"
+            guard libraryBuiltFor != libraryKey else { return }
             libraryRefresh?.cancel()
             libraryRefresh = Task {
                 let shelves = model.musicSource == .yourMusic ? await yourMusicLibrarySections() : await appleMusicLibrarySections()
                 guard !Task.isCancelled else { return }
                 library.showsSpinnerWhileEmpty = false
-                library.updateSections(shelves)
-                libraryBuiltFor = key
+                library.updateSections(Self.capped(sourceSwitchSection().map { [$0] + shelves } ?? shelves))
+                libraryBuiltFor = libraryKey
             }
         }
+    }
+
+    /// The other source, a tap away at the top of Library, when there's music in both: the song
+    /// on carries on from the other source when it has it, so switching while driving doesn't
+    /// stop the music.
+    private func sourceSwitchSection() -> CPListSection? {
+        guard model.isDemoLaunch || (MusicAuthorization.currentStatus == .authorized && model.yourMusic.hasMusic) else { return nil }
+        let other: MusicSource = model.musicSource == .appleMusic ? .yourMusic : .appleMusic
+        let item = CPListItem(
+            text: String(localized: "Switch to \(other.name)"),
+            detailText: model.player.current == nil
+                ? String(localized: "Now using \(model.musicSource.name)")
+                : String(localized: "Carries on with the song playing"),
+            image: CarPlayImages.symbol("arrow.left.arrow.right", side: CPListItem.maximumImageSize.height, scale: scale)
+        )
+        item.handler = { [weak self] _, completion in
+            guard let self else { return completion() }
+            Task {
+                await self.model.switchSourceCarryingOn(to: other)
+                completion()
+            }
+        }
+        return CPListSection(items: [item])
     }
 
     /// Redraws what shows a setting when one the car shows has changed: any change to

@@ -49,7 +49,7 @@ struct TopSongsCard: View {
         let shown = Array(songs.prefix(limit))
         Card(padding: 0) {
             VStack(spacing: 0) {
-                ForEach(Array(shown.enumerated()), id: \.element.id) { index, song in
+                ForEach(shown.enumerated(), id: \.element.id) { index, song in
                     NavigationLink(value: Route.song(song.id)) {
                         SongRow(song: song, rank: index + 1, widestRank: shown.count)
                             .padding(.horizontal, Metrics.cardPadding)

@@ -90,6 +90,17 @@ struct LastFMErrorTests {
         #expect(!LastFMError.http(status: 400).isRetryable)
         #expect(!LastFMError.notConfigured.isRetryable)
     }
+
+    /// It was built by interpolation and force-unwrapped, so a token URLs reject trapped.
+    @Test("the approval link encodes the token")
+    func authorisationURLEncodes() throws {
+        let client = LastFMClient(apiKey: "KEY", secret: "SECRET")
+        let url = client.authorisationURL(for: "a b&c=d")
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(url.host() == "www.last.fm")
+        #expect(items.first { $0.name == "token" }?.value == "a b&c=d")
+        #expect(items.first { $0.name == "api_key" }?.value == "KEY")
+    }
 }
 
 @MainActor
@@ -234,7 +245,7 @@ struct LastFMClientTests {
     @Test("scrobbles are sent indexed, and the indices are signed")
     func sendsIndexedScrobbles() async throws {
         let body = LockedBox()
-        let client = client(answering: "{}", capturing: { request in
+        let client = client(answering: FakeLastFM.outcomes([0, 0]), capturing: { request in
             body.set(String(decoding: request.httpBody ?? Data(), as: UTF8.self))
         })
         let played = Date(timeIntervalSince1970: 1_700_000_000)

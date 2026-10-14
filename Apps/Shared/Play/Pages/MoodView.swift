@@ -671,12 +671,15 @@ struct MoodView: View {
     // MARK: Loading
 
     private func load() async {
-        // Once per visit: coming back from an artist or an album shouldn't search again.
-        guard room == nil else { return }
-        let (history, signals, drives, mood) = (model.library.history, player.signals, player.drive.log, mood)
-        let room = await OffMainActor.run { ListeningRoom.mood(mood, in: history, signals: signals, drives: drives) }
-        self.room = room
-        if room.isEmpty { flow = .new }
+        // Once per visit: coming back from an artist or an album shouldn't search again. A
+        // search left unfinished, or that couldn't reach Apple Music, is tried again.
+        if room == nil {
+            let (history, signals, drives, mood) = (model.library.history, player.signals, player.drive.log, mood)
+            let room = await OffMainActor.run { ListeningRoom.mood(mood, in: history, signals: signals, drives: drives) }
+            self.room = room
+            if room.isEmpty { flow = .new }
+        }
+        guard reach != .found else { return }
         await loadCatalog()
     }
 
@@ -686,11 +689,15 @@ struct MoodView: View {
             return
         }
         let found = await MoodCatalog.find(mood, isDemo: player.isDemo)
+        // Left part way: what came back is cut short, not Apple Music being out of reach.
+        guard !Task.isCancelled else { return }
         stations = found.stations
         playlists = found.playlists
         newSongs = fresh(found.newSongs)
         reach = found.stations.isEmpty && found.playlists.isEmpty && found.newSongs.isEmpty && !player.isDemo ? .unreachable : .found
-        newArtists = await MoodCatalog.artists(of: newSongs.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
+        let artists = await MoodCatalog.artists(of: newSongs.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
+        guard !Task.isCancelled else { return }
+        newArtists = artists
     }
 
     /// Songs never played, the version the explicit setting allows, no artist twice in a row.

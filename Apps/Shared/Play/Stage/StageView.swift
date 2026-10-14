@@ -50,8 +50,11 @@ struct StageView: View {
                 if let track = player.current {
                     GeometryReader { proxy in
                         // Each song blurs into the next.
+                        // Made afresh when the screen turns as well: MusicKit's covers for
+                        // library songs drop their picture when moved to a new place in the
+                        // layout, and don't load it again.
                         stage(track, in: proxy.size)
-                            .id(track.id)
+                            .id(StageIdentity(track: track.id, isWide: proxy.size.width > proxy.size.height))
                             .transition(.blurReplace)
                     }
                     .padding(.horizontal, 40)
@@ -118,7 +121,7 @@ struct StageView: View {
         }
         .accessibilityAction(.escape, onClose)
         #if os(iOS)
-        .statusBarHidden(!controlsShown)
+        .toolbarVisibility(controlsShown ? .automatic : .hidden, for: .statusBar)
         .persistentSystemOverlays(.hidden)
         .onChange(of: keepsScreenOn, initial: true) { _, isOn in
             UIApplication.shared.isIdleTimerDisabled = isOn
@@ -381,9 +384,9 @@ struct StageView: View {
         let next = showsNext ? player.upNext.first : nil
         if showsProgress || next != nil || !player.isPlaying {
             VStack(alignment: .leading, spacing: 10) {
-                if showsProgress, let duration = track.duration, duration > 0 {
+                if showsProgress, let duration = track.duration, duration > 0, duration.isFinite {
                     TimelineView(.animation(minimumInterval: 1, paused: !player.isPlaying || !isOnScreen)) { _ in
-                        let fraction = min(1, max(0, player.playbackTime / duration))
+                        let fraction = Scrubber.fraction(player.playbackTime, of: duration)
                         GeometryReader { proxy in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(.white.opacity(0.2))
@@ -451,7 +454,7 @@ struct StageView: View {
             Spacer()
             if let track = player.current {
                 VStack(spacing: isShort ? 8 : 18) {
-                    if let duration = track.duration, duration > 0, !player.isLive, player.context?.isStation != true {
+                    if let duration = track.duration, duration > 0, duration.isFinite, !player.isLive, player.context?.isStation != true {
                         Scrubber(duration: duration, isPlaying: player.isPlaying, time: { player.playbackTime }, track: track, interval: Scrubber.platformInterval) { time in
                             player.seek(to: time)
                         }
@@ -603,6 +606,12 @@ private final class PointerMoves {
 
 /// Moves what's on Stage a few points over the minutes, too slowly to see, so a screen kept on
 /// for hours doesn't keep the same picture burned in one place.
+/// What Stage's layout is made afresh for: a new song, or the screen turning.
+private struct StageIdentity: Hashable {
+    let track: String
+    let isWide: Bool
+}
+
 private struct PixelShift: ViewModifier {
     let isOn: Bool
     @Environment(\.isOnScreen) private var isOnScreen

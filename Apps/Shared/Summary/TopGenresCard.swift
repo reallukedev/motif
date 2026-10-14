@@ -22,7 +22,7 @@ struct TopGenresCard: View {
                 }
 
                 VStack(spacing: 12) {
-                    ForEach(Array(summary.topGenres.prefix(limit).enumerated()), id: \.element.id) { index, genre in
+                    ForEach(summary.topGenres.prefix(limit).enumerated(), id: \.element.id) { index, genre in
                         GenreRow(
                             genre: genre,
                             share: Double(genre.count) / known,

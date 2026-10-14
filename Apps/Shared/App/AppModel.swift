@@ -213,6 +213,8 @@ final class AppModel {
         nearby.onTakeOver = { [weak self] state, device in
             Task { _ = await self?.play(state, from: device) }
         }
+        // Sample data never shows, or forgets, the devices this one really knows.
+        if isDemoLaunch { nearby.keepToThisRun() }
         #if DEBUG
         nearby.showSample()
         if UserDefaults.standard.string(forKey: "TracksNearbyDemo") == "control" { controlledDeviceID = "sample" }
@@ -222,6 +224,7 @@ final class AppModel {
     /// Tells your other devices what's playing here.
     func tellNearby() {
         nearby.publish(nearbyState ?? NearbyState())
+        updateHandoff()
         // Music started here: the player is this device's again.
         if player.isPlaying { controlledDeviceID = nil }
     }
@@ -243,6 +246,24 @@ final class AppModel {
 
     // MARK: - Your devices, as one player
 
+    @ObservationIgnored private var handoff: NowPlayingHandoff?
+
+    /// Offers what Tracks is playing to your other devices through Handoff, or stops.
+    func updateHandoff() {
+        guard !isDemoLaunch else { return }
+        let handoff = handoff ?? NowPlayingHandoff(deviceName: NearbyDevices.thisDeviceName) { [weak self] in self?.nearbyState }
+        self.handoff = handoff
+        handoff.update()
+    }
+
+    /// Picks up a song another device offered through Handoff, from where it had got to.
+    func continueHandoff(_ activity: NSUserActivity) {
+        guard let (state, name) = NowPlayingHandoff.song(from: activity) else { return }
+        // Nearby too: it's asked to pause, as Play Here does.
+        let device = nearby.devices.first { $0.state?.title == state.title && $0.state?.artist == state.artist }
+        Task { _ = await play(state, named: device?.name ?? name, pausing: device) }
+    }
+
     /// The device the main player is showing and controlling instead of this one, as Spotify
     /// Connect does. Nil for this device.
     var controlledDeviceID: String?
@@ -253,20 +274,30 @@ final class AppModel {
         return nearby.devices.first { $0.id == controlledDeviceID && $0.state?.hasSong == true }
     }
 
+    /// Which of your devices has the music, for the checkmark in Your Devices.
+    var musicLocation: MusicLocation {
+        MusicLocation(
+            controlled: controlledDeviceID,
+            isPlayingHere: player.isPlaying,
+            hasSongHere: player.hasQueue,
+            peers: nearby.devices.map { MusicLocation.Peer(id: $0.id, hasSong: $0.state?.hasSong == true, isPlaying: $0.state?.isPlaying == true) }
+        )
+    }
+
     /// Shows and controls another device's song in the main player.
     func control(_ device: NearbyDevices.Device?) {
         controlledDeviceID = device?.id
     }
 
-    /// Moves what's playing here to another device, from where it's got to, and pauses it
-    /// here. The main player goes on showing it, there.
+    /// Moves what's playing here to another device, from where it's got to. It pauses here
+    /// once that device says it's playing, so music never stops in both places when the song
+    /// can't be found there. The main player goes on showing it, there.
     func sendMusic(to device: NearbyDevices.Device) {
         guard var state = nearbyState else { return }
         state.position = player.playbackTime
         state.isPlaying = true
         state.sentAt = .now
         nearby.handOver(state, to: device)
-        if player.isPlaying { player.togglePlayPause() }
         controlledDeviceID = device.id
     }
 
@@ -294,9 +325,14 @@ final class AppModel {
 
     /// Plays a song another device had on, from where it had got to, and pauses it there.
     func play(_ state: NearbyState, from device: NearbyDevices.Device) async -> Bool {
+        await play(state, named: device.name, pausing: device)
+    }
+
+    /// Plays a song from another device, by name, pausing it there if it's nearby to ask.
+    private func play(_ state: NearbyState, named name: String, pausing device: NearbyDevices.Device?) async -> Bool {
         guard let title = state.title, let artist = state.artist else { return false }
-        if controlledDeviceID == device.id { controlledDeviceID = nil }
-        let context = PlayContext.songs(String(localized: "From \(device.name)"))
+        if let device, controlledDeviceID == device.id { controlledDeviceID = nil }
+        let context = PlayContext.songs(String(localized: "From \(name)"))
         var sources = [musicSource]
         if QuickSwitch.isOn, QuickSwitch.isAvailable(yourMusic) {
             sources.append(musicSource == .appleMusic ? .yourMusic : .appleMusic)
@@ -312,11 +348,59 @@ final class AppModel {
                 }
                 player.seek(to: position)
             }
-            nearby.pause(device)
+            if let device { nearby.pause(device) }
             return true
         }
         return false
     }
+
+    /// Switches source live and carries on with the same song from the same place, when the
+    /// other source has it: "Switch to Your Music" in the car moves the song on to your own
+    /// copy without a gap you'd notice. When it doesn't, the song on carries on and the other
+    /// source takes over from the next thing played, as Quick Switch does.
+    /// - Returns: whether the song on carried over.
+    @discardableResult
+    func switchSourceCarryingOn(to source: MusicSource) async -> Bool {
+        guard source != musicSource else { return false }
+        let player = player
+        guard let track = player.current, player.status == .playing || player.status == .paused else {
+            switchSource(to: source)
+            return false
+        }
+        let wasPlaying = player.status == .playing
+        let position = player.playbackTime
+        let wasLive = player.isLive
+        let following = Array(player.upNext.prefix(Self.carriedSongs))
+        guard let request = await request(for: track.title, by: track.artistName, album: track.albumTitle, duration: track.duration, in: source) else {
+            switchSource(to: source)
+            return false
+        }
+        switchSource(to: source)
+        // A plain queue on the other side: a live mix's context would have the player pick
+        // for a mix that isn't there.
+        await player.start(request, from: .songs(track.title))
+        if position > 3 {
+            for _ in 0..<20 where player.status != .playing {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            player.seek(to: position)
+        }
+        if !wasPlaying, player.status == .playing { player.togglePlayPause() }
+        // What was coming up comes along too, found one by one behind the song already
+        // playing; Tracks Radio's picks are followed by Autoplay instead.
+        if !wasLive {
+            for next in following {
+                guard musicSource == source, player.current != nil else { break }
+                if let more = await self.request(for: next.title, by: next.artistName, album: next.albumTitle, duration: next.duration, in: source) {
+                    player.append(more)
+                }
+            }
+        }
+        return true
+    }
+
+    /// How many songs of Up Next follow a song carried over to the other source.
+    private static let carriedSongs = 15
 
     /// A song by name, as the music source plays it.
     private func request(for title: String, by artist: String, album: String?, duration: TimeInterval?, in source: MusicSource) async -> PlayRequest? {

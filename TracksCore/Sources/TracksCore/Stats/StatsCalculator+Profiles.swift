@@ -98,6 +98,7 @@ extension StatsCalculator {
         calendar: Calendar = .current,
         now: Date = .now
     ) -> AlbumProfile? {
+        let id = CaptureStat.canonicalAlbumIdentity(id)
         let members = history.captures.indices.filter { history.captures[$0].albumIdentity == id }
         guard let album = tallyAlbums(members, in: history).first else { return nil }
         let everything = tallyAlbums(history.captures.indices, in: history)
@@ -110,7 +111,9 @@ extension StatsCalculator {
         let songs = tallySongs(members, in: history)
         return AlbumProfile(
             album: album,
-            artistID: captures[captures.count - 1].artistIdentity,
+            // The album's own artist's page when they're heard on their own, not a feature's.
+            artistID: captures.last { $0.albumIdentity?.hasSuffix("\u{1F}" + $0.artistIdentity) == true }?.artistIdentity
+                ?? captures[captures.count - 1].artistIdentity,
             songs: songs,
             timeline: timeline(members, in: history, unit: unit, span: span, calendar: calendar),
             timelineUnit: unit,

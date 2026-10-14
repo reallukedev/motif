@@ -438,21 +438,25 @@ struct GenreView: View {
     // MARK: Loading
 
     private func load() async {
-        guard !hasLoaded else { return }
-        let history = model.library.history
-        if model.musicSource == .yourMusic {
-            local = LocalGenres.group(music.playableTracks, history: history, facts: feed.facts).first { $0.genre == genre }
-            localAlbums = Self.albums(of: local?.tracks ?? [], in: music)
+        // Once per visit, but charts left unfinished, or that couldn't reach Apple Music, are
+        // asked for again on the way back.
+        if !hasLoaded {
+            let history = model.library.history
+            if model.musicSource == .yourMusic {
+                local = LocalGenres.group(music.playableTracks, history: history, facts: feed.facts).first { $0.genre == genre }
+                localAlbums = Self.albums(of: local?.tracks ?? [], in: music)
+                hasLoaded = true
+                return
+            }
+            let (signals, genre) = (player.signals, genre)
+            let (room, profile) = await OffMainActor.run {
+                (ListeningRoom.genre(genre, in: history, signals: signals), MusicGenre.profiles(in: history, signals: signals).first { $0.genre == genre })
+            }
+            self.room = room
+            artists = profile?.artists ?? []
             hasLoaded = true
-            return
         }
-        let (signals, genre) = (player.signals, genre)
-        let (room, profile) = await OffMainActor.run {
-            (ListeningRoom.genre(genre, in: history, signals: signals), MusicGenre.profiles(in: history, signals: signals).first { $0.genre == genre })
-        }
-        self.room = room
-        artists = profile?.artists ?? []
-        hasLoaded = true
+        guard model.musicSource != .yourMusic, reach != .found else { return }
         await loadCharts()
     }
 
@@ -461,10 +465,15 @@ struct GenreView: View {
             reach = .notAuthorized
             return
         }
-        charts = await GenreCatalog.load(genre, isDemo: player.isDemo)
+        let loaded = await GenreCatalog.load(genre, isDemo: player.isDemo)
+        // Left part way: what came back is cut short, not Apple Music being out of reach.
+        guard !Task.isCancelled else { return }
+        charts = loaded
         let isEmpty = charts.songs.isEmpty && charts.albums.isEmpty && charts.playlists.isEmpty
         reach = isEmpty && !player.isDemo ? .unreachable : .found
-        newArtists = await MoodCatalog.artists(of: freshCharts.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
+        let found = await MoodCatalog.artists(of: freshCharts.map(\.song), leavingOut: feed.heardArtists, isDemo: player.isDemo)
+        guard !Task.isCancelled else { return }
+        newArtists = found
     }
 }
 

@@ -59,6 +59,9 @@ private struct PlayerFeedback: ViewModifier {
                     ConfirmationHUD(message: player.confirmation)
                 }
             }
+            // "Added to Library" is felt as it shows; a problem, as its alert comes up.
+            .sensoryFeedback(.success, trigger: player.confirmation) { _, message in isActive && message != nil }
+            .sensoryFeedback(.error, trigger: player.isShowingProblem) { _, showing in isActive && showing }
     }
 }
 

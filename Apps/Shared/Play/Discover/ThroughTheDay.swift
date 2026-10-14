@@ -167,7 +167,7 @@ struct ThroughTheDayChart: View {
                 .symbol {
                     Circle()
                         .strokeBorder(Color.primary, lineWidth: 2.5)
-                        .background(Circle().fill(.background))
+                        .background(.background, in: .circle)
                         .frame(width: 12, height: 12)
                 }
         }

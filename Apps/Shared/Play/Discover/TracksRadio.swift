@@ -252,9 +252,9 @@ struct TracksRadioRow: View {
                         Label(isOn && player.isPlaying ? "Pause" : "Play", systemImage: isOn && player.isPlaying ? "pause.fill" : "play.fill")
                             .contentTransition(.symbolEffect(.replace))
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     Button("Tune…") { showsTuner = true }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                 }
                 .buttonBorderShape(.capsule)
                 .font(.subheadline.weight(.semibold))
@@ -505,7 +505,7 @@ struct RadioTuner: View {
                     Button("Play Tracks Radio") { player.playTracksRadio() }
                 }
                 Button("Done") { dismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
             }
             // The form ends in its own inset, so the bar needs none above it.

@@ -115,9 +115,21 @@ public struct LastFMClient: Sendable {
     }
 
     /// Where to send the user to approve the token.
+    ///
+    /// Built from parts so a token with characters URLs reject is encoded rather than trapping.
     public func authorisationURL(for token: String) -> URL {
-        URL(string: "https://www.last.fm/api/auth/?api_key=\(apiKey)&token=\(token)")!
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.last.fm"
+        components.path = "/api/auth/"
+        components.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "token", value: token),
+        ]
+        return components.url ?? Self.authorisationPage
     }
+
+    static let authorisationPage = URL(string: "https://www.last.fm/api/auth/")!
 
     /// Step two: exchange an approved token for a session key that never expires.
     ///
@@ -177,9 +189,9 @@ public struct LastFMClient: Sendable {
     /// the order they were sent.
     static func scrobbleOutcomes(from json: [String: Any], sent count: Int) throws -> [ScrobbleOutcome] {
         guard let report = json["scrobbles"] as? [String: Any] else {
-            // A 200 that says nothing about the entries. Last.fm reports errors in the body,
-            // and `call` has already checked for one, so it took them.
-            return Array(repeating: .accepted, count: count)
+            // Last.fm always answers a scrobble with this. Without it there's no telling the
+            // batch arrived, so the rows stay owed rather than being marked sent.
+            throw LastFMError.malformedResponse
         }
 
         let entries: [[String: Any]] = switch report["scrobble"] {
@@ -191,13 +203,14 @@ public struct LastFMClient: Sendable {
             return entries.map(outcome(of:))
         }
 
-        // Can't line the entries up with what was sent. That only matters if some of them
-        // were ignored.
+        // Can't line the entries up with what was sent, but Last.fm took the batch. Sending
+        // it again would scrobble every accepted entry twice, so the lot counts as accepted
+        // even if a few were quietly ignored.
         let attributes = report["@attr"] as? [String: Any]
-        if integer(attributes?["ignored"]) == 0 {
-            return Array(repeating: .accepted, count: count)
+        if let ignored = integer(attributes?["ignored"]), ignored > 0 {
+            Log.lastFM.notice("Last.fm ignored \(ignored) scrobbles it couldn't be matched to")
         }
-        throw LastFMError.malformedResponse
+        return Array(repeating: .accepted, count: count)
     }
 
     private static func outcome(of entry: [String: Any]) -> ScrobbleOutcome {
@@ -334,15 +347,17 @@ public struct LastFMClient: Sendable {
         request.httpBody = Self.formBody(all)
 
         let (data, response) = try await transport(request)
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
 
         // Check the body first. Last.fm's errors usually come with a plain 400.
-        if let code = json["error"] as? Int {
-            throw LastFMError.service(code: code, message: json["message"] as? String ?? "")
+        if let code = json?["error"] as? Int {
+            throw LastFMError.service(code: code, message: json?["message"] as? String ?? "")
         }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw LastFMError.http(status: http.statusCode)
         }
+        // A captive portal or a proxy can answer 200 with a page of HTML. That isn't Last.fm.
+        guard let json else { throw LastFMError.malformedResponse }
         return json
     }
 

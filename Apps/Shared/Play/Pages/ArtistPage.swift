@@ -87,7 +87,11 @@ struct ArtistPage: View {
                 }
             }
         }
-        .task { await load() }
+        .task(id: artist.id) {
+            // Once per artist: coming back to the page keeps what loaded.
+            guard loaded?.id != artist.id else { return }
+            await load()
+        }
     }
 
     private func songs(_ songs: [Song], artist: String, context: PlayContext) -> some View {
@@ -142,6 +146,7 @@ struct ArtistPage: View {
         do {
             loaded = try await artist.with([.topSongs, .fullAlbums, .albums, .singles, .latestRelease, .appearsOnAlbums, .similarArtists])
         } catch {
+            guard !Task.isCancelled else { return }
             loadFailed = loaded == nil
         }
     }

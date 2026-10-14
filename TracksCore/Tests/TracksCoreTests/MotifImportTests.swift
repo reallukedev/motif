@@ -94,6 +94,22 @@ struct MotifImportTests {
         #expect(stations.first?.firstSeenAt == start)
     }
 
+    @Test("the store and its log are copied together when nothing is writing")
+    func copiesTheFiles() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "MotifCopyTest-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = folder.appending(path: "default.store")
+        try Data("store".utf8).write(to: store)
+        try Data("log".utf8).write(to: URL(filePath: store.path(percentEncoded: false) + "-wal"))
+
+        let copy = try await MotifImport.copyStore(at: store)
+        defer { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+
+        #expect(try Data(contentsOf: copy) == Data("store".utf8))
+        #expect(try Data(contentsOf: URL(filePath: copy.path(percentEncoded: false) + "-wal")) == Data("log".utf8))
+    }
+
     /// Imports a copy of a real Motif store: set `MOTIF_STORE_COPY` to its path.
     @Test("a real Motif store", .enabled(if: ProcessInfo.processInfo.environment["MOTIF_STORE_COPY"] != nil))
     func realStore() async throws {

@@ -94,6 +94,7 @@ extension SyncedSetting {
         // is both safe and order-independent. Newest-wins would undo a removal made on the
         // other device the next time this one forgot anything.
         SyncedSetting(key: CaptureSettings.forgottenSongsKey, merge: .union),
+        SyncedSetting(key: CaptureSettings.forgottenSongDatesKey, merge: .union),
         // A skip on the Mac is in the iPhone's recently-played list too. Each device only
         // adds, and trims the old ones by their own dates, so a union settles the same way.
         SyncedSetting(key: CaptureSettings.passedOverSongsKey, merge: .union),

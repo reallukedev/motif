@@ -101,7 +101,7 @@ struct LibrarySearchResults: View {
                 }
                 if !shownSongs.isEmpty {
                     Section("Songs") {
-                        ForEach(Array(shownSongs.enumerated()), id: \.element.id) { index, song in
+                        ForEach(shownSongs.enumerated(), id: \.element.id) { index, song in
                             let identity = HistoryImport.key(title: song.title, artistName: song.artistName)
                             let play = { player.play(.songs(shownSongs, startingAt: index), from: .songs(String(localized: "Search"))) }
                             SongResultRow(id: song.id.rawValue, selection: $selectedSong, step: { step(from: index, by: $0) }, play: play) {

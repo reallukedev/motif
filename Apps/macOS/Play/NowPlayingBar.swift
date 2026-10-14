@@ -135,7 +135,7 @@ private struct RemoteNowPlayingBar: View {
                     Label {
                         Text("Playing on \(device.name)")
                     } icon: {
-                        Image(systemName: NearbyDevices.symbol(for: device.platform))
+                        Image(systemName: device.kind.symbol)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tint)

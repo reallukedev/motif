@@ -3,11 +3,11 @@ import TracksCore
 
 /// What fills the player behind the song, chosen in Settings.
 enum NowPlayingBackground: String, CaseIterable, Identifiable {
-    /// The cover's colour, deepening toward the controls. The default.
+    /// The cover's colour, deepening toward the controls.
     case colour
     /// The cover itself, blurred to fill the screen, drifting slowly while it plays.
     case artwork
-    /// The cover itself, flowing, its colours swirling into one another while it plays.
+    /// The cover itself, flowing, its colours swirling into one another while it plays. The default.
     case living
     /// The cover behind a pane of ribbed glass, drifting past while it plays.
     case glass
@@ -20,6 +20,7 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let storageKey = "nowPlayingBackground"
+    static let defaultValue = NowPlayingBackground.living
 
     var title: LocalizedStringKey {
         switch self {
@@ -39,13 +40,13 @@ enum NowPlayingBackground: String, CaseIterable, Identifiable {
         case .living: "The cover comes alive: its colours flow and swirl into one another while the music plays, and settle when it's paused."
         case .glass: "The cover, seen through a pane of ribbed glass, drifts slowly past while the music plays."
         case .aurora: "Curtains of light in the cover's colours ripple across a night sky while the music plays."
-        case .halo: "Light spills from behind the cover in its colours and moves with the music: every beat and note of your own music, and the feel of each Apple Music song, which Tracks can't hear."
+        case .halo: "Light spills from behind the cover in its colours and moves with the music: every beat and note of your own music, and each Apple Music song's beat and feel, learned from its preview."
         }
     }
 
     /// The one chosen in Settings, for a view that needs it before it's drawn.
     static var stored: NowPlayingBackground {
-        UserDefaults.standard.string(forKey: storageKey).flatMap(Self.init) ?? .colour
+        UserDefaults.standard.string(forKey: storageKey).flatMap(Self.init) ?? defaultValue
     }
 }
 
@@ -83,7 +84,7 @@ struct NowPlayingBackdrop: View {
     var style: NowPlayingBackground?
     /// Where the cover sits, in this view's space, for a background lit from behind it.
     var focus: CGRect?
-    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.colour
+    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.defaultValue
     @AppStorage(BackdropChange.storageKey) private var change = BackdropChange.crossfade
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
@@ -309,7 +310,7 @@ extension View {
 /// Brightness shows Light and Dark, and how it changes between songs. With nothing playing
 /// they show a sample cover, so each can still be told apart.
 struct NowPlayingBackdropPicker: View {
-    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.colour
+    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.defaultValue
     @Environment(PlayerModel.self) private var player
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -440,7 +441,7 @@ private struct BackdropMiniature: View {
 /// Settings ▸ Play ▸ Now Playing: the background, how it changes between songs, and whether
 /// the player shows the quality you're hearing.
 struct NowPlayingBackdropSection: View {
-    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.colour
+    @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.defaultValue
     @AppStorage(BackdropChange.storageKey) private var change = BackdropChange.crossfade
     @AppStorage(AudioQualityBadge.showsKey) private var showsQuality = true
 

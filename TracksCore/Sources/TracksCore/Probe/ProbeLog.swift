@@ -86,7 +86,7 @@ public final class ProbeLog {
     public var exportText: String {
         let header = """
         Tracks phase 0 probe
-        Exported: \(ISO8601DateFormatter().string(from: .now))
+        Exported: \(Date.now.formatted(.iso8601))
         Platform: \(CapturePlatform.current.rawValue)
         Entries: \(entries.count)
         ────────────────────────────────────────────────────────

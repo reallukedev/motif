@@ -171,7 +171,7 @@ extension StatsSummary {
             }
             .padding()
         }
-        .background(GroupedBackground())
+        .background { GroupedBackground() }
     }
 }
 
@@ -182,7 +182,7 @@ extension StatsSummary {
             TrendsSection(summary: summary)
                 .padding()
         }
-        .background(GroupedBackground())
+        .background { GroupedBackground() }
     }
 }
 
@@ -212,7 +212,7 @@ extension StatsSummary {
             GenresSection(summary: summary)
                 .padding()
         }
-        .background(GroupedBackground())
+        .background { GroupedBackground() }
     }
 }
 
@@ -226,7 +226,7 @@ extension StatsSummary {
             }
             .padding()
         }
-        .background(GroupedBackground())
+        .background { GroupedBackground() }
     }
 }
 #endif

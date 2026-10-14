@@ -484,7 +484,7 @@ public enum StatsCalculator {
             return AlbumTally(
                 id: identity,
                 title: latest.albumTitle ?? "",
-                artistName: latest.artistName,
+                artistName: LocalTrack.leadArtist(of: latest.artistName),
                 count: captures.count,
                 songCount: Set(captures.map(\.songIdentity)).count,
                 artworkURL: bestArtwork(in: captures),

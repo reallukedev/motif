@@ -60,3 +60,23 @@ struct LoadingRow: View {
         .accessibilityHidden(true)
     }
 }
+
+/// In place of ``LoadingRow`` when the next page couldn't be fetched, so a dropped connection
+/// doesn't pass for the end of the list.
+struct LoadMoreFailedRow: View {
+    var text: LocalizedStringKey = "Couldn't load more songs."
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Button("Try Again", action: retry)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .frame(minHeight: LoadingRow.height)
+    }
+}

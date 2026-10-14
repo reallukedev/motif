@@ -5,6 +5,8 @@ import Observation
 import TracksCore
 #if os(iOS)
 import UIKit
+#else
+import IOKit.ps
 #endif
 
 /// Your other devices running Tracks close by: what each is playing, live, and its controls.
@@ -20,11 +22,23 @@ final class NearbyDevices {
         let id: String
         var name: String
         var platform: String
+        /// What it said it is, a ``NearbyDeviceKind``'s wire name.
+        var kindName: String?
         var state: NearbyState?
+
+        var kind: NearbyDeviceKind { NearbyDeviceKind(platform: platform, kind: kindName) }
     }
 
     /// Devices connected and introduced.
     private(set) var devices: [Device] = []
+
+    /// Every device that's been here lately, kept on this device to show the ones away.
+    private(set) var known: [KnownNearbyDevice] = []
+
+    /// The ones seen lately that aren't here now, latest first.
+    var away: [KnownNearbyDevice] {
+        KnownNearbyDevices.away(known, connected: Set(devices.map(\.id)), now: .now)
+    }
 
     /// Local Network is off for Tracks, so it can't look for your devices or be found. Settings
     /// says so, since nothing else would.
@@ -47,26 +61,49 @@ final class NearbyDevices {
     /// device it was.
     @ObservationIgnored var onTakeOver: ((NearbyState, Device) -> Void)?
 
-    /// The symbol for a kind of device, as a device tells it.
-    static func symbol(for platform: String) -> String {
-        switch platform {
-        case "Mac": "laptopcomputer"
-        case "iPad": "ipad"
-        default: "iphone"
+    /// What this device is, for its own symbol.
+    static let thisKind: NearbyDeviceKind = {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+        #else
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        var model = [CChar](repeating: 0, count: max(size, 1))
+        sysctlbyname("hw.model", &model, &size, nil, 0)
+        let hardwareModel = String(decoding: model.prefix { $0 != 0 }.map(UInt8.init), as: UTF8.self)
+        return NearbyDeviceKind.mac(hardwareModel: hardwareModel, hasBattery: hasBattery)
+        #endif
+    }()
+
+    static var thisDeviceSymbol: String { thisKind.symbol }
+
+    /// "This Mac", "This iPhone", as Apple's own lists name the device in your hand.
+    static var thisDeviceName: String {
+        switch thisKind {
+        case .iPhone: String(localized: "This iPhone")
+        case .iPad: String(localized: "This iPad")
+        default: String(localized: "This Mac")
         }
     }
 
-    /// This device's own symbol, for Play Here.
-    static var thisDeviceSymbol: String {
-        #if os(macOS)
-        "laptopcomputer"
-        #else
-        "iphone"
-        #endif
+    #if os(macOS)
+    private static var hasBattery: Bool {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else { return false }
+        return sources.contains { source in
+            let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any]
+            return description?[kIOPSTypeKey] as? String == kIOPSInternalBatteryType
+        }
     }
+    #endif
 
     static let storageKey = "showsNearbyDevices"
     static var isOn: Bool { UserDefaults.standard.object(forKey: storageKey) as? Bool ?? true }
+
+    private static let knownKey = "nearbyKnownDevices"
+    /// The sample's devices are never saved over the real ones.
+    @ObservationIgnored private var isSample = false
 
     @ObservationIgnored private let myID: String
     @ObservationIgnored private let myName: String
@@ -111,16 +148,83 @@ final class NearbyDevices {
         myName = Host.current().localizedName ?? "Mac"
         myPlatform = "Mac"
         #endif
+        known = KnownNearbyDevices.decoded(defaults.data(forKey: Self.knownKey))
+    }
+
+    /// Takes a device out of the ones seen lately. It comes back the next time it's here.
+    func forget(_ id: String) {
+        known.removeAll { $0.id == id }
+        saveKnown()
+        if !isSample { TracksShortcuts.updateAppShortcutParameters() }
+    }
+
+    /// For a run on sample data: starts with no devices known, and saves none.
+    func keepToThisRun() {
+        isSample = true
+        known = []
+    }
+
+    /// Looks for your devices if it isn't already, for Siri and Shortcuts, which can run
+    /// before any window has started it, and waits a few seconds for one to say hello.
+    func waitForDevices(until found: (Device) -> Bool) async -> Device? {
+        guard Self.isOn else { return nil }
+        if isRunning { resume() } else { start() }
+        for _ in 0..<16 {
+            if let device = devices.first(where: found) { return device }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return devices.first(where: found)
+    }
+
+    /// Notes a device as here now, with the song it's playing.
+    private func remember(_ device: Device) {
+        let seen = KnownNearbyDevice(
+            id: device.id,
+            name: device.name,
+            platform: device.platform,
+            kind: device.kindName,
+            lastSeen: .now,
+            song: device.state?.hasSong == true ? device.state?.title : nil,
+            artist: device.state?.hasSong == true ? device.state?.artist : nil
+        )
+        let isNew = !known.contains { $0.id == device.id }
+        known = KnownNearbyDevices.remembering(seen, in: known)
+        saveKnown()
+        // "Play on <device> with Tracks" learns its name.
+        if isNew, !isSample { TracksShortcuts.updateAppShortcutParameters() }
+    }
+
+    private func saveKnown() {
+        guard !isSample else { return }
+        UserDefaults.standard.set(KnownNearbyDevices.encoded(known), forKey: Self.knownKey)
     }
 
     #if DEBUG
     /// `-TracksNearbyDemo YES` (or `paused`): a device nearby, for screenshots.
+    /// `away` shows only devices seen lately, `none` none at all, `many` several here at once.
     func showSample() {
         guard let mode = UserDefaults.standard.string(forKey: "TracksNearbyDemo") else { return }
-        devices = [Device(id: "sample", name: "Luke's MacBook Pro", platform: "Mac", state: NearbyState(
+        isSample = true
+        let day: TimeInterval = 86_400
+        known = [
+            KnownNearbyDevice(id: "sample-ipad", name: "Luke's iPad", platform: "iPad", kind: "iPad", lastSeen: .now.addingTimeInterval(-day), song: "Paper Parade", artist: "June Arcade"),
+            KnownNearbyDevice(id: "sample-imac", name: "Studio iMac", platform: "Mac", kind: "iMac", lastSeen: .now.addingTimeInterval(-6 * day), song: nil, artist: nil),
+        ]
+        guard mode != "away", mode != "none" else {
+            if mode == "none" { known = [] }
+            return
+        }
+        devices = [Device(id: "sample", name: "Luke's MacBook Pro", platform: "Mac", kindName: "MacBook", state: NearbyState(
             title: "Golden Moon", artist: "Nova Harbor", album: "Golden Moon",
             isPlaying: mode != "paused", position: 84, duration: 212
         ))]
+        if mode == "many" {
+            known.removeAll { $0.id == "sample-ipad" }
+            devices.append(Device(id: "sample-ipad", name: "Luke's iPad", platform: "iPad", kindName: "iPad", state: NearbyState(
+                title: "Paper Parade", artist: "June Arcade", isPlaying: false, position: 30, duration: 190
+            )))
+            devices.append(Device(id: "sample-mini", name: "Living Room Mac mini", platform: "Mac", kindName: "Mac mini", state: nil))
+        }
     }
     #endif
 
@@ -135,7 +239,9 @@ final class NearbyDevices {
         keyInUse = key.withUnsafeBytes { Data($0) }
         do {
             let listener = try NWListener(using: parameters)
-            listener.service = NWListener.Service(name: myName, type: Self.serviceType, txtRecord: NWTXTRecord(["id": myID]))
+            // Bonjour names are seen by anyone on the network, so this says only "Mac" or
+            // "iPhone". The real name goes to your own devices once they've connected.
+            listener.service = NWListener.Service(name: myPlatform, type: Self.serviceType, txtRecord: NWTXTRecord(["id": myID]))
             listener.newConnectionHandler = { [weak self] connection in
                 MainActor.assumeIsolated { _ = self?.adopt(connection) }
             }
@@ -324,7 +430,7 @@ final class NearbyDevices {
                 guard let self, let link else { return }
                 switch state {
                 case .ready:
-                    self.send(.hello(id: self.myID, name: self.myName, platform: self.myPlatform), on: link)
+                    self.send(.hello(id: self.myID, name: self.myName, platform: self.myPlatform, kind: Self.thisKind.wireName), on: link)
                     self.receive(on: link)
                 case .failed, .cancelled:
                     self.drop(link)
@@ -345,6 +451,7 @@ final class NearbyDevices {
         guard links.removeValue(forKey: ObjectIdentifier(link.connection)) != nil else { return }
         link.connection.cancel()
         if let peerID = link.peerID, !links.values.contains(where: { $0.peerID == peerID }) {
+            if let device = devices.first(where: { $0.id == peerID }) { remember(device) }
             devices.removeAll { $0.id == peerID }
             redialSoon()
         }
@@ -376,7 +483,7 @@ final class NearbyDevices {
 
     private func handle(_ message: NearbyMessage, from link: Link) {
         switch message {
-        case .hello(let id, let name, let platform):
+        case .hello(let id, let name, let platform, let kind):
             link.peerID = id
             failedRedials = 0
             // Back on a new connection: the one from before it went away is let go, however
@@ -387,14 +494,18 @@ final class NearbyDevices {
             }
             if let position = devices.firstIndex(where: { $0.id == id }) {
                 devices[position].name = name
+                devices[position].kindName = kind
             } else {
-                devices.append(Device(id: id, name: name, platform: platform))
+                devices.append(Device(id: id, name: name, platform: platform, kindName: kind))
             }
+            if let device = devices.first(where: { $0.id == id }) { remember(device) }
             if let lastState { send(.state(lastState), on: link) }
             onJoin?()
         case .state(let state):
             guard let id = link.peerID, let position = devices.firstIndex(where: { $0.id == id }) else { return }
+            let isNewSong = devices[position].state?.title != state.title
             devices[position].state = state
+            if isNewSong, state.hasSong { remember(devices[position]) }
         case .command(let command):
             onCommand?(command)
         case .pause:

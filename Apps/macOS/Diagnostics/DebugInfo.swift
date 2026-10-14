@@ -11,6 +11,7 @@ enum DebugInfo {
         if let notice = quitMonitor.notice {
             var quit = DebugReport.section(for: notice)
             quit = DebugReport.Section(quit.title, quit.rows + [
+                ("Reopen automatically", quitMonitor.reopensAutomatically ? "On" : "Off"),
                 ("Automatic reopens (10 min)", String(quitMonitor.recentAutomaticReopens)),
             ])
             sections.append(quit)
@@ -21,9 +22,24 @@ enum DebugInfo {
 
     /// Copies the report as Markdown, ready for a GitHub issue.
     static func copy(model: AppModel, quitMonitor: UnexpectedQuitMonitor) {
-        let text = report(model: model, quitMonitor: quitMonitor).markdown()
+        let text = redactingHome(in: report(model: model, quitMonitor: quitMonitor).markdown())
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// The report goes into public issues, and errors from the store name its path, which
+    /// starts with the home folder and so the person's account name. Each home becomes "~".
+    static func redactingHome(in text: String) -> String {
+        var homes = [NSHomeDirectory()]
+        // In the sandbox NSHomeDirectory() is the app's container; this is the real one.
+        if let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir {
+            homes.append(String(cString: directory))
+        }
+        // Longest first, so the container isn't left half replaced.
+        return homes
+            .filter { $0.count > 1 }
+            .sorted { $0.count > $1.count }
+            .reduce(text) { $0.replacing($1, with: "~") }
     }
 
     private static var app: DebugReport.Section {

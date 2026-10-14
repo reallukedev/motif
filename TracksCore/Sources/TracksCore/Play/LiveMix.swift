@@ -17,6 +17,10 @@ import Foundation
 ///
 /// Each pick leans a little toward the genre of the song before it, so one song flows into the
 /// next, and an artist heard a few songs ago is less likely to come round again so soon.
+///
+/// Tracks Radio started from nothing in particular opens with a probe: a few songs from
+/// different directions, to hear what you're in the mood for, and remembers what landed at
+/// that moment for next time. See ``RadioProbe`` and ``RadioHabits``.
 public struct LiveMix: Sendable {
     public struct Candidate: Sendable, Equatable {
         public let song: MixSong
@@ -80,6 +84,9 @@ public struct LiveMix: Sendable {
         /// A song let play, or loved, after a run of skips: more like it.
         case towardGenre(String)
         case towardArtist(String)
+        /// The opening probe is over, and this genre landed best: more of it, with something
+        /// else now and then.
+        case settledOn(String)
     }
 
     /// Why a song came up, as far as one thing stands out. Only what the mix really weighed:
@@ -105,6 +112,9 @@ public struct LiveMix: Sendable {
         case moreOf(String)
         /// The artist of a song loved or asked for more of this listen.
         case moreLike(String)
+        /// One of the first few songs of Tracks Radio, each from a different direction, to
+        /// hear which one you're in the mood for.
+        case probing
     }
 
     /// How a song went, told by when it gave way.
@@ -174,6 +184,18 @@ public struct LiveMix: Sendable {
     /// while and say they're more like its artist while they do.
     private var lovedGenre: String?
     private let byIdentity: [String: Int]
+    /// What landed on Tracks Radio before, as it was when this listen began. Nil for any other
+    /// mix, which learns nothing across listens and weighs genres only by this listen's skips.
+    private var habitsBase: RadioHabits?
+    /// What this listen has added to them.
+    private var learned = RadioHabits()
+    /// The opening probe. See ``RadioProbe``.
+    private var probe: RadioProbe?
+    /// Each genre family's share of the mix's weight, for the probe to choose directions by.
+    private var shares: [String: Double] = [:]
+    /// Picks since the probe, over which the share of picks that ignore what's been learned
+    /// shrinks.
+    private var picksSinceProbe = 0
     /// See ``artistMemory(artists:)``.
     private let remembersArtists: Int
     private var random: SeededGenerator
@@ -260,6 +282,10 @@ public struct LiveMix: Sendable {
     public mutating func next(newFinds: Bool? = nil, where include: (MixSong) -> Bool) -> MixSong? {
         guard !candidates.isEmpty else { return nil }
         if picked.count >= candidates.count { startOver() }
+        // A new find got ready behind the radio's own songs isn't one of the probe's.
+        if newFinds != true, let choice = probePick(onlyNew: newFinds == false ? false : nil, opening: false, where: include) {
+            return choice.song
+        }
 
         let open = candidates.filter { !picked.contains($0.song.songIdentity) && allows($0.song) && include($0.song) }
         let yours = newFinds == true ? [] : open.filter { !$0.isNew }
@@ -278,12 +304,13 @@ public struct LiveMix: Sendable {
         let spaced = fresh.filter { !recent.contains($0.song.artistKey) }
         let choices = clear(of: avoiding, spaced.isEmpty ? fresh : spaced)
 
-        guard let choice = draw(from: choices) else { return nil }
+        guard let choice = draw(from: choices, learning: true) else { return nil }
         // As it is now, even when nothing stands out: a song come round again doesn't keep
         // what it was picked for before.
         pickReasons.updateValue(reason(choosing: choice), forKey: choice.song.songIdentity)
         note(picked: choice.song.songIdentity)
         easeBack()
+        if habitsBase != nil { picksSinceProbe += 1 }
         return choice.song
     }
 
@@ -297,6 +324,8 @@ public struct LiveMix: Sendable {
     /// skipped when it doesn't land. A new find, or a song resting, only when nothing else
     /// passes.
     public mutating func opener(where include: (MixSong) -> Bool) -> MixSong? {
+        // Probing, the likeliest direction to land opens it.
+        if let choice = probePick(onlyNew: false, opening: true, where: include) { return choice.song }
         let yours = candidates.filter { !$0.isNew && !$0.isResting && !picked.contains($0.song.songIdentity) && allows($0.song) && include($0.song) }
         guard let choice = draw(from: yours, emphasis: 2) else { return next(playable: include) }
         // As it is now, even when nothing stands out: a song come round again doesn't keep
@@ -329,6 +358,7 @@ public struct LiveMix: Sendable {
         guard picked.remove(identity) != nil else { return }
         picks.removeAll { $0 == identity }
         pickReasons[identity] = nil
+        probe?.slots.removeAll { $0.identity == identity }
     }
 
     /// Counts a song as picked without drawing it: the one a listen starts with.
@@ -351,12 +381,16 @@ public struct LiveMix: Sendable {
         guard let index = byIdentity[identity] else { return }
         let candidate = candidates[index]
         let artist = candidate.song.artistKey
-        artistBias[artist] = max(0.02, (artistBias[artist] ?? 1) * 0.35)
+        // A skip is a nudge, not a verdict: it may only have been that song, or that moment.
+        // Each one makes its artist and genre rarer for a while, never gone, and they ease back.
+        artistBias[artist] = max(0.15, (artistBias[artist] ?? 1) * 0.55)
         if let genre = candidate.genreKey {
-            genreBias[genre] = max(0.1, (genreBias[genre] ?? 1) * 0.7)
+            // A probe song skipped says a little more about its genre than one skipped later.
+            genreBias[genre] = max(0.4, (genreBias[genre] ?? 1) * (isProbePick(identity) ? 0.75 : 0.85))
         }
         if candidate.isNew { newShare = (newShare * 0.7).clamped(to: shareRange) }
         record(candidate, skipped: true)
+        learn(identity, candidate, landed: false)
         steerAfterSkips()
     }
 
@@ -369,10 +403,11 @@ public struct LiveMix: Sendable {
         let artist = candidate.song.artistKey
         artistBias[artist] = max(0.02, (artistBias[artist] ?? 1) * 0.7)
         if let genre = candidate.genreKey {
-            genreBias[genre] = max(0.1, (genreBias[genre] ?? 1) * 0.9)
+            genreBias[genre] = max(0.4, (genreBias[genre] ?? 1) * 0.9)
         }
         if candidate.isNew { newShare = (newShare * 0.9).clamped(to: shareRange) }
         record(candidate, skipped: true, movedOn: true)
+        learn(identity, candidate, landed: false, counting: 0.5)
         steerAfterSkips()
     }
 
@@ -382,13 +417,15 @@ public struct LiveMix: Sendable {
         let candidate = candidates[index]
         let artist = candidate.song.artistKey
         artistBias[artist] = min(3, (artistBias[artist] ?? 1) * 1.25)
-        let wasSearching = isSearching
+        let wasSearching = isSearching || probe.map { $0.isOpen && $0.extended > 0 } == true
         if let genre = candidate.genreKey {
-            // After a run of skips, the song that finally plays through is the one to follow.
-            genreBias[genre] = min(4, (genreBias[genre] ?? 1) * (wasSearching ? 2 : 1.15))
+            // After a run of skips, the song that finally plays through is the one to follow,
+            // and a probe song let play says more than one let play later.
+            genreBias[genre] = min(4, (genreBias[genre] ?? 1) * (wasSearching ? 2 : isProbePick(identity) ? 1.6 : 1.15))
         }
         if candidate.isNew { newShare = (newShare * 1.2 + 0.02).clamped(to: shareRange) }
         record(candidate, skipped: false)
+        learn(identity, candidate, landed: true)
         if wasSearching {
             avoiding = nil
             steering = candidate.genre.map(Steering.towardGenre) ?? .towardArtist(candidate.song.artistName)
@@ -406,6 +443,9 @@ public struct LiveMix: Sendable {
         }
         lovedGenre = candidate.genreKey
         avoiding = nil
+        learn(identity, candidate, landed: true, counting: 2)
+        // Nothing more to probe for: it knows what you want.
+        probe?.isOpen = false
         steering = .towardArtist(candidate.song.artistName)
     }
 
@@ -443,7 +483,7 @@ public struct LiveMix: Sendable {
     private var isSearching: Bool {
         switch steering {
         case .awayFromGenre, .awayFromDecade, .fewerNewFinds, .moreNewFinds, .tryingSomethingElse: avoiding != nil
-        case .towardGenre, .towardArtist, nil: false
+        case .towardGenre, .towardArtist, .settledOn, nil: false
         }
     }
 
@@ -456,6 +496,8 @@ public struct LiveMix: Sendable {
     /// genre first, since that's what people hear; then a decade; then new or known. Skips
     /// that share nothing try genres the run didn't have.
     private mutating func steerAfterSkips() {
+        // The probe is already trying a different direction with every song.
+        guard probe?.isOpen != true else { return }
         let run = Array(outcomes.reversed().prefix { $0.skipped })
         guard run.count >= Self.runLength else { return }
         // Songs only moved on from, heard a minute or two each, make a run only once there are
@@ -495,10 +537,13 @@ public struct LiveMix: Sendable {
         return clear.isEmpty ? choices : clear
     }
 
-    /// After each pick, genres drift a tenth of the way back to even, and what's being avoided
+    /// After each pick, genres drift a tenth of the way back to even, skipped artists a little,
+    /// and what's being avoided
     /// comes one pick closer to coming back.
     private mutating func easeBack() {
         for (genre, bias) in genreBias { genreBias[genre] = 1 + (bias - 1) * 0.9 }
+        // A skipped artist comes back more slowly, but comes back.
+        for (artist, bias) in artistBias where bias < 1 { artistBias[artist] = 1 + (bias - 1) * 0.96 }
         guard var avoid = avoiding else { return }
         avoid.picksLeft -= 1
         avoiding = avoid.picksLeft > 0 ? avoid : nil
@@ -526,7 +571,9 @@ public struct LiveMix: Sendable {
 
     /// - Parameter emphasis: a power the weights are raised to: 1 as they are, 2 to lean
     ///   harder toward the strongest.
-    private mutating func draw(from choices: [Candidate], emphasis: Double = 1) -> Candidate? {
+    /// - Parameter learning: whether what Tracks Radio has learned about genres and decades
+    ///   weighs in. See ``lifts(for:)``.
+    private mutating func draw(from choices: [Candidate], emphasis: Double = 1, learning: Bool = false) -> Candidate? {
         // Artists heard lately, each time halving their chance, so one with many songs doesn't
         // come round every few picks.
         var lately: [String: Int] = [:]
@@ -536,8 +583,10 @@ public struct LiveMix: Sendable {
         }
         // The song before: the next leans toward its genre, so one flows into the next.
         let before = picks.last.flatMap { byIdentity[$0] }.flatMap { candidates[$0].genreKey }
+        let lifts = learning ? lifts(for: choices) : nil
         let weights = choices.map { candidate in
             candidate.weight
+                * (lifts.map { $0.weight(of: candidate) } ?? 1)
                 * (artistBias[candidate.song.artistKey] ?? 1)
                 * (candidate.genreKey.flatMap { genreBias[$0] } ?? 1)
                 * pow(0.5, Double(lately[candidate.song.artistKey] ?? 0))
@@ -664,6 +713,13 @@ extension LiveMix {
         outcomes = earlier.outcomes
         avoiding = earlier.avoiding
         steering = earlier.steering
+        if let habits = earlier.habitsBase {
+            habitsBase = habits
+            learned = earlier.learned
+            probe = earlier.probe
+            picksSinceProbe = earlier.picksSinceProbe
+            shares = Self.shares(of: candidates)
+        }
     }
 
     /// A mood: your songs in genres that suit it, and new finds from Apple Music's playlists
@@ -711,6 +767,253 @@ extension LiveMix {
         let halfLife: TimeInterval = 120 * 24 * 60 * 60
         let recency = pow(0.5, max(0, now.timeIntervalSince(lastHeard)) / halfLife)
         return log2(1 + Double(plays)) * (0.6 + 0.4 * recency)
+    }
+}
+
+// MARK: - Probing and habits
+
+extension LiveMix {
+    /// Starts Tracks Radio's listen from what has landed at this moment before, and learns
+    /// from it as it plays. Call it before the first pick.
+    /// - Parameters:
+    ///   - habits: as the last listen left them. See ``habits(at:)``.
+    ///   - probing: whether to open with a probe: for a listen started from nothing in
+    ///     particular, not one started from a song.
+    public mutating func begin(with habits: RadioHabits, probing: Bool, now: Date = .now) {
+        let base = habits.decayed(to: now)
+        habitsBase = base
+        learned = RadioHabits()
+        shares = Self.shares(of: candidates)
+        let band = band
+        let hasNewFinds = candidates.contains(where: \.isNew)
+        // New finds that have landed at this moment make a few more of them, and ones skipped
+        // a few fewer, never far from the share tuned.
+        let novelty = base.tallyOfNewFinds(in: band)
+        if novelty.total > 0, hasNewFinds {
+            let lift = LandingOdds(novelty).mean / LandingOdds.prior.mean
+            newShare = (newShare * min(1.25, max(0.75, lift))).clamped(to: shareRange)
+        }
+        probe = probing
+            ? RadioProbe.plan(
+                shares: shares, yourSongs: candidates.count { !$0.isNew }, heard: base.heard(in: band),
+                newShare: newShare, hasNewFinds: hasNewFinds
+            )
+            : nil
+    }
+
+    /// Whether the opening probe is still trying directions.
+    public var isProbing: Bool { probe?.isOpen == true }
+
+    /// What has landed on Tracks Radio, this listen included, to keep for the next. Nil for a
+    /// mix that wasn't begun with ``begin(with:probing:now:)``. The same however often it's
+    /// asked, so it can be kept after every song.
+    public func habits(at now: Date = .now) -> RadioHabits? {
+        habitsBase.map { $0.adding(learned).decayed(to: now) }
+    }
+
+    private var band: RadioHabits.Band { RadioHabits.Band(moment: moment) }
+
+    /// What a song in the probe counts for, against one later.
+    static let probeCounts = 2.0
+
+    static func shares(of candidates: [Candidate]) -> [String: Double] {
+        let total = candidates.reduce(0) { $0 + $1.weight }
+        guard total > 0 else { return [:] }
+        var shares: [String: Double] = [:]
+        for candidate in candidates {
+            guard let key = candidate.genreKey else { continue }
+            shares[key, default: 0] += candidate.weight / total
+        }
+        return shares
+    }
+
+    private func isProbePick(_ identity: String) -> Bool {
+        probe?.slots.contains { $0.identity == identity } == true
+    }
+
+    /// The probe's next song, from a direction it hasn't tried yet. Nil once the probe is
+    /// over, or when no such direction has a song that passes.
+    /// - Parameters:
+    ///   - onlyNew: true for a new find only, false for one of yours only, nil for whichever
+    ///     the probe's plan has for this song.
+    ///   - opening: for the song a listen opens on, which leans toward the direction likeliest
+    ///     to land, since the first song is the one most often skipped.
+    private mutating func probePick(onlyNew: Bool?, opening: Bool, where include: (MixSong) -> Bool) -> Candidate? {
+        guard var probe, probe.isOpen else { return nil }
+        if probe.slots.count >= probe.planned {
+            let heard = probe.slots.compactMap(\.landed)
+            if heard.contains(true) {
+                endProbe(settling: true)
+                return nil
+            }
+            // Nothing landed: another direction, as long as there are some left to try.
+            guard heard.count >= 2, probe.extended < RadioProbe.mostExtra else {
+                endProbe(settling: false)
+                return nil
+            }
+            probe.planned += 1
+            probe.extended += 1
+            steering = .tryingSomethingElse
+        }
+
+        let wantsNew = onlyNew ?? probe.newSlots.contains(probe.slots.count)
+        let artists = Set(picks.compactMap { byIdentity[$0].map { candidates[$0].song.artistKey } })
+        let open = clear(of: avoiding, candidates.filter { candidate in
+            guard let family = candidate.genreKey else { return false }
+            return !probe.families.contains(family) && !picked.contains(candidate.song.songIdentity)
+                && !artists.contains(candidate.song.artistKey) && allows(candidate.song) && include(candidate.song)
+                && (onlyNew == nil || candidate.isNew == onlyNew)
+        })
+        var byFamily: [String: [Candidate]] = [:]
+        for candidate in open {
+            guard let family = candidate.genreKey, shares[family, default: 0] >= RadioProbe.leastShare else { continue }
+            byFamily[family, default: []].append(candidate)
+        }
+        // Families with the kind of song this one is to be, where any have.
+        let ofKind = byFamily.filter { $0.value.contains { $0.isNew == wantsNew } }
+        let families = (ofKind.isEmpty ? byFamily : ofKind).keys.sorted()
+
+        let habits = (habitsBase ?? RadioHabits()).adding(learned)
+        let band = band
+        let prior = LandingOdds.prior
+        let odds = families.map { LandingOdds(habits.tally(genre: $0, in: band)) }
+        // A direction that seldom lands at this moment waits until the rest have been tried.
+        let likely = odds.map { $0.mean >= RadioProbe.leastLanded || probe.extended > 0 }
+        let usable = likely.contains(true) ? likely : likely.map { _ in true }
+        let scores = zip(families, odds).enumerated().map { index, pair -> Double in
+            guard usable[index] else { return 0 }
+            let (family, odds) = pair
+            let share = shares[family, default: 0]
+            let lift = pow(odds.mean / prior.mean, 2)
+            // The opener: the direction likeliest to land. The rest: the ones most worth
+            // hearing about, played a lot and not yet sure of.
+            let score = opening ? share * lift : share.squareRoot() * lift * odds.spread / prior.spread
+            return score * score
+        }
+        guard let family = pick(families, weights: scores), var pool = byFamily[family] else {
+            self.probe = probe
+            // Trying further, and every direction has been tried: what's learned takes over.
+            if probe.extended > 0, byFamily.isEmpty { endProbe(settling: false) }
+            return nil
+        }
+        let kind = pool.filter { $0.isNew == wantsNew }
+        if !kind.isEmpty { pool = kind }
+        let rested = pool.filter { !$0.isResting }
+        if !rested.isEmpty { pool = rested }
+        // Another era than the probe has played.
+        let unheard = pool.filter { $0.decade.map { !probe.decades.contains($0) } ?? true }
+        if !unheard.isEmpty { pool = unheard }
+
+        guard let choice = draw(from: pool, emphasis: opening ? 2 : 1) else {
+            self.probe = probe
+            return nil
+        }
+        probe.slots.append(RadioProbe.Slot(identity: choice.song.songIdentity, family: family))
+        if let decade = choice.decade { probe.decades.insert(decade) }
+        self.probe = probe
+        pickReasons.updateValue(.probing, forKey: choice.song.songIdentity)
+        note(picked: choice.song.songIdentity)
+        easeBack()
+        return choice
+    }
+
+    /// One of `items`, as likely as its weight. Nil when none has any.
+    private mutating func pick<Item>(_ items: [Item], weights: [Double]) -> Item? {
+        let total = weights.reduce(0, +)
+        guard total > 0 else { return nil }
+        var target = Double.random(in: 0..<total, using: &random)
+        for (item, weight) in zip(items, weights) {
+            target -= weight
+            if target < 0 { return item }
+        }
+        return weights.lastIndex { $0 > 0 }.map { items[$0] }
+    }
+
+    /// Ends the probe. Settling, it says which genre landed best.
+    private mutating func endProbe(settling: Bool) {
+        guard var probe, probe.isOpen else { return }
+        probe.isOpen = false
+        self.probe = probe
+        guard settling else { return }
+        let habits = (habitsBase ?? RadioHabits()).adding(learned)
+        let landed = Set(probe.slots.filter { $0.landed == true }.compactMap(\.family)).sorted()
+        guard let best = landed.max(by: { LandingOdds(habits.tally(genre: $0, in: band)).mean < LandingOdds(habits.tally(genre: $1, in: band)).mean })
+        else { return }
+        switch steering {
+        // Already following a song let play or loved: that says more.
+        case .towardGenre, .towardArtist: break
+        default: steering = .settledOn(displayName(ofGenre: best))
+        }
+    }
+
+    /// Takes in how a song went: for the habits kept across listens, counting double for a
+    /// probe song, and for the probe, which tries further when nothing lands.
+    /// - Parameter counting: how much the outcome counts: less for a song moved on from than
+    ///   one skipped, more for one loved.
+    private mutating func learn(_ identity: String, _ candidate: Candidate, landed: Bool, counting: Double = 1) {
+        guard habitsBase != nil else { return }
+        let slot = probe?.slots.firstIndex { $0.identity == identity }
+        let weight = counting * (slot != nil ? Self.probeCounts : 1)
+        // A skip remembered for next time counts for half a song let play: what you skip one
+        // morning shouldn't keep a genre away the next.
+        learned.record(
+            landed: landed ? weight : 0, missed: landed ? 0 : weight * 0.5,
+            genre: candidate.genreKey, decade: candidate.decade, isNew: candidate.isNew, in: band
+        )
+        guard let slot, var probe, probe.isOpen, probe.slots[slot].landed == nil else { return }
+        probe.slots[slot].landed = landed
+        self.probe = probe
+        if landed {
+            // Found after a probe that was all skips: that's the one to follow.
+            if probe.extended > 0 { endProbe(settling: false) }
+            return
+        }
+        // Every probe song heard so far skipped, and nearly all of them heard: it's going to
+        // try further, and says so now rather than with its next pick.
+        let heard = probe.slots.compactMap(\.landed)
+        if heard.count >= max(2, probe.planned - 1), !heard.contains(true) {
+            steering = .tryingSomethingElse
+        }
+    }
+
+    /// How much what Tracks Radio has learned makes each choice likelier, for a pick after
+    /// the probe: a guess at how likely each genre family and decade is to land, drawn from
+    /// what's been heard (Thompson sampling), against the odds before anything is. A family
+    /// that keeps landing comes up more; one little heard from gets a guess that's often high,
+    /// so it keeps its chances. Now and then, less often as the listen goes on, nothing
+    /// learned weighs in at all, so a genre that didn't land early can still come round.
+    /// Nil for a mix that doesn't learn, and while probing.
+    private mutating func lifts(for choices: [Candidate]) -> Lifts? {
+        guard let base = habitsBase, probe?.isOpen != true else { return nil }
+        let explore = max(Self.leastExploring, Self.mostExploring * pow(0.85, Double(picksSinceProbe)))
+        guard Double.random(in: 0..<1, using: &random) >= explore else { return nil }
+        let habits = base.adding(learned)
+        let band = band
+        let prior = LandingOdds.prior.mean
+        var lifts = Lifts()
+        for family in Set(choices.compactMap(\.genreKey)).sorted() {
+            let guess = LandingOdds(habits.tally(genre: family, in: band)).draw(using: &random)
+            lifts.genres[family] = min(4, max(0.15, pow(guess / prior, 2)))
+        }
+        for decade in Set(choices.compactMap(\.decade)).sorted() {
+            let guess = LandingOdds(habits.tally(decade: decade, in: band)).draw(using: &random)
+            lifts.decades[decade] = min(2, max(0.5, guess / prior))
+        }
+        return lifts
+    }
+
+    /// The share of picks after the probe that ignore what's been learned, at first, and at
+    /// the least.
+    static let mostExploring = 0.15
+    static let leastExploring = 0.05
+
+    struct Lifts {
+        var genres: [String: Double] = [:]
+        var decades: [Int: Double] = [:]
+
+        func weight(of candidate: Candidate) -> Double {
+            (candidate.genreKey.flatMap { genres[$0] } ?? 1) * (candidate.decade.flatMap { decades[$0] } ?? 1)
+        }
     }
 }
 

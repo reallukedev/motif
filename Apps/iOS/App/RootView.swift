@@ -110,6 +110,8 @@ struct RootView: View {
                 model.nearby.start()
             }
             .onPlayingChange(of: player) { model.tellNearby() }
+            // A song picked up from another of your devices through Handoff.
+            .onContinueUserActivity(NowPlayingHandoff.activityType) { model.continueHandoff($0) }
             // Playlists merged with Apple Music, once your servers have had a moment to answer.
             .task {
                 guard !model.isDemoLaunch else { return }

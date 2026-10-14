@@ -25,6 +25,10 @@ struct AlbumDetailView: View {
                     .frame(maxWidth: .infinity)
             } else if loadedID == albumID {
                 ContentUnavailableView("No Plays", systemImage: "square.stack")
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 120)
             }
         }
         .groupedBackground()

@@ -114,7 +114,7 @@ final class SharePlayController {
     @ObservationIgnored private var guestInvite: SharePlayInvite?
     /// The relay, where the build has one.
     @ObservationIgnored private let relay = SharePlayRelayConfig.main
-    @ObservationIgnored private var foregroundObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var foregroundObserver: NotificationCenter.ObservationToken?
     #if DEBUG
     /// Sample data's pretend sessions, which the simulator can't run for real.
     @ObservationIgnored private(set) var demo: SharePlayDemo?
@@ -157,11 +157,9 @@ final class SharePlayController {
         }
         // iOS stops listening nearby while Tracks is suspended: back in the foreground, the
         // code works again straight away.
-        foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.codeHost?.resume()
-                self?.codeGuest?.resume()
-            }
+        foregroundObserver = NotificationCenter.default.addObserver(of: UIApplication.self, for: .didBecomeActive) { [weak self] _ in
+            self?.codeHost?.resume()
+            self?.codeGuest?.resume()
         }
     }
 

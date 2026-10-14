@@ -18,7 +18,11 @@ final class MusicServers {
     private(set) var servers: [SubsonicServer] = []
     private(set) var status: [String: Status] = [:]
     /// Every song on each server, as of its last sync.
-    private(set) var catalogs: [String: [LocalTrack]] = [:]
+    private(set) var catalogs: [String: [LocalTrack]] = [:] {
+        didSet { catalogRevision &+= 1 }
+    }
+    /// Bumped whenever ``catalogs`` changes, so following it doesn't mean comparing them.
+    private(set) var catalogRevision = 0
     /// Each server's artists, by folded name: their id there, for artists like them, and their
     /// picture's cover id, for artist pages and circles. A server not asked yet isn't here.
     private(set) var artists: [String: [String: ServerArtistRef]] = [:]
@@ -42,6 +46,9 @@ final class MusicServers {
     @ObservationIgnored private var syncTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var keepFollowUps: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let isDemo: Bool
+    /// Reading the saved songs at launch, off the main actor: a big library takes a moment.
+    /// Connecting and syncing wait for it.
+    @ObservationIgnored private var loading: Task<Void, Never>?
 
     private static let storageKey = "musicServers"
     private static let quietKey = "musicServersNotToldOfPlays"
@@ -65,8 +72,16 @@ final class MusicServers {
             if let password = ServerKeychain.password(for: server.id) {
                 clients[server.id] = SubsonicClient(server: server, password: password)
             }
-            catalogs[server.id] = Self.loadCatalog(server.id)
-            artists[server.id] = Self.loadArtists(server.id)
+        }
+        let ids = servers.map(\.id)
+        loading = Task { [self] in
+            let saved = await Self.loadSaved(ids)
+            for (id, catalog, artists) in saved where servers.contains(where: { $0.id == id }) {
+                // A sync that landed first is newer.
+                if catalogs[id] == nil, !catalog.isEmpty { catalogs[id] = catalog }
+                if self.artists[id] == nil, let artists { self.artists[id] = artists }
+            }
+            loading = nil
         }
         #if DEBUG
         // An unsigned build has no keychain.
@@ -151,7 +166,45 @@ final class MusicServers {
         }
     }
 
+    /// Checks servers again once the connection comes back or moves: ones out of reach are
+    /// tried again, and ones that answered are asked quietly whether they still do, so a
+    /// server reachable only at home shows as out of reach once you've left, and back again
+    /// when you're home. Servers not checked yet this launch are left to that.
+    func networkChanged() async {
+        await withTaskGroup(of: Void.self) { group in
+            for server in servers where clients[server.id] != nil {
+                switch status[server.id] {
+                case .online: group.addTask { await self.recheck(server.id) }
+                case .offline, .failed: group.addTask { await self.connect(server.id) }
+                case .connecting, .wrongPassword, nil: break
+                }
+            }
+        }
+    }
+
+    /// Asks a server that answered before whether it still does, without showing it as
+    /// connecting meanwhile.
+    private func recheck(_ serverID: String) async {
+        guard let client = clients[serverID] else { return }
+        let next: Status
+        do {
+            try await client.ping()
+            return
+        } catch SubsonicError.wrongCredentials {
+            next = .wrongPassword
+        } catch let error as SubsonicError {
+            next = .failed(Self.describe(error))
+        } catch {
+            next = .offline
+        }
+        // Checked again, or removed, meanwhile.
+        guard status[serverID] == .online else { return }
+        status[serverID] = next
+        onStatusChange?()
+    }
+
     func connect(_ serverID: String) async {
+        await loading?.value
         guard let client = clients[serverID] else {
             status[serverID] = .wrongPassword
             return
@@ -181,6 +234,8 @@ final class MusicServers {
     /// Pages through every song on the server. Songs keep the date they were first seen, so
     /// Recently Added means recently added to the server.
     func sync(_ serverID: String) async {
+        // Its saved songs first, so their dates added aren't lost.
+        await loading?.value
         // One already running is waited for, so whoever asked sees its songs when it returns.
         if let running = syncTasks[serverID] {
             await running.value
@@ -230,7 +285,7 @@ final class MusicServers {
         }
         catalogs[serverID] = tracks
         lastSynced[serverID] = now
-        Self.saveCatalog(tracks, serverID)
+        Task.detached(priority: .utility) { Self.saveCatalog(tracks, serverID) }
         settleKept(serverID, synced: tracks)
         // Its artists' pictures after the songs are safe.
         await syncArtists(serverID)
@@ -422,25 +477,30 @@ final class MusicServers {
         }
     }
 
-    private static func artistsURL(_ serverID: String) -> URL {
+    nonisolated private static func artistsURL(_ serverID: String) -> URL {
         LibraryFolders.index.appending(path: "server-\(serverID)-artists.json")
     }
 
-    private static func loadArtists(_ serverID: String) -> [String: ServerArtistRef]? {
+    @concurrent
+    nonisolated private static func loadSaved(_ ids: [String]) async -> [(String, [LocalTrack], [String: ServerArtistRef]?)] {
+        ids.map { ($0, loadCatalog($0), loadArtists($0)) }
+    }
+
+    nonisolated private static func loadArtists(_ serverID: String) -> [String: ServerArtistRef]? {
         guard let data = try? Data(contentsOf: artistsURL(serverID)) else { return nil }
         return try? JSONDecoder().decode([String: ServerArtistRef].self, from: data)
     }
 
-    private static func catalogURL(_ serverID: String) -> URL {
+    nonisolated private static func catalogURL(_ serverID: String) -> URL {
         LibraryFolders.index.appending(path: "server-\(serverID).json")
     }
 
-    private static func loadCatalog(_ serverID: String) -> [LocalTrack] {
+    nonisolated private static func loadCatalog(_ serverID: String) -> [LocalTrack] {
         guard let data = try? Data(contentsOf: catalogURL(serverID)) else { return [] }
         return (try? JSONDecoder().decode([LocalTrack].self, from: data)) ?? []
     }
 
-    private static func saveCatalog(_ tracks: [LocalTrack], _ serverID: String) {
+    nonisolated private static func saveCatalog(_ tracks: [LocalTrack], _ serverID: String) {
         guard let data = try? JSONEncoder().encode(tracks) else { return }
         try? data.write(to: catalogURL(serverID), options: .atomic)
     }

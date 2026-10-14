@@ -7,6 +7,10 @@ struct RunLogTests {
     let scratch = ScratchDefaults()
     var log: RunLog { RunLog(suiteName: scratch.suiteName) }
 
+    init() {
+        RunLog(suiteName: scratch.suiteName).reopensAutomatically = true
+    }
+
     let start = Date(timeIntervalSince1970: 1_800_000_000)
 
     @discardableResult
@@ -67,6 +71,36 @@ struct RunLogTests {
         begin()
         log.endCleanly(now: start.addingTimeInterval(60))
         #expect(log.recordTermination(processID: 100, now: start.addingTimeInterval(61)) == .quit)
+    }
+
+    @Test("with reopening off, the app stays closed and the stop time is still exact")
+    func reopeningOff() throws {
+        log.reopensAutomatically = false
+        begin()
+        #expect(log.recordTermination(processID: 100, now: start.addingTimeInterval(330)) == .leftClosed)
+
+        let quit = try #require(begin(at: 900, pid: 101))
+        #expect(quit.stoppedAt == start.addingTimeInterval(330))
+        #expect(quit.stopTimeIsExact)
+        #expect(!quit.reopenedAutomatically)
+    }
+
+    @Test("an app ended while someone was using the Mac stays closed, as after Force Quit")
+    func forceQuit() {
+        begin()
+        #expect(log.recordTermination(processID: 100, secondsSinceInput: 2) == .leftClosed)
+    }
+
+    @Test("an app ended while the Mac sat idle is reopened")
+    func idleEnd() {
+        begin()
+        #expect(log.recordTermination(processID: 100, secondsSinceInput: 600) == .reopen)
+    }
+
+    @Test("reopening is off until the person turns it on")
+    func offByDefault() {
+        let fresh = ScratchDefaults()
+        #expect(!RunLog(suiteName: fresh.suiteName).reopensAutomatically)
     }
 
     @Test("a watchdog from another run doesn't act on this one")

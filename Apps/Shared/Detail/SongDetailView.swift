@@ -23,6 +23,10 @@ struct SongDetailView: View {
                     .frame(maxWidth: .infinity)
             } else if loadedID == songID {
                 ContentUnavailableView("No Plays", systemImage: "music.note")
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 120)
             }
         }
         .groupedBackground()
@@ -125,7 +129,7 @@ struct SongDetailView: View {
                     // Lazy: a favourite can have thousands of plays once they're all shown.
                     LazyVStack(spacing: 0) {
                         let plays = showsAllPlays ? profile.plays : Array(profile.plays.prefix(8))
-                        ForEach(Array(plays.enumerated()), id: \.offset) { index, date in
+                        ForEach(plays.enumerated(), id: \.offset) { index, date in
                             HStack {
                                 Text(Format.day(date))
                                 Spacer()
@@ -163,13 +167,13 @@ struct SongDetailView: View {
                         Task { await playback.play(item) }
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 Button("Show in Music", systemImage: "arrow.up.forward.app") {
                     if let url = URL(string: "https://music.apple.com/song/\(song.songID)") {
                         openURL(url)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
             }
             .buttonBorderShape(.capsule)
             .controlSize(.large)

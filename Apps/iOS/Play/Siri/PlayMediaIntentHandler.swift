@@ -2,25 +2,38 @@ import Intents
 import MusicKit
 import TracksCore
 
-/// Siri's "Play Phoebe Bridgers in Tracks", "Play my Workout playlist on Tracks", and plain
-/// "Play music" once Siri has learned Tracks is where you listen.
+/// Siri's "Play Phoebe Bridgers in Tracks", "Play Blue from my music", "Play my Workout
+/// playlist on Tracks", "Play some jazz", "Play Motion Sickness next", "Play more like this",
+/// and plain "Play music" once Siri has learned Tracks is where you listen.
 ///
-/// Siri parses the request; this finds what it names, in Tracks’ own mixes first, then the
-/// library for playlists, then Apple Music's catalog, and plays it in Tracks so every song is
-/// kept. Handled in the app, which is launched in the background to do it.
+/// Siri parses the request; ``MediaRequestResolver`` finds what it names in Tracks' own mixes,
+/// then the music source that's on, then the other one, and plays it in Tracks so every song
+/// is kept, switching source on the way when that's where it was found. Handled in the app,
+/// which is launched in the background to do it.
 nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
     func resolveMediaItems(for intent: INPlayMediaIntent) async -> [INPlayMediaMediaItemResolutionResult] {
         let search = intent.mediaSearch
+        // "Play more like this": nothing to look up.
+        if search?.reference == .currentlyPlaying {
+            let item = INMediaItem(identifier: Self.moreLikeThis, title: String(localized: "More Like This"), type: .music, artwork: nil)
+            return INPlayMediaMediaItemResolutionResult.successes(with: [item])
+        }
+        // "Resume" and "Play" with nothing named, while something is paused: carry on.
+        if intent.resumePlayback == true, search?.mediaName == nil, search?.artistName == nil, await Self.hasSomethingToResume() {
+            let item = INMediaItem(identifier: Self.resume, title: String(localized: "Resume"), type: .music, artwork: nil)
+            return INPlayMediaMediaItemResolutionResult.successes(with: [item])
+        }
         let request = MediaRequest(
-            name: search?.mediaName?.trimmingCharacters(in: .whitespaces) ?? "",
-            artist: search?.artistName?.trimmingCharacters(in: .whitespaces) ?? "",
-            type: search?.mediaType ?? .unknown,
-            moods: search?.moodNames ?? []
+            name: search?.mediaName ?? "",
+            artist: search?.artistName ?? "",
+            kind: MediaKind(search?.mediaType ?? .unknown),
+            moods: search?.moodNames ?? [],
+            genres: search?.genreNames ?? []
         )
         guard let found = await MediaRequestResolver.item(for: request) else {
             return [.unsupported(forReason: .unsupportedMediaType)]
         }
-        let item = INMediaItem(identifier: found.identifier, title: found.title, type: found.type, artwork: nil, artist: found.artist)
+        let item = INMediaItem(identifier: found.identifier, title: found.title, type: found.kind.mediaType, artwork: nil, artist: found.artist)
         return INPlayMediaMediaItemResolutionResult.successes(with: [item])
     }
 
@@ -28,298 +41,150 @@ nonisolated final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandl
         guard let identifier = intent.mediaItems?.first?.identifier else {
             return INPlayMediaIntentResponse(code: .failure, userActivity: nil)
         }
-        let shuffled = intent.playShuffled == true
-        let problem = await MediaRequestResolver.play(identifier, shuffled: shuffled)
-        switch problem {
-        case nil:
-            let search = intent.mediaSearch
-            let asked = [search?.mediaName, search?.artistName]
-            await Self.remember(asked)
-            return INPlayMediaIntentResponse(code: .success, userActivity: nil)
-        case .needsSubscription, .accessDenied:
-            // Something to sort out in Tracks itself.
-            return INPlayMediaIntentResponse(code: .failureRequiringAppLaunch, userActivity: nil)
-        case .onlyExplicit, .explicitSong, .blockedArtist:
-            return INPlayMediaIntentResponse(code: .failureRestrictedContent, userActivity: nil)
-        case .nothingToPlay, .notInYourMusic, .needsAppleMusic, .failed:
-            return INPlayMediaIntentResponse(code: .failure, userActivity: nil)
+        let problem: PlayerProblem?
+        switch identifier {
+        case Self.moreLikeThis:
+            problem = await MediaRequestResolver.playMoreLikeThis()
+        case Self.resume:
+            await Self.resumePlaying()
+            problem = nil
+        default:
+            let placement: MediaPlacement = switch intent.playbackQueueLocation {
+            case .next: .next
+            case .later: .later
+            default: .now
+            }
+            problem = await MediaRequestResolver.play(identifier, shuffled: intent.playShuffled == true, placement: placement)
+            if problem == nil {
+                let search = intent.mediaSearch
+                await MediaRequestResolver.remember([search?.mediaName, search?.artistName])
+            }
         }
+        return INPlayMediaIntentResponse(code: Self.code(for: problem), userActivity: nil)
     }
-}
 
-extension PlayMediaIntentHandler {
-    /// Keeps what was asked for with the phone's recent searches, so Search in the car and on
-    /// the phone shows it, as Music does with what you ask Siri for.
+    private static let moreLikeThis = "special:more-like-this"
+    private static let resume = "special:resume"
+
     @MainActor
-    static func remember(_ asked: [String?]) {
-        let term = asked
-            .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        // "Play music" and "something chill" aren't searches.
-        guard !term.isEmpty, MediaRequestResolver.tracksChoice(named: term) == nil else { return }
-        let key = MusicSource.current == .yourMusic ? "recentYourMusicSearches" : "recentMusicSearches"
-        let defaults = UserDefaults.standard
-        defaults.set(RecentSearches.adding(term, to: defaults.string(forKey: key) ?? ""), forKey: key)
+    private static func hasSomethingToResume() -> Bool {
+        let player = AppModel.shared.player
+        return player.current != nil && player.status == .paused
+    }
+
+    @MainActor
+    private static func resumePlaying() {
+        let player = AppModel.shared.player
+        if player.status != .playing { player.togglePlayPause() }
+    }
+
+    private static func code(for problem: PlayerProblem?) -> INPlayMediaIntentResponseCode {
+        switch problem {
+        case nil: .success
+        // Something to sort out in Tracks itself.
+        case .needsSubscription, .accessDenied: .failureRequiringAppLaunch
+        case .onlyExplicit, .explicitSong, .blockedArtist: .failureRestrictedContent
+        case .nothingToPlay, .notInYourMusic, .needsAppleMusic: .failureUnknownMediaType
+        case .failed: .failure
+        }
     }
 }
 
-/// What Siri heard, as plain values.
-nonisolated struct MediaRequest: Sendable {
-    let name: String
-    let artist: String
-    let type: INMediaItemType
-    /// Moods Siri heard: "something chill", "workout music".
-    var moods: [String] = []
+/// Siri's "I like this song" and "I don't like this song": a favorite in Apple Music, and
+/// either way the live mix hears about it, as the star and the skip tell it.
+nonisolated final class UpdateMediaAffinityIntentHandler: NSObject, INUpdateMediaAffinityIntentHandling {
+    func resolveMediaItems(for intent: INUpdateMediaAffinityIntent) async -> [INUpdateMediaAffinityMediaItemResolutionResult] {
+        guard let current = await Self.current() else { return [.unsupported()] }
+        let item = INMediaItem(identifier: current.id, title: current.title, type: .song, artwork: nil, artist: current.artist)
+        return INUpdateMediaAffinityMediaItemResolutionResult.successes(with: [item])
+    }
+
+    func resolveAffinityType(for intent: INUpdateMediaAffinityIntent) async -> INMediaAffinityTypeResolutionResult {
+        intent.affinityType == .unknown ? .needsValue() : .success(with: intent.affinityType)
+    }
+
+    func handle(intent: INUpdateMediaAffinityIntent) async -> INUpdateMediaAffinityIntentResponse {
+        let liked = intent.affinityType == .like
+        let done = await Self.update(liked: liked)
+        return INUpdateMediaAffinityIntentResponse(code: done ? .success : .failure, userActivity: nil)
+    }
+
+    @MainActor
+    private static func current() -> (id: String, title: String, artist: String)? {
+        guard let track = AppModel.shared.player.current else { return nil }
+        return (track.id, track.title, track.artistName)
+    }
+
+    @MainActor
+    private static func update(liked: Bool) -> Bool {
+        let player = AppModel.shared.player
+        guard let track = player.current else { return false }
+        if liked {
+            if let song = track.song {
+                player.setFavorite(song, true)
+            } else if player.canAskForMoreLikeThis {
+                player.playMoreLikeThis()
+            }
+        } else {
+            if let song = track.song, player.isFavorite(song) { player.setFavorite(song, false) }
+            player.skipToNext()
+        }
+        return true
+    }
 }
 
-/// What a request resolved to, as plain values, turned into an `INMediaItem` by the handler.
-nonisolated struct ResolvedMedia: Sendable {
-    let identifier: String
-    let title: String
-    let type: INMediaItemType
-    var artist: String?
+/// Siri's "Add this song to my library": the song on, into your Apple Music library.
+nonisolated final class AddMediaIntentHandler: NSObject, INAddMediaIntentHandling {
+    func resolveMediaItems(for intent: INAddMediaIntent) async -> [INAddMediaMediaItemResolutionResult] {
+        guard let current = await Self.current() else {
+            return [INAddMediaMediaItemResolutionResult(mediaItemResolutionResult: .unsupported())]
+        }
+        let item = INMediaItem(identifier: current.id, title: current.title, type: .song, artwork: nil, artist: current.artist)
+        return INAddMediaMediaItemResolutionResult.successes(with: [item])
+    }
+
+    func handle(intent: INAddMediaIntent) async -> INAddMediaIntentResponse {
+        let done = await Self.add()
+        return INAddMediaIntentResponse(code: done ? .success : .failure, userActivity: nil)
+    }
+
+    @MainActor
+    private static func current() -> (id: String, title: String, artist: String)? {
+        guard let track = AppModel.shared.player.current, track.song != nil else { return nil }
+        return (track.id, track.title, track.artistName)
+    }
+
+    @MainActor
+    private static func add() -> Bool {
+        let player = AppModel.shared.player
+        guard let song = player.current?.song else { return false }
+        player.addToLibrary(song)
+        return true
+    }
 }
 
-/// Turns what Siri heard into something Tracks can play, and plays it.
-@MainActor
-enum MediaRequestResolver {
-    // Identifiers carried from resolving to handling: "kind:value".
-    private static let tracksPrefix = "tracks:"
-
-    static func item(for request: MediaRequest) async -> ResolvedMedia? {
-        let (name, artist, type) = (request.name, request.artist, request.type)
-
-        // "Play something chill": one of Tracks’ moods, when Siri heard one and nothing else.
-        if name.isEmpty, artist.isEmpty, let mood = request.moods.lazy.compactMap(moodChoice(named:)).first {
-            return tracksItem(mood)
-        }
-
-        // "Play music": Tracks Radio, which always has something, or this hour's mix with it off.
-        if name.isEmpty, artist.isEmpty {
-            return tracksItem(PlayPreferences.isTracksRadioOn ? .station : .forYou)
-        }
-        if artist.isEmpty, let choice = tracksChoice(named: name) {
-            return tracksItem(choice)
-        }
-        if MusicSource.current == .yourMusic {
-            return localItem(name: name, artist: artist, type: type)
-        }
-        guard MusicAuthorization.currentStatus == .authorized else { return nil }
-
-        switch type {
-        case .playlist:
-            let inLibrary = await libraryPlaylist(named: name)
-            let playlist: Playlist? = if let inLibrary { inLibrary } else { await catalog(Playlist.self, name).first }
-            if let playlist {
-                return ResolvedMedia(identifier: "playlist:\(playlist.id.rawValue)", title: playlist.name, type: .playlist)
-            }
-        case .album:
-            if let album = PlayPreferences.versions(of: await catalog(Album.self, [name, artist].joined(separator: " "))).first {
-                return ResolvedMedia(identifier: "album:\(album.id.rawValue)", title: album.title, type: .album, artist: album.artistName)
-            }
-        case .artist:
-            if let found = await catalog(Artist.self, artist.isEmpty ? name : artist).first {
-                return ResolvedMedia(identifier: "artist:\(found.id.rawValue)", title: found.name, type: .artist)
-            }
-        case .radioStation, .station:
-            if let station = await catalog(MusicKit.Station.self, name).first {
-                return ResolvedMedia(identifier: "station:\(station.id.rawValue)", title: station.name, type: .radioStation)
-            }
-        default:
-            break
-        }
-
-        // A song, or anything unspecified: the catalog's best match.
-        if artist.isEmpty || !name.isEmpty {
-            let songs = PlayPreferences.versions(of: await catalog(Song.self, [name, artist].joined(separator: " ")))
-            if let song = songs.first {
-                return ResolvedMedia(identifier: "song:\(song.id.rawValue)", title: song.title, type: .song, artist: song.artistName)
-            }
-        }
-        if let found = await catalog(Artist.self, artist.isEmpty ? name : artist).first {
-            return ResolvedMedia(identifier: "artist:\(found.id.rawValue)", title: found.name, type: .artist)
-        }
-        return nil
-    }
-
-    /// Plays what an identifier names. Returns what went wrong, if anything.
-    static func play(_ identifier: String, shuffled: Bool) async -> PlayerProblem? {
-        let model = AppModel.shared
-        guard !model.isDemoLaunch else { return .nothingToPlay }
-        let usesYourMusic = model.musicSource == .yourMusic
-        // No prompt from the background, where no one would see it. Your own music needs none.
-        guard usesYourMusic || MusicAuthorization.currentStatus == .authorized else { return .accessDenied }
-        await model.prepareForPlaying()
-        let player = model.player
-        let parts = identifier.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return .nothingToPlay }
-        let id = MusicItemID(parts[1])
-        defer { player.problem = nil }
-
-        switch parts[0] {
-        case "local-track":
-            let index = model.yourMusic.index
-            guard let track = index.track(id: parts[1]) else { return .nothingToPlay }
-            // The song, then the rest of its artist's, so the music doesn't stop after one.
-            let more = index.artist(id: track.artistKey)?.tracks.filter { $0.id != track.id }.shuffled() ?? []
-            await player.start(.local([track] + more), from: .songs(track.title))
-        case "local-album":
-            guard let album = model.yourMusic.index.album(id: parts[1]) else { return .nothingToPlay }
-            await player.start(.local(album.tracks), from: PlayContext(kind: .album, title: album.title), shuffled: shuffled)
-        case "local-artist":
-            guard let artist = model.yourMusic.index.artist(id: parts[1]) else { return .nothingToPlay }
-            await player.start(.local(artist.tracks), from: PlayContext(kind: .artist, title: artist.name), shuffled: true)
-        case "tracks":
-            guard let choice = PlayChoice(rawValue: parts[1]) else { return .nothingToPlay }
-            await TracksPlayback.start(choice, model: model)
-        case "song":
-            guard let song = await song(id) else { return .nothingToPlay }
-            // The song, then more by the same artist, so the music doesn't stop after one.
-            await player.start(.songs(await songAndMore(song)), from: .songs(song.title))
-        case "album":
-            guard let album = await album(id) else { return .nothingToPlay }
-            await player.start(.album(album), from: PlayContext(kind: .album, title: album.title), shuffled: shuffled)
-        case "playlist":
-            guard let playlist = await libraryOrCatalogPlaylist(id) else { return .nothingToPlay }
-            await player.start(.playlist(playlist), from: PlayContext(kind: .playlist, title: playlist.name), shuffled: shuffled)
-        case "artist":
-            guard let artist = await artist(id),
-                  let top = try? await artist.with([.topSongs]).topSongs, !top.isEmpty
-            else { return .nothingToPlay }
-            let songs = PlayPreferences.versions(of: Array(top))
-            await player.start(.songs(songs), from: PlayContext(kind: .artist, title: artist.name), shuffled: shuffled)
-        case "station":
-            guard let station = await station(id) else { return .nothingToPlay }
-            await player.start(.station(station), from: PlayContext(kind: .station, title: station.name))
-        default:
-            return .nothingToPlay
-        }
-        // Answered to Siri, so it isn't shown again the next time the app opens: the defer
-        // above clears it once this has been read.
-        return player.problem
-    }
-
-    /// Your own music's best match: an artist, album or song, as Siri heard it asked for.
-    private static func localItem(name: String, artist: String, type: INMediaItemType) -> ResolvedMedia? {
-        let index = AppModel.shared.yourMusic.index
-        let query = [name, artist].filter { !$0.isEmpty }.joined(separator: " ")
-        let found = index.search(query, limit: 5)
-        switch type {
-        case .artist:
-            let named = index.search(artist.isEmpty ? name : artist, limit: 1).artists.first
-            return named.map { ResolvedMedia(identifier: "local-artist:\($0.id)", title: $0.name, type: .artist) }
-        case .album:
-            return found.albums.first.map { ResolvedMedia(identifier: "local-album:\($0.id)", title: $0.title, type: .album, artist: $0.artist) }
-        default:
-            if let track = found.tracks.first {
-                return ResolvedMedia(identifier: "local-track:\(track.id)", title: track.title, type: .song, artist: track.artist)
-            }
-            if let album = found.albums.first {
-                return ResolvedMedia(identifier: "local-album:\(album.id)", title: album.title, type: .album, artist: album.artist)
-            }
-            return found.artists.first.map { ResolvedMedia(identifier: "local-artist:\($0.id)", title: $0.name, type: .artist) }
+private extension MediaKind {
+    nonisolated init(_ type: INMediaItemType) {
+        self = switch type {
+        case .song: .song
+        case .album: .album
+        case .artist: .artist
+        case .playlist: .playlist
+        case .radioStation, .station: .station
+        case .genre: .genre
+        default: .anything
         }
     }
 
-    // MARK: - Finding things
-
-    private static func tracksItem(_ choice: PlayChoice) -> ResolvedMedia {
-        let title = String(localized: PlayChoice.caseDisplayRepresentations[choice]?.title ?? "Tracks Radio")
-        return ResolvedMedia(identifier: tracksPrefix + choice.rawValue, title: title, type: .music)
-    }
-
-    /// A mood Siri named, matched loosely by the start of a word: "chill", "relaxing",
-    /// "workout", "sad". Only at a word's start, so "unhappy" isn't happy and "brunch" isn't
-    /// a run.
-    static func moodChoice(named name: String) -> PlayChoice? {
-        let words = StatsCalculator.folded(name).split { !$0.isLetter }
-        let spoken = " " + words.joined(separator: " ")
-        let starts: [(String, PlayChoice)] = [
-            ("chill", .chill), ("relax", .chill), ("calm", .chill), ("focus", .focus), ("study", .focus),
-            ("workout", .workout), ("gym", .workout), ("running", .workout), ("party", .party), ("danc", .party),
-            ("sleep", .sleep), ("love", .love), ("romantic", .love), ("sad", .heartbreak), ("heartbr", .heartbreak),
-            ("happy", .feelGood), ("feel good", .feelGood), ("upbeat", .feelGood), ("energ", .energy), ("pump", .energy),
-            ("driv", .drive), ("road trip", .drive), ("roadtrip", .drive),
-        ]
-        return starts.first { spoken.contains(" " + $0.0) }?.1
-    }
-
-    /// One of Tracks’ own names, however Siri spelled it.
-    static func tracksChoice(named name: String) -> PlayChoice? {
-        let folded = StatsCalculator.folded(name)
-        let names: [(String, PlayChoice)] = [
-            ("tracks radio", .station), ("tracks station", .station), ("my station", .station), ("my radio", .station),
-            ("my mix", .forYou), ("discover", .discover), ("something new", .discover),
-            ("on repeat", .onRepeat), ("all-time favorites", .favorites), ("all time favorites", .favorites),
-            ("my favorites", .favorites), ("deep cuts", .deepCuts), ("radio finds", .radioFinds),
-            ("feel good music", .feelGood), ("something upbeat", .feelGood), ("energy", .energy),
-            ("workout music", .workout), ("focus music", .focus), ("something to focus", .focus),
-            ("chill music", .chill), ("something chill", .chill), ("love songs", .love),
-            ("sad songs", .heartbreak), ("heartbreak songs", .heartbreak), ("party music", .party),
-            ("sleep music", .sleep), ("something to sleep to", .sleep),
-            ("driving music", .drive), ("something to drive to", .drive), ("road trip music", .drive),
-        ]
-        return names.first { folded == $0.0 }?.1
-    }
-
-    private static func catalog<Item: MusicCatalogSearchable>(_ type: Item.Type, _ term: String) async -> [Item] {
-        let term = term.trimmingCharacters(in: .whitespaces)
-        guard !term.isEmpty else { return [] }
-        var request = MusicCatalogSearchRequest(term: term, types: [type])
-        request.limit = 5
-        guard let response = try? await request.response() else { return [] }
-        return switch type {
-        case is Song.Type: Array(response.songs) as? [Item] ?? []
-        case is Album.Type: Array(response.albums) as? [Item] ?? []
-        case is Artist.Type: Array(response.artists) as? [Item] ?? []
-        case is Playlist.Type: Array(response.playlists) as? [Item] ?? []
-        case is MusicKit.Station.Type: Array(response.stations) as? [Item] ?? []
-        default: []
+    nonisolated var mediaType: INMediaItemType {
+        switch self {
+        case .song: .song
+        case .album: .album
+        case .artist: .artist
+        case .playlist: .playlist
+        case .station: .radioStation
+        case .genre: .genre
+        case .anything: .music
         }
-    }
-
-    private static func libraryPlaylist(named name: String) async -> Playlist? {
-        var request = MusicLibraryRequest<Playlist>()
-        request.filter(text: name)
-        request.limit = 5
-        let playlists = (try? await request.response().items) ?? []
-        let wanted = StatsCalculator.folded(name)
-        return playlists.first { StatsCalculator.folded($0.name) == wanted } ?? playlists.first
-    }
-
-    private static func song(_ id: MusicItemID) async -> Song? {
-        try? await MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: id).response().items.first
-    }
-
-    private static func album(_ id: MusicItemID) async -> Album? {
-        try? await MusicCatalogResourceRequest<Album>(matching: \.id, equalTo: id).response().items.first
-    }
-
-    private static func artist(_ id: MusicItemID) async -> Artist? {
-        try? await MusicCatalogResourceRequest<Artist>(matching: \.id, equalTo: id).response().items.first
-    }
-
-    private static func station(_ id: MusicItemID) async -> MusicKit.Station? {
-        try? await MusicCatalogResourceRequest<MusicKit.Station>(matching: \.id, equalTo: id).response().items.first
-    }
-
-    private static func libraryOrCatalogPlaylist(_ id: MusicItemID) async -> Playlist? {
-        var library = MusicLibraryRequest<Playlist>()
-        library.filter(matching: \.id, equalTo: id)
-        if let found = try? await library.response().items.first { return found }
-        return try? await MusicCatalogResourceRequest<Playlist>(matching: \.id, equalTo: id).response().items.first
-    }
-
-    /// The song asked for, then the artist's other top songs in a fresh order.
-    private static func songAndMore(_ song: Song) async -> [Song] {
-        guard let artist = try? await song.with([.artists]).artists?.first,
-              let top = try? await artist.with([.topSongs]).topSongs
-        else { return [song] }
-        let others = PlayPreferences.versions(of: Array(top)).filter {
-            ExplicitVersions.versionKey(title: $0.title, artist: $0.artistName)
-                != ExplicitVersions.versionKey(title: song.title, artist: song.artistName)
-        }
-        return [song] + others.shuffled()
     }
 }

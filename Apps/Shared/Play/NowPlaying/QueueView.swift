@@ -5,6 +5,8 @@ import TracksCore
 /// reordered and trimmed. Shuffle and repeat live here, as in Music.
 struct QueueView: View {
     let track: PlayerTrack
+    /// Shuffle, Repeat and Autoplay, each felt as it's pressed.
+    @State private var toggles = 0
     @Environment(PlayerModel.self) private var player
     @Environment(YourMusic.self) private var music
     @AppStorage(PlayPreferences.autoplayKey) private var autoplay = true
@@ -51,6 +53,7 @@ struct QueueView: View {
                         .accessibilityHint(autoplay ? "Stops playing similar songs when the queue ends" : "Plays similar songs when the queue ends")
                 }
             }
+            .sensoryFeedback(.selection, trigger: toggles)
 
             let (queued, picks) = UpNextParts.split(player)
             if player.context?.isStation == true {
@@ -96,9 +99,7 @@ struct QueueView: View {
                 }
 
                 if player.isLive {
-                    if player.upNext.contains(where: isGettingReady) {
-                        note("Songs on this iPhone play first. New finds download behind them and play once they're here: swipe one away if it's not for you.")
-                    } else if let steering = player.steering {
+                    if let steering = player.steering {
                         steeringNote(steering)
                     } else {
                         note("\(player.context?.title ?? "") picks each song as the one before starts.")
@@ -277,7 +278,10 @@ struct QueueView: View {
     }
 
     private func toggle(_ title: LocalizedStringKey, _ symbol: String, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            toggles += 1
+            action()
+        } label: {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isOn ? Color.black : .white.opacity(0.8))

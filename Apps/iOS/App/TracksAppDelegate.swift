@@ -17,7 +17,12 @@ final class TracksAppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
-        intent is INPlayMediaIntent ? PlayMediaIntentHandler() : nil
+        switch intent {
+        case is INPlayMediaIntent: PlayMediaIntentHandler()
+        case is INUpdateMediaAffinityIntent: UpdateMediaAffinityIntentHandler()
+        case is INAddMediaIntent: AddMediaIntentHandler()
+        default: nil
+        }
     }
 
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {

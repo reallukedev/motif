@@ -477,6 +477,13 @@ final class MusicKitPlayerEngine: PlayerEngine {
         if authorization == .notDetermined {
             authorization = await MusicAuthorization.request()
         }
+        // Screen Time's restriction isn't a switch the person can turn on in Tracks' settings.
+        if authorization == .restricted {
+            throw PlayerProblem.failed(
+                String(localized: "Apple Music is restricted on this device in Screen Time."),
+                title: String(localized: "Apple Music Is Restricted")
+            )
+        }
         guard authorization == .authorized else { throw PlayerProblem.accessDenied }
         // Can't tell offline, and a network hiccup mustn't stop music already downloaded.
         if let subscription = try? await MusicSubscription.current, !subscription.canPlayCatalogContent {

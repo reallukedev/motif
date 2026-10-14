@@ -12,6 +12,7 @@ struct PlaylistPage: View {
     @State private var tracks: [Track] = []
     @State private var nextBatch: MusicItemCollection<Track>?
     @State private var isLoadingMore = false
+    @State private var loadMoreFailed = false
     @State private var loadFailed = false
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
 
@@ -50,11 +51,16 @@ struct PlaylistPage: View {
                 // Loads the next page as the end of the list comes into view. A row of its own,
                 // since with explicit songs off the last rows loaded may all be hidden.
                 if nextBatch != nil {
-                    LoadingRow()
-                        .listRowSeparator(.hidden)
-                        // A new identity per page, so it asks again if it's still in view after one.
-                        .id(tracks.count)
-                        .onAppear { Task { await loadMore() } }
+                    if loadMoreFailed {
+                        LoadMoreFailedRow { Task { await loadMore() } }
+                            .listRowSeparator(.hidden)
+                    } else {
+                        LoadingRow()
+                            .listRowSeparator(.hidden)
+                            // A new identity per page, so it asks again if it's still in view after one.
+                            .id(tracks.count)
+                            .onAppear { Task { await loadMore() } }
+                    }
                 }
             } footer: {
                 CollectionFooter(lines: footerLines)
@@ -75,7 +81,7 @@ struct PlaylistPage: View {
                 Menu("More", systemImage: "ellipsis") { moreItems(playlist) }
             }
         }
-        .task { await load() }
+        .task(id: playlist.id) { await loadOnce() }
         #else
         CollectionMacLayout(hasNote: note(playlist) != nil) {
             header(playlist, context: context)
@@ -83,7 +89,7 @@ struct PlaylistPage: View {
             macTracks(playlist, context: context)
         }
         .navigationTitle(playlist.name)
-        .task { await load() }
+        .task(id: playlist.id) { await loadOnce() }
         #endif
     }
 
@@ -183,6 +189,10 @@ struct PlaylistPage: View {
                         songMenu(tracks[index])
                     }
                 }
+                if loadMoreFailed, nextBatch != nil {
+                    LoadMoreFailedRow { Task { await loadMore() } }
+                        .padding(.horizontal, PlayMetrics.margin)
+                }
                 if let hiddenNote {
                     Text(hiddenNote)
                         .font(.footnote)
@@ -239,6 +249,13 @@ struct PlaylistPage: View {
         return String(AttributedString(localized: "^[\(hidden) explicit song](inflect: true) hidden. Turn on Explicit Songs in Settings to see them.").characters)
     }
 
+    /// Once per playlist: coming back to the page keeps the pages already loaded and where
+    /// the list was scrolled to.
+    private func loadOnce() async {
+        guard loaded?.id != playlist.id else { return }
+        await load()
+    }
+
     private func load() async {
         loadFailed = false
         if tracks.isEmpty, let known = playlist.tracks { tracks = Array(known) }
@@ -249,6 +266,8 @@ struct PlaylistPage: View {
             tracks = Array(first ?? [])
             nextBatch = first?.hasNextBatch == true ? first : nil
         } catch {
+            // Left before it loaded: it loads again on the way back.
+            guard !Task.isCancelled else { return }
             loadFailed = tracks.isEmpty
         }
     }
@@ -258,9 +277,11 @@ struct PlaylistPage: View {
         isLoadingMore = true
         defer { isLoadingMore = false }
         guard let more = try? await batch.nextBatch() else {
-            nextBatch = nil
+            // The batch is kept to ask again: the playlist isn't whole, and mustn't look it.
+            loadMoreFailed = true
             return
         }
+        loadMoreFailed = false
         tracks += more
         nextBatch = more.hasNextBatch ? more : nil
     }

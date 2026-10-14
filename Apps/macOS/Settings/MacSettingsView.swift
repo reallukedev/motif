@@ -3,7 +3,7 @@ import TracksCore
 
 /// A pane of the Mac's Settings window, stored so Settings reopens where it was left.
 enum MacSettingsPane: String {
-    case general, play, history, radio, lastFM, iCloud, menuBar
+    case general, play, history, radio, lastFM, iCloud, devices, menuBar
     static let storageKey = "settingsPane"
 }
 
@@ -41,6 +41,10 @@ struct MacSettingsView: View {
                 Tab("iCloud", systemImage: "icloud", value: .iCloud) {
                     CloudSyncPage(sync: cloud)
                 }
+            }
+            Tab("Devices", systemImage: "laptopcomputer.and.iphone", value: .devices) {
+                DevicesSettingsPage()
+                    .environment(model.player)
             }
             Tab("Menu Bar", systemImage: "menubar.rectangle", value: .menuBar) {
                 MenuBarSettingsPane()

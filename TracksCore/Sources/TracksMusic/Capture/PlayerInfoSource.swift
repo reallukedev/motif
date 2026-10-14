@@ -11,7 +11,7 @@ import TracksCore
 ///   `com.apple.iTunes.playerInfo`, with identical `userInfo`. We observe one.
 /// - Delivery is suspended while the app is inactive, which a menu bar app nearly always
 ///   is, so this registers with `.deliverImmediately`.
-public final class PlayerInfoSource: NSObject, NowPlayingSource, @unchecked Sendable {
+public final class PlayerInfoSource: NSObject, NowPlayingSource, Sendable {
     private struct State {
         var isObserving = false
         /// Where observations go. Replaced on every ``start()``, cleared by ``stop()``.
@@ -121,7 +121,7 @@ public final class PlayerInfoSource: NSObject, NowPlayingSource, @unchecked Send
 
         // Music omits zero-valued integer keys and a station track has no length, so a
         // missing Total Time means radio. See RadioHeuristic and
-        // docs/ProbeResults/macos-comparison-2026-09-08.md.
+        // docs/PlatformNotes.md.
         let duration: TimeInterval? = userInfo[PlayerInfoKey.totalTime]
             .flatMap { Double($0) }
             .map { $0 / 1000 }

@@ -41,7 +41,15 @@ final class Downloads {
 
     private(set) var items: [String: Item] = [:]
     /// Songs on their way, by track id, from 0 to 1.
-    private(set) var progress: [String: Double] = [:]
+    private(set) var progress: [String: Double] = [:] {
+        didSet {
+            let ids = Set(progress.keys)
+            if ids != downloading { downloading = ids }
+        }
+    }
+    /// The songs in ``progress``, changing only when one starts or ends, so what needs only
+    /// to know a song is on its way isn't redrawn at every step of it.
+    private(set) var downloading: Set<String> = []
     /// Songs on their way whose first bytes have come, so they aren't waiting to start.
     private(set) var started: Set<String> = []
     /// Songs on their way from a server that didn't say how big they are, so how far along
@@ -104,7 +112,7 @@ final class Downloads {
 
     func isDownloaded(_ trackID: String) -> Bool { items[trackID] != nil }
 
-    func isDownloading(_ trackID: String) -> Bool { progress[trackID] != nil }
+    func isDownloading(_ trackID: String) -> Bool { downloading.contains(trackID) }
 
     /// Where a downloaded song is on this iPhone.
     func fileURL(for trackID: String) -> URL? {
@@ -164,7 +172,7 @@ final class Downloads {
 
     /// Whether a download is queued and hasn't started: waiting for Wi-Fi, with cellular off.
     func isWaitingForWiFi(_ trackID: String, onCellular: Bool) -> Bool {
-        onCellular && !Self.allowsCellular && progress[trackID] != nil && !started.contains(trackID)
+        onCellular && !Self.allowsCellular && downloading.contains(trackID) && !started.contains(trackID)
     }
 
     /// Downloading over cellular was turned on or off: the downloads that haven't started are

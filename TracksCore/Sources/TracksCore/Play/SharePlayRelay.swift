@@ -305,7 +305,11 @@ final class SharePlayRelayChannel {
         case "presence_diff":
             presence.apply(joins: payload["joins"] as? [String: Any] ?? [:], leaves: payload["leaves"] as? [String: Any] ?? [:])
         case "broadcast":
+            // Checked first: a bare string or number here makes JSONSerialization raise an
+            // Objective-C exception, which `try?` can't catch, and anyone on the channel can
+            // send one.
             guard let inner = payload["payload"],
+                  JSONSerialization.isValidJSONObject(inner),
                   let body = try? JSONSerialization.data(withJSONObject: inner),
                   let envelope = try? JSONDecoder().decode(Envelope.self, from: body)
             else { return }

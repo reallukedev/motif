@@ -31,6 +31,11 @@ final class LastFMConnection {
         }
     }
 
+    /// Closing Settings ends a wait for approval, so a later Connect is the only flow.
+    isolated deinit {
+        poll?.cancel()
+    }
+
     var isConnected: Bool {
         if case .connected = state { return true }
         return false

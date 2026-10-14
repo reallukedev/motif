@@ -33,6 +33,7 @@ struct SettingsSheet: View {
                         )
                     }
                     LastFMRow(connection: lastFM)
+                    DevicesRow()
                     if let cloud {
                         NavigationLink(value: SettingsPage.iCloud) {
                             SettingsRowLabel(title: "iCloud", systemImage: "icloud.fill", tint: .blue, value: cloud.status.short)
@@ -73,6 +74,7 @@ struct SettingsSheet: View {
         case .radio: RadioSettingsPage()
         case .appleMusic: AppleMusicSettingsPage()
         case .lastFM: LastFMSettingsPage(connection: lastFM)
+        case .devices: DevicesSettingsPage()
         case .louderAtSpeed: SpeedVolumePage()
         case .iCloud:
             if let cloud {
@@ -84,13 +86,31 @@ struct SettingsSheet: View {
 
 /// A page of iPhone Settings. Also what `-TracksSettings <page>` opens on.
 enum SettingsPage: String, Hashable, CaseIterable {
-    case play, history, radio, appleMusic, lastFM, iCloud
+    case play, history, radio, appleMusic, lastFM, iCloud, devices
     /// Inside Play.
     case louderAtSpeed
 
     /// The pages to push to reach this one.
     var path: [SettingsPage] {
         self == .louderAtSpeed ? [.play, self] : [self]
+    }
+}
+
+/// Your Devices' row: off, a problem, or how many are nearby.
+private struct DevicesRow: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(NearbyDevices.storageKey) private var isOn = true
+
+    var body: some View {
+        let status = NearbyDevicesStatus(
+            isOn: isOn,
+            needsLocalNetwork: model.nearby.needsLocalNetwork,
+            connected: model.nearby.devices.count,
+            playingOn: nil
+        )
+        NavigationLink(value: SettingsPage.devices) {
+            SettingsRowLabel(title: "Your Devices", systemImage: "laptopcomputer.and.iphone", tint: .blue, value: status.short)
+        }
     }
 }
 

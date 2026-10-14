@@ -19,7 +19,7 @@ struct ChartList: View {
 
     var body: some View {
         LazyVStack(spacing: 0) {
-            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+            ForEach(entries.enumerated(), id: \.element.id) { index, entry in
                 row(entry, index: index)
             }
         }

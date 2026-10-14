@@ -35,8 +35,15 @@ nonisolated struct ChartSnapshot: Equatable, Sendable {
         now: Date = .now,
         calendar: Calendar = .current
     ) -> ChartSnapshot {
-        let songChart = StatsCalculator.songChart(in: period, history: history, calendar: calendar)
+        // Every song of the period, so an artist or album whose songs each rank low still
+        // has them to play.
+        let allSongs = StatsCalculator.songChart(in: period, history: history, calendar: calendar, limit: .max)
+        let songChart = Array(allSongs.prefix(100))
         let activity = history.activity(in: period, now: now, calendar: calendar)
+        let byArtist = kind == .artists ? group(allSongs) { StatsCalculator.folded($0.artistName) } : [:]
+        let byAlbum = kind == .albums ? group(allSongs) { song in
+            song.albumTitle.flatMap { CaptureStat.albumIdentity(title: $0, artistName: song.artistName) }
+        } : [:]
         let entries: [ChartEntry] = switch kind {
         case .songs:
             songChart.map(ChartEntry.init)
@@ -44,6 +51,7 @@ nonisolated struct ChartSnapshot: Equatable, Sendable {
             // Each artist with the song of theirs played most in the period.
             StatsCalculator.artistChart(in: period, history: history, calendar: calendar).map { ranked in
                 var entry = ChartEntry(ranked)
+                entry.songs = byArtist[ranked.item.id] ?? []
                 entry.songCount = ranked.item.songCount
                 entry.isNew = activity.newArtists.contains(ranked.item.id)
                 if let song = songChart.first(where: { StatsCalculator.folded($0.item.artistName) == ranked.item.id }) {
@@ -54,6 +62,7 @@ nonisolated struct ChartSnapshot: Equatable, Sendable {
         case .albums:
             StatsCalculator.albumChart(in: period, history: history, calendar: calendar).map { ranked in
                 var entry = ChartEntry(ranked)
+                entry.songs = byAlbum[ranked.item.id] ?? []
                 entry.songCount = ranked.item.songCount
                 return entry
             }
@@ -70,6 +79,16 @@ nonisolated struct ChartSnapshot: Equatable, Sendable {
             hasHistory: !history.isEmpty,
             activity: activity
         )
+    }
+
+    /// The songs under each artist or album, in chart order, a hundred at most.
+    private static func group(_ songs: [Ranked<SongTally>], by key: (SongTally) -> String?) -> [String: [MixSong]] {
+        var groups: [String: [MixSong]] = [:]
+        for song in songs {
+            guard let key = key(song.item), groups[key, default: []].count < 100 else { continue }
+            groups[key, default: []].append(MixSong(tally: song.item))
+        }
+        return groups
     }
 
     /// "62 plays, 41 songs": the period in one line.
@@ -107,6 +126,8 @@ nonisolated struct ChartEntry: Identifiable, Equatable, Sendable {
     var songCount: Int?
     /// An artist heard for the first time in the period.
     var isNew = false
+    /// An artist's or album's songs from the period, most played first, for Play.
+    var songs: [MixSong] = []
 
     init(_ ranked: Ranked<SongTally>) {
         let song = ranked.item

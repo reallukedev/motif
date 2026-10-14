@@ -6,8 +6,10 @@ import TracksCore
 /// macOS can end Tracks with no warning: when the disk is nearly full it quits apps to purge
 /// their caches, and nothing is written to say so. A menu bar app that's gone looks the same
 /// as one that's idle, so listening goes unrecorded until someone notices. The app starts
-/// this helper at launch with its process ID. When that process ends, ``RunLog`` says whether
-/// it was quit on purpose; if not, this opens it again, and the app shows what happened.
+/// this helper at launch with its process ID, when the person has turned on "Reopen Tracks If
+/// It Quits Unexpectedly". When that process ends, ``RunLog`` says whether it was quit on
+/// purpose; if not, and nobody was using the Mac at that moment (Force Quit is someone at the
+/// Mac), this opens it again, and the app shows what happened.
 ///
 /// It has no interface and does nothing else. It exits once the app it watches has gone,
 /// and the reopened app starts a new one.
@@ -64,23 +66,29 @@ final class Watcher {
         ) { [weak self] notification in
             let ended = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             let endedID = ended?.processIdentifier
+            let idle = UserPresence.secondsSinceInput
             MainActor.assumeIsolated {
                 guard let self, endedID == self.processID else { return }
-                self.appEnded()
+                self.appEnded(secondsSinceInput: idle)
             }
         }
     }
 
-    func appEnded() {
+    /// - Parameter secondsSinceInput: how long the Mac had been left alone as the app ended,
+    ///   read at once, since the settle below would add to it.
+    func appEnded(secondsSinceInput: TimeInterval? = UserPresence.secondsSinceInput) {
         guard !isHandling else { return }
         isHandling = true
         Task {
             try? await Task.sleep(for: Self.settle)
-            switch RunLog().recordTermination(processID: processID) {
+            let log = RunLog()
+            switch log.recordTermination(processID: processID, secondsSinceInput: secondsSinceInput) {
             case .reopen:
                 try? await Task.sleep(for: Self.reopenDelay)
+                // Turned off in the meantime: respect it.
+                guard log.reopensAutomatically else { break }
                 await reopen()
-            case .quit, .gaveUp, .unknown:
+            case .quit, .leftClosed, .gaveUp, .unknown:
                 break
             }
             exit(0)

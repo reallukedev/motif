@@ -398,7 +398,7 @@ struct SuggestedSongsSection: View {
                         ForEach(columns) { column in
                             VStack(spacing: 0) {
                                 ForEach(column.items) { suggestion in
-                                    row(suggestion)
+                                    row(suggestion, in: visible)
                                     if suggestion.id != column.items.last?.id {
                                         Divider().padding(.leading, 60)
                                     }
@@ -455,9 +455,10 @@ struct SuggestedSongsSection: View {
         }
     }
 
-    private func row(_ suggestion: Suggestion) -> some View {
+    /// Plays from the song, through the ones the shelf shows: not those it leaves out.
+    private func row(_ suggestion: Suggestion, in visible: [Suggestion]) -> some View {
         SuggestionRow(suggestion: suggestion, showsReason: false) {
-            let all = discovery.songs.map(\.song)
+            let all = visible.map(\.song)
             let start = all.firstIndex(of: suggestion.song) ?? 0
             player.play(.songs(all, startingAt: start), from: .songs(String(localized: "Suggested Songs")))
         }
@@ -480,7 +481,8 @@ struct KeepExploringSection: View {
     @State private var isEndInView = false
 
     var body: some View {
-        let songs = Array(discovery.songs.visible(in: music, source: model.musicSource, mode: mode).dropFirst(followsShelf ? discovery.shelfReach : 0))
+        let visible = discovery.songs.visible(in: music, source: model.musicSource, mode: mode)
+        let songs = Array(visible.dropFirst(followsShelf ? discovery.shelfReach : 0))
         // The shelf above looks up its own; this goes on from there.
         let rest = Array(discovery.songs.dropFirst(followsShelf ? discovery.shelfReach + SuggestedSongsSection.lookAhead : 0))
         let unanswered = rest.unanswered(in: music, source: model.musicSource)
@@ -493,7 +495,7 @@ struct KeepExploringSection: View {
 
                 ForEach(songs) { suggestion in
                     SuggestionRow(suggestion: suggestion) {
-                        let all = discovery.songs.map(\.song)
+                        let all = visible.map(\.song)
                         let start = all.firstIndex(of: suggestion.song) ?? 0
                         player.play(.songs(all, startingAt: start), from: .songs(String(localized: "Suggested Songs")))
                     }
@@ -501,7 +503,11 @@ struct KeepExploringSection: View {
                     Divider().padding(.leading, 64)
                 }
 
-                if unanswered > 0 || discovery.canExpand {
+                if unanswered == 0, discovery.canExpand, discovery.expandFailed {
+                    LoadMoreFailedRow(text: "Couldn't load more suggestions.") {
+                        Task { await discovery.expand() }
+                    }
+                } else if unanswered > 0 || discovery.canExpand {
                     // The end of the list: while it's on screen, the next songs are looked up,
                     // and once they're answered, more are asked for.
                     LoadingRows(count: 2)
@@ -552,7 +558,9 @@ struct SuggestedArtistsShelf: View {
                         ForEach(discovery.artists) { artist in
                             SuggestedArtistTile(suggestion: artist)
                         }
-                        if discovery.canExpand {
+                        if discovery.canExpand, discovery.expandFailed {
+                            RetryArtistTile { Task { await discovery.expand() } }
+                        } else if discovery.canExpand {
                             LoadingArtistTile()
                                 .onScrollVisibilityChange(threshold: 0.1) { isEndInView = $0 }
                                 .onDisappear { isEndInView = false }
@@ -571,6 +579,30 @@ struct SuggestedArtistsShelf: View {
                 await discovery.expand()
             }
         }
+    }
+}
+
+/// At the end of the shelf in place of the loading tile, when Apple Music couldn't be reached.
+private struct RetryArtistTile: View {
+    let retry: () -> Void
+    @ScaledMetric(relativeTo: .subheadline) private var side: CGFloat = 120
+
+    var body: some View {
+        let side = min(side, 180)
+        Button(action: retry) {
+            VStack(spacing: 8) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: side, height: side)
+                    .background(Color(.secondarySystemFill), in: .circle)
+                Text("Try Again")
+                    .font(.subheadline.weight(.medium))
+            }
+            .frame(width: side)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Couldn't load more artists. Try Again"))
     }
 }
 

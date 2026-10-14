@@ -18,7 +18,6 @@ struct SongFinder: View {
     @State private var lens: SongLens
     /// Songs for the lenses Discovery doesn't keep, by lens, once loaded.
     @State private var loaded: [String: [Suggestion]] = [:]
-    @State private var loading: Set<String> = []
     /// Songs brought back by Undo after Not Interested, by lens, with where they were.
     @State private var returned: [String: [Returned]] = [:]
 
@@ -63,7 +62,8 @@ struct SongFinder: View {
         #endif
         if !player.isDemo, model.musicAuthorization != .authorized { return .noAccess }
         if !songs.isEmpty { return .songs }
-        if isLoading(lens) || unanswered > 0 || (expands(lens) && discovery.canExpand) { return .loading }
+        let isWalking = expands(lens) && discovery.canExpand && !discovery.expandFailed
+        if isLoading(lens) || unanswered > 0 || isWalking { return .loading }
         return .empty
     }
 
@@ -125,7 +125,11 @@ struct SongFinder: View {
         if phase == .noAccess {
             PlayAccessCard()
         } else {
-            PlayStateCard(symbol: lens.symbol, title: String(localized: "Nothing New Here Yet"), message: emptyMessage) {
+            PlayStateCard(
+                symbol: isOffline ? "wifi.exclamationmark" : lens.symbol,
+                title: isOffline ? String(localized: "Couldn't Reach Apple Music") : String(localized: "Nothing New Here Yet"),
+                message: emptyMessage
+            ) {
                 emptyAction
             }
         }
@@ -135,18 +139,34 @@ struct SongFinder: View {
     @ViewBuilder
     private var emptyAction: some View {
         switch lens {
+        case .forYou where isOffline, .likeYourArtists where isOffline:
+            Button("Try Again") { Task { await discovery.expand() } }
+                .buttonStyle(.glassProminent)
         case .forYou, .yourArtists, .likeYourArtists:
             Button("Try Popular") { lens = .popular }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
         case .newReleases:
-            Button("Try Your Artists") { lens = .yourArtists }
-                .buttonStyle(.borderedProminent)
-        case .popular, .mood:
-            Button("Try Again") {
-                loaded[lens.id] = nil
-                Task { await load(lens) }
+            // Nothing may have come back because Apple Music couldn't be reached.
+            ViewThatFits {
+                HStack(spacing: 10) { newReleasesActions }
+                VStack(alignment: .leading, spacing: 10) { newReleasesActions }
             }
-            .buttonStyle(.borderedProminent)
+        case .popular, .mood:
+            tryAgain.buttonStyle(.glassProminent)
+        }
+    }
+
+    @ViewBuilder
+    private var newReleasesActions: some View {
+        Button("Try Your Artists") { lens = .yourArtists }
+            .buttonStyle(.glassProminent)
+        tryAgain.buttonStyle(.glass)
+    }
+
+    private var tryAgain: some View {
+        Button("Try Again") {
+            loaded[lens.id] = nil
+            Task { await load(lens) }
         }
     }
 
@@ -166,6 +186,11 @@ struct SongFinder: View {
         if FinderDebugState.current == .long { songs = FinderDebugState.longSuggestions + songs }
         #endif
         return songs
+    }
+
+    /// A walking lens is empty because Apple Music couldn't be reached, not for want of songs.
+    private var isOffline: Bool {
+        expands(lens) && discovery.expandFailed
     }
 
     /// The lenses that walk further out as they're scrolled.
@@ -190,6 +215,8 @@ struct SongFinder: View {
 
     private var emptyMessage: String {
         switch lens {
+        case .forYou where isOffline, .likeYourArtists where isOffline:
+            String(localized: "Apple Music couldn't be reached. Check your connection, then try again.")
         case .forYou, .likeYourArtists, .yourArtists:
             String(localized: "Suggestions come from the artists you play most. Play a few more songs, and they'll start.")
         case .newReleases:
@@ -200,16 +227,19 @@ struct SongFinder: View {
     }
 
     private func load(_ lens: SongLens) async {
-        guard loaded[lens.id] == nil, !loading.contains(lens.id) else { return }
+        // An empty answer may have been Apple Music out of reach: it's asked again each time
+        // the lens is chosen, rather than kept for the visit.
+        guard loaded[lens.id]?.isEmpty != false else { return }
         switch lens {
         case .forYou, .yourArtists, .likeYourArtists:
             return
         default:
             break
         }
-        loading.insert(lens.id)
-        defer { loading.remove(lens.id) }
+        loaded[lens.id] = nil
         let songs = await SongLensLoader.songs(for: lens, discovery: discovery, isDemo: player.isDemo)
+        // Another lens was chosen part way: what came back is cut short, not the answer.
+        guard !Task.isCancelled else { return }
         loaded[lens.id] = fresh(songs, lens: lens, reason: { song in
             switch lens {
             case .newReleases: .newRelease(song.artistName)

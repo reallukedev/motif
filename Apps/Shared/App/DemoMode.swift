@@ -2,9 +2,14 @@ import Foundation
 import TracksCore
 
 enum DemoMode {
-    /// `-TracksDemoData YES` on the command line (or in the scheme's arguments).
+    /// `-TracksDemoData YES` on the command line (or in the scheme's arguments), in a Debug
+    /// build. A shipping build always opens the real store.
     static var isRequestedAtLaunch: Bool {
+        #if DEBUG
         UserDefaults.standard.bool(forKey: "TracksDemoData")
+        #else
+        false
+        #endif
     }
 
     /// A fresh in-memory store filled with `DemoLibrary` plays ending now.

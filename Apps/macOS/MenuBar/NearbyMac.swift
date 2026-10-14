@@ -121,7 +121,7 @@ private struct NearbyMenuRow: View {
         HStack(spacing: 10) {
             ArtworkView(url: state.artworkURL, seed: state.album ?? state.title ?? device.name, size: 36)
             VStack(alignment: .leading, spacing: 1) {
-                Label(state.isPlaying ? "Playing on \(device.name)" : "Paused on \(device.name)", systemImage: NearbyDevices.symbol(for: device.platform))
+                Label(state.isPlaying ? "Playing on \(device.name)" : "Paused on \(device.name)", systemImage: device.kind.symbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(state.isPlaying ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .lineLimit(1)

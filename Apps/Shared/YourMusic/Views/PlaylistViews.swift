@@ -118,7 +118,7 @@ struct PlaylistsPage: View {
     }
 
     private func play(_ playlist: TracksPlaylist) {
-        let playable = music.songs(in: playlist, facts: feed.facts).filter(music.isPlayable)
+        let playable = music.songs(in: playlist, facts: feed.facts, factsRevision: feed.builtRevision).filter(music.isPlayable)
         guard !playable.isEmpty else { return }
         player.play(.local(playable), from: PlayContext(kind: .playlist, title: playlist.name))
     }
@@ -198,7 +198,7 @@ private struct PlaylistMenu: View {
     @Environment(PlayerModel.self) private var player
 
     var body: some View {
-        let playable = music.songs(in: playlist, facts: feed.facts).filter(music.isPlayable)
+        let playable = music.songs(in: playlist, facts: feed.facts, factsRevision: feed.builtRevision).filter(music.isPlayable)
         let context = PlayContext(kind: .playlist, title: playlist.name)
         Button("Play", systemImage: "play") { player.play(.local(playable), from: context) }
             .disabled(playable.isEmpty)
@@ -227,7 +227,7 @@ private struct PlaylistTile<Menu: View>: View {
     @Environment(PlayerModel.self) private var player
 
     var body: some View {
-        let songs = music.songs(in: playlist, facts: feed.facts)
+        let songs = music.songs(in: playlist, facts: feed.facts, factsRevision: feed.builtRevision)
         let playable = songs.filter(music.isPlayable)
         LibraryCoverTile(
             title: playlist.name,
@@ -257,7 +257,7 @@ struct PlaylistRow: View {
     @ScaledMetric(relativeTo: .body) private var side: CGFloat = 56
 
     var body: some View {
-        let songs = music.songs(in: playlist, facts: feed.facts)
+        let songs = music.songs(in: playlist, facts: feed.facts, factsRevision: feed.builtRevision)
         HStack(spacing: 12) {
             PlaylistCover(songs: songs, isSmart: playlist.isSmart, seed: playlist.name, size: min(side, 80))
             VStack(alignment: .leading, spacing: 2) {
@@ -378,7 +378,7 @@ struct TracksPlaylistPage: View {
     }
 
     private func content(_ playlist: TracksPlaylist) -> some View {
-        let songs = music.songs(in: playlist, facts: feed.facts)
+        let songs = music.songs(in: playlist, facts: feed.facts, factsRevision: feed.builtRevision)
         let playable = songs.filter(music.isPlayable)
         let context = PlayContext(kind: .playlist, title: playlist.name)
         return page(playlist, songs: songs, playable: playable, context: context)

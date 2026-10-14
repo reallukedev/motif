@@ -156,7 +156,7 @@ struct DownloadStateIcon: View {
                 // The server didn't say how big it is, so there's no telling how far along.
                 TurningRing()
                     .accessibilityLabel("Downloading")
-            } else if let progress = music.downloads.progress[copy.id] {
+            } else if music.downloads.isDownloading(copy.id), let progress = music.downloads.progress[copy.id] {
                 ZStack {
                     Circle().stroke(.quaternary, lineWidth: 2)
                     Circle()
@@ -182,7 +182,7 @@ struct DownloadStateIcon: View {
     /// Changes between states animate; progress within one doesn't restart the transition.
     private func stateKey(_ track: LocalTrack) -> Int {
         if music.downloads.isWaitingForWiFi(track.id, onCellular: music.network.isExpensive) { return 4 }
-        if music.downloads.progress[track.id] != nil { return 1 }
+        if music.downloads.isDownloading(track.id) { return 1 }
         if music.downloads.isDownloaded(track.id) { return 2 }
         if music.downloads.isDownloading(track.id) || music.servers.isWaitingToKeep(track) { return 3 }
         return 0
