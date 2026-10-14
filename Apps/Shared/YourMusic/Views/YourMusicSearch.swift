@@ -85,10 +85,12 @@ struct YourMusicSearchResults: View {
     @ViewBuilder
     private var blank: some View {
         if !recents.isEmpty {
-            RecentSearchesSection(recents: recents, clear: { recentStorage = "" }, search: search)
+            RecentSearchesSection(recents: recents, clear: { recentStorage = "" }, search: search) {
+                recentStorage = RecentSearches.removing($0, from: recentStorage)
+            }
         }
         if hasMusic {
-            BrowseByMoodSection()
+            BrowseSections()
         }
     }
 
@@ -107,43 +109,11 @@ struct YourMusicSearchResults: View {
         let match = topMatch
         let top = match.map(card)
         let songs = shownSongs(besides: match)
-        #if os(macOS)
-        // The top result beside the first songs, as Music lays them out.
-        if top != nil || !songs.isEmpty {
-            HStack(alignment: .top, spacing: 28) {
-                if let top {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SearchSectionTitle("Top Result")
-                        TopResultCard(result: top)
-                    }
-                    .frame(width: 340)
-                }
-                if !songs.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        songsTitle
-                        songRows(songs, all: found.tracks)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, PlayMetrics.margin)
+        SearchLead(top: top, hasSongs: !songs.isEmpty) {
+            songsTitle
+        } songs: {
+            songRows(songs, all: found.tracks)
         }
-        #else
-        if let top {
-            VStack(alignment: .leading, spacing: 10) {
-                SearchSectionTitle("Top Result")
-                TopResultCard(result: top)
-            }
-            .padding(.horizontal, PlayMetrics.margin)
-        }
-        if !songs.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                songsTitle
-                songRows(songs, all: found.tracks)
-            }
-            .padding(.horizontal, PlayMetrics.margin)
-        }
-        #endif
 
         let artists = shelfArtists(besides: match)
         if !artists.isEmpty {
@@ -288,18 +258,22 @@ struct YourMusicSearchResults: View {
         case artist(LocalArtist), album(LocalAlbum), song(LocalTrack)
     }
 
-    /// The best match, if there's a clear one: an artist whose name is what was typed, an album
-    /// called just that, or the first song that can play.
+    /// The best match, if there's a clear one, as ``SearchRanking`` picks it; a song only if it
+    /// can play.
     private var topMatch: TopMatch? {
-        let term = StatsCalculator.folded(query.trimmingCharacters(in: .whitespaces))
-        if let artist = found.artists.first {
-            let name = StatsCalculator.folded(artist.name)
-            if name.hasPrefix(term) || term.hasPrefix(name) { return .artist(artist) }
+        let song = found.tracks.first(where: music.isPlayable)
+        let kind = SearchRanking.topKind(
+            for: query,
+            artist: found.artists.first?.name,
+            album: found.albums.first?.displayTitle,
+            hasSong: song != nil
+        )
+        return switch kind {
+        case .artist: found.artists.first.map(TopMatch.artist)
+        case .album: found.albums.first.map(TopMatch.album)
+        case .song: song.map(TopMatch.song)
+        case nil: nil
         }
-        if let album = found.albums.first, StatsCalculator.folded(album.displayTitle) == term {
-            return .album(album)
-        }
-        return found.tracks.first(where: music.isPlayable).map(TopMatch.song)
     }
 
     /// The top result as its card shows it.
@@ -362,7 +336,8 @@ struct YourMusicSearchResults: View {
 
     @ViewBuilder
     private var overlay: some View {
-        if !hasMusic {
+        // Not before the files have been read once, when "nothing" isn't known yet.
+        if !hasMusic, music.hasScanned || !music.servers.servers.isEmpty {
             ContentUnavailableView(
                 "Nothing to Search Yet",
                 systemImage: "magnifyingglass",
@@ -371,7 +346,7 @@ struct YourMusicSearchResults: View {
         } else if !isBlank, found.query == query, found.isEmpty, fromServers.isEmpty,
                   serverShelvesQuery != query || (serverAlbums.isEmpty && serverArtists.isEmpty),
                   answeredQuery == query || music.servers.onlineServers.isEmpty {
-            ContentUnavailableView.search(text: query)
+            SearchNoResults(query: query)
         }
     }
 

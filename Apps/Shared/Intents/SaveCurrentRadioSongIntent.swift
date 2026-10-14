@@ -105,6 +105,15 @@ struct TracksShortcuts: AppShortcutsProvider {
             systemImageName: "binoculars"
         )
         AppShortcut(
+            intent: SearchInTracksIntent(),
+            phrases: [
+                "Search \(.applicationName)",
+                "Search in \(.applicationName)",
+            ],
+            shortTitle: "Search",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
             intent: PlayInTracksIntent(),
             phrases: [
                 "Play \(\.$choice) in \(.applicationName)",

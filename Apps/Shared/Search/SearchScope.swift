@@ -31,26 +31,19 @@ enum SearchScope: String, CaseIterable, Identifiable {
         self == .library && source == .yourMusic ? Text("Songs, Albums and Artists") : prompt
     }
 
+    /// Where the scope's recent searches are kept. Apple Music's catalog and library share
+    /// theirs, as they did before scopes were one page.
+    func recentsKey(for source: MusicSource) -> String {
+        switch self {
+        case .appleMusic: "recentMusicSearches"
+        case .library: source == .yourMusic ? "recentYourMusicSearches" : "recentMusicSearches"
+        case .history: "recentHistorySearches"
+        }
+    }
+
     /// The scopes Play offers: Apple Music's catalog isn't one when your own music is what
     /// plays.
     static func scopes(for source: MusicSource) -> [SearchScope] {
         source == .yourMusic ? [.library, .history] : allCases
     }
-}
-
-/// Puts the cursor in the window's search field, in the scope given: on the Mac, where search
-/// is the sidebar's, for "Search Apple Music" on an empty page and for ⌘F.
-struct BeginSearchAction: Equatable {
-    let run: @MainActor (SearchScope?) -> Void
-
-    /// Every one opens the same search, so a root view redrawing with a new one doesn't
-    /// redraw everything that reads it.
-    static func == (lhs: Self, rhs: Self) -> Bool { true }
-
-    @MainActor
-    func callAsFunction(in scope: SearchScope? = nil) { run(scope) }
-}
-
-extension EnvironmentValues {
-    @Entry var beginSearch = BeginSearchAction { _ in }
 }

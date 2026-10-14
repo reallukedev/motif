@@ -5,18 +5,15 @@ import TracksCore
 /// of it, with Up Next and the song's history in a popover rising from it.
 struct MacRootView: View {
     @Bindable var model: AppModel
-    @State private var query = LaunchScene.searchText ?? ""
     @Environment(\.openWindow) private var openWindow
     @AppStorage(OpeningTab.storageKey) private var openingTab: OpeningTab = .standard
     @AppStorage(PlayPreferences.songDestinationKey) private var songDestination = SongDestination.tracks
-    @AppStorage(SearchScope.macStorageKey) private var searchScope: SearchScope = .appleMusic
     /// The panel and the full player: the window's, not the app's.
     @State private var playerWindow = PlayerWindowState()
     @State private var history = NavigationHistory()
     /// Tracks Radio's tuning, presented by the window from outside the full player and the
     /// bar's popover, whose looks mustn't reach it.
     @State private var showsTuner = false
-    @FocusState private var isSearchFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isOnScreen) private var isOnScreen
     #if DEBUG
@@ -46,14 +43,19 @@ struct MacRootView: View {
             }
             // Under the full player, the page and its bar stop ticking.
             .environment(\.isOnScreen, isOnScreen && !isShowingFullPlayer)
-            .searchable(text: $query, placement: .sidebar, prompt: Text("Search"))
-            .searchFocused($isSearchFocused)
             .environment(playerWindow)
-            .environment(\.beginSearch, BeginSearchAction { scope in beginSearch(in: scope) })
-            .onChange(of: model.sidebarSelection) {
+            .onChange(of: model.sidebarSelection) { _, selection in
                 history.reset()
                 navigator.path = NavigationPath()
-                query = ""
+                // Clicking Search puts the cursor in its field, as Podcasts does. Arrowing
+                // through the sidebar past it doesn't, or the next arrow would type.
+                if selection == .search, NSApp.currentEvent?.type != .keyDown {
+                    model.search.wantsFocus = true
+                }
+            }
+            // Siri's search too, which arrives without the window's help.
+            .onChange(of: model.search.wantsFocus) { _, wants in
+                if wants { playerWindow.showsFullPlayer = false }
             }
             .onChange(of: navigator.path) { old, new in
                 history.pathChanged(from: old, to: new)
@@ -68,7 +70,6 @@ struct MacRootView: View {
                     playerWindow.showsFullPlayer = true
                     return
                 }
-                query = ""
                 navigator.path = NavigationPath([route])
             }
             .onChange(of: model.musicSource) { old, source in
@@ -139,7 +140,7 @@ struct MacRootView: View {
                 history: history,
                 path: $navigator.path,
                 goToCurrentSong: goToCurrentSong,
-                beginSearch: { beginSearch(in: nil) },
+                beginSearch: beginSearch,
                 open: open
             )
             .opensDeepLinks(in: model)
@@ -212,17 +213,15 @@ struct MacRootView: View {
         playerWindow.showsFullPlayer && model.player.hasQueue
     }
 
-    /// The cursor in the sidebar's search field, out of the full player, in `scope` if given.
-    private func beginSearch(in scope: SearchScope?) {
+    /// The Search page with the cursor in its field, out of the full player.
+    private func beginSearch() {
         playerWindow.showsFullPlayer = false
-        if let scope { searchScope = scope }
-        isSearchFocused = true
+        model.beginSearch()
     }
 
     /// A page from the menu bar, over whatever the window shows.
     private func open(_ route: PlayRoute) {
         playerWindow.showsFullPlayer = false
-        query = ""
         model.playNavigator.show(route)
     }
 
@@ -230,7 +229,6 @@ struct MacRootView: View {
     private func goToCurrentSong() {
         guard let track = model.player.current else { return }
         playerWindow.showsFullPlayer = false
-        query = ""
         let navigator = model.playNavigator
         if let local = track.local {
             navigator.show(.localAlbum(local.albumKey))
@@ -249,20 +247,17 @@ struct MacRootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-            MacSearchResults(query: query, scope: $searchScope) { query = $0 }
-        } else {
-            switch model.sidebarSelection ?? SidebarItem.opening {
-            case .listenNow: ListenNowPage()
-            case .radio: RadioPage()
-            case .summary: MacSummaryView()
-            case .history: MacHistoryView()
-            case .topSongs: TopChartView(kind: .songs)
-            case .topArtists: TopChartView(kind: .artists)
-            case .topAlbums: TopChartView(kind: .albums)
-            case .recentlyAdded, .playlists, .albums, .artists, .songs, .downloads, .lidarr:
-                LibraryPage(item: model.sidebarSelection ?? .playlists, source: model.musicSource)
-            }
+        switch model.sidebarSelection ?? SidebarItem.opening {
+        case .search: SearchPage()
+        case .listenNow: ListenNowPage()
+        case .radio: RadioPage()
+        case .summary: MacSummaryView()
+        case .history: MacHistoryView()
+        case .topSongs: TopChartView(kind: .songs)
+        case .topArtists: TopChartView(kind: .artists)
+        case .topAlbums: TopChartView(kind: .albums)
+        case .recentlyAdded, .playlists, .albums, .artists, .songs, .downloads, .lidarr:
+            LibraryPage(item: model.sidebarSelection ?? .playlists, source: model.musicSource)
         }
     }
 }
@@ -277,6 +272,7 @@ private struct MacSidebar: View {
 
     var body: some View {
         List(selection: $selection) {
+            Section { rows([.search]) }
             let leading = SidebarItem.leading(opening: opening)
             let playing = leading.filter { $0 == .listenNow || $0 == .radio }
             let listening = leading.filter { $0 != .listenNow && $0 != .radio }
@@ -297,11 +293,6 @@ private struct MacSidebar: View {
                 .tag(item)
         }
     }
-}
-
-extension SearchScope {
-    /// Where the Mac window remembers the scope searched last.
-    static let macStorageKey = "macSearchScope"
 }
 
 extension View {

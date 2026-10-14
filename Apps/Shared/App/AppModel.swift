@@ -62,6 +62,8 @@ final class AppModel {
     #endif
     /// The Play tab's stack, so Now Playing can push onto it.
     let playNavigator = PlayNavigator()
+    /// The one search, kept while you're away from it.
+    let search = SearchSession()
 
     /// Where Play's music comes from. Changing it changes the player; whatever was playing stops.
     var musicSource: MusicSource = MusicSource.current {
@@ -95,12 +97,14 @@ final class AppModel {
     var pendingRoute: Route?
 
     /// The Mac sidebar selection. Lives here so menu commands can change it.
-    var sidebarSelection: SidebarItem? = LaunchScene.sidebar.flatMap(SidebarItem.init(rawValue:)) ?? SidebarItem.opening
+    var sidebarSelection: SidebarItem? = LaunchScene.sidebar.flatMap(SidebarItem.init(rawValue:))
+        ?? (LaunchScene.searchText != nil ? .search : SidebarItem.opening)
 
     /// The iPhone's tab. Lives here so Summary's "See All" can move to Charts, which owns the
     /// full lists, instead of pushing a second copy inside Summary.
     /// A launch link opens on Summary, whose stack it's pushed onto (see `RootView`).
-    var selectedTab: AppTab = AppTab(launchName: LaunchScene.tab) ?? (LaunchScene.route != nil ? .summary : AppTab.opening)
+    var selectedTab: AppTab = AppTab(launchName: LaunchScene.tab)
+        ?? (LaunchScene.opensSearch || LaunchScene.searchText != nil ? .search : LaunchScene.route != nil ? .summary : AppTab.opening)
 
     /// Apple Music access, as last read. Summary and Settings explain what it's for and offer
     /// to ask, rather than the app asking out of nowhere at launch.
@@ -558,6 +562,8 @@ enum MotifImportState: Equatable {
 /// The iPhone's tabs.
 enum AppTab: String, Hashable {
     case summary, play, history, charts
+    /// Search, at the tab bar's far end, as Music has it.
+    case search
 
     init?(launchName: String?) {
         guard let launchName else { return nil }
@@ -575,6 +581,7 @@ enum AppTab: String, Hashable {
         case .play: "Play"
         case .history: "History"
         case .charts: "Charts"
+        case .search: "Search"
         }
     }
 
@@ -584,6 +591,7 @@ enum AppTab: String, Hashable {
         case .play: "play.circle"
         case .history: "clock.arrow.circlepath"
         case .charts: "list.number"
+        case .search: "magnifyingglass"
         }
     }
 }
@@ -620,6 +628,8 @@ enum OpeningTab: String, CaseIterable, Identifiable {
 
 /// The Mac sidebar: where to play from, your listening, and the library of the music source.
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
+    /// The search page, at the top of the sidebar, as in Podcasts and TV.
+    case search
     case listenNow
     case radio
     case summary
@@ -642,6 +652,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
 
     var title: LocalizedStringKey {
         switch self {
+        case .search: "Search"
         case .listenNow: "Listen Now"
         case .radio: "Radio"
         case .summary: "Summary"
@@ -661,6 +672,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .search: "magnifyingglass"
         case .listenNow: "play.circle"
         case .radio: "dot.radiowaves.left.and.right"
         case .summary: "chart.bar.xaxis"

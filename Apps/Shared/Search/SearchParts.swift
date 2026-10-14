@@ -1,26 +1,12 @@
 import SwiftUI
 import TracksCore
 
-/// What you searched for lately, kept as lines in one stored string, newest first.
-enum RecentSearches {
-    static func list(_ storage: String) -> [String] {
-        storage.split(separator: "\n").map(String.init)
-    }
-
-    /// The storage with a search added at the front, eight at most, each once.
-    static func adding(_ query: String, to storage: String) -> String {
-        let term = query.trimmingCharacters(in: .whitespaces)
-        guard !term.isEmpty else { return storage }
-        let kept = [term] + list(storage).filter { $0.caseInsensitiveCompare(term) != .orderedSame }
-        return kept.prefix(8).joined(separator: "\n")
-    }
-}
-
 /// Recent searches as chips to search again, with Clear.
 struct RecentSearchesSection: View {
     let recents: [String]
     let clear: () -> Void
     let search: (String) -> Void
+    var remove: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -50,6 +36,13 @@ struct RecentSearchesSection: View {
                                 .contentShape(.rect)
                         }
                         .buttonStyle(.pressable)
+                        .contextMenu {
+                            if let remove {
+                                Button("Remove from Recent Searches", systemImage: "minus.circle") {
+                                    withAnimation(.snappy) { remove(recent) }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -59,25 +52,69 @@ struct RecentSearchesSection: View {
     }
 }
 
-/// The moods, as tiles to open, for before a search.
-struct BrowseByMoodSection: View {
+/// The moods and genres, as tiles to open, for before a search: Music's Browse Categories,
+/// made of the rooms Play already has.
+struct BrowseSections: View {
+    @Environment(AppModel.self) private var model
+    @Environment(PlayFeed.self) private var feed
+    /// Nil until they're worked out, which walks the history.
+    @State private var genres: [GenreTileItem]?
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SearchSectionTitle("Browse by Mood")
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.tile), spacing: 12)], spacing: 12) {
+        VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
+            section("Browse by Mood") {
                 ForEach(Mood.allCases) { mood in
-                    MoodTile(mood: mood, height: 84, fillsWidth: true)
+                    MoodTile(mood: mood, height: Self.tileHeight, fillsWidth: true)
                 }
+            }
+            if let genres {
+                if !genres.isEmpty {
+                    section("Browse by Genre") {
+                        ForEach(genres) { item in
+                            GenreTile(item: item, height: Self.tileHeight, fillsWidth: true)
+                        }
+                    }
+                }
+            } else {
+                // The genres' place, held while they're worked out.
+                section("Browse by Genre") {
+                    ForEach(0..<(model.musicSource == .appleMusic ? MusicGenre.all.count : 4), id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.quaternary)
+                            .frame(height: Self.tileHeight)
+                    }
+                }
+                .accessibilityHidden(true)
+            }
+        }
+        .task(id: GenresKey(source: model.musicSource, revision: model.library.revision, songs: model.yourMusic.index.tracks.count)) {
+            guard model.library.isLoaded else { return }
+            genres = await GenreShelfItems.load(model: model, facts: feed.facts)
+        }
+    }
+
+    private func section(_ title: LocalizedStringKey, @ViewBuilder tiles: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SearchSectionTitle(title)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.tileWidth), spacing: 12)], spacing: 12) {
+                tiles()
             }
         }
         .padding(.horizontal, PlayMetrics.margin)
     }
 
     #if os(macOS)
-    private static let tile: CGFloat = 170
+    private static let tileWidth: CGFloat = 170
     #else
-    private static let tile: CGFloat = 150
+    private static let tileWidth: CGFloat = 150
     #endif
+    private static let tileHeight: CGFloat = 84
+}
+
+private struct GenresKey: Equatable {
+    let source: MusicSource
+    let revision: Int
+    let songs: Int
 }
 
 /// A search section's title.
@@ -95,7 +132,75 @@ struct SearchSectionTitle: View {
     }
 }
 
-/// Search's songs, in rows: one column on iPhone, two on the Mac, as Music lays them out.
+/// The top result and the songs: side by side on the Mac, as Music lays them out, or one above
+/// the other where the window's too narrow for both, and always on iPhone.
+struct SearchLead<SongsTitle: View, Songs: View>: View {
+    let top: SearchTopResult?
+    let hasSongs: Bool
+    @ViewBuilder var songsTitle: SongsTitle
+    @ViewBuilder var songs: Songs
+
+    var body: some View {
+        Group {
+            #if os(macOS)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 28) {
+                    if top != nil {
+                        topBlock
+                            .frame(width: Self.cardWidth)
+                    }
+                    if hasSongs {
+                        songsBlock
+                            .frame(minWidth: 420, maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                stacked
+            }
+            #else
+            stacked
+            #endif
+        }
+        .padding(.horizontal, PlayMetrics.margin)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
+            topBlock
+                #if os(macOS)
+                .frame(maxWidth: Self.cardWidth)
+                #endif
+            if hasSongs { songsBlock }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var topBlock: some View {
+        if let top {
+            VStack(alignment: .leading, spacing: 10) {
+                SearchSectionTitle("Top Result")
+                TopResultCard(result: top)
+            }
+        }
+    }
+
+    private var songsBlock: some View {
+        VStack(alignment: .leading, spacing: Self.titleSpacing) {
+            songsTitle
+            songs
+        }
+    }
+
+    private static var cardWidth: CGFloat { 340 }
+    #if os(macOS)
+    private static var titleSpacing: CGFloat { 10 }
+    #else
+    private static var titleSpacing: CGFloat { 6 }
+    #endif
+}
+
+/// Search's songs, in rows: one column on iPhone; on the Mac, as many as fit, as Music lays
+/// them out.
 struct SearchSongGrid<Item: Identifiable, Row: View>: View {
     let items: [Item]
     @ViewBuilder var row: (Item) -> Row
@@ -109,7 +214,7 @@ struct SearchSongGrid<Item: Identifiable, Row: View>: View {
     }
 
     #if os(macOS)
-    private static var columns: [GridItem] { [GridItem(.flexible(), spacing: 28), GridItem(.flexible())] }
+    private static var columns: [GridItem] { [GridItem(.adaptive(minimum: 260), spacing: 28)] }
     #else
     private static var columns: [GridItem] { [GridItem(.flexible())] }
     #endif
@@ -171,6 +276,8 @@ struct TopResultCard: View {
                         .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
                 }
                 .buttonStyle(.pressable)
+                // A fixed circle, so its symbol can't outgrow it at the largest text sizes.
+                .dynamicTypeSize(.large)
                 .padding(16)
                 // Reached as the card's Play action with VoiceOver.
                 .accessibilityHidden(true)
@@ -181,7 +288,11 @@ struct TopResultCard: View {
         .buttonStyle(.pressable)
         .coverTint(of: result.cover ?? .url(nil, seed: result.title), into: $tint)
         .accessibilityElement(children: .combine)
-        .accessibilityAction(named: "Play") { result.play?() }
+        .accessibilityActions {
+            if let play = result.play {
+                Button("Play", action: play)
+            }
+        }
     }
 
     @ViewBuilder
@@ -190,6 +301,30 @@ struct TopResultCard: View {
             ArtistPicture(cover: result.cover, name: result.title, size: 112, onStage: true)
         } else {
             CoverImage(cover: result.cover ?? .url(nil, seed: result.title), size: 112)
+        }
+    }
+}
+
+/// No results, with the other places the same search could look, a click away.
+struct SearchNoResults: View {
+    let query: String
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let session = model.search
+        let others = SearchScope.scopes(for: model.musicSource).filter { $0 != session.scope }
+        ContentUnavailableView {
+            Label("No Results", systemImage: "magnifyingglass")
+        } description: {
+            Text("Nothing in \(Text(session.scope.title(for: model.musicSource))) matches “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”.")
+        } actions: {
+            ForEach(others) { scope in
+                Button {
+                    session.scope = scope
+                } label: {
+                    Text("Search \(Text(scope.title(for: model.musicSource)))")
+                }
+            }
         }
     }
 }

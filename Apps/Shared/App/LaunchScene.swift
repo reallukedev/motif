@@ -4,8 +4,8 @@ import TracksCore
 /// Where to start, from launch arguments. Used for screenshots and UI checks, so a given
 /// screen can be reached without tapping through the app. Debug builds only.
 ///
-///     -TracksTab charts            Summary, Play, History or Charts (iPhone)
-///     -TracksSearch YES            open search on the first tab (iPhone)
+///     -TracksTab charts            Summary, Play, History, Charts or Search (iPhone)
+///     -TracksSearch YES            open the Search tab (iPhone)
 ///     -TracksDemoPlaying YES       with sample data, start the Play tab's first mix (iPhone);
 ///                                 "station" for Tracks Radio, or a mood such as "chill"
 ///     -TracksDemoPlaying one       or just its first song, for Autoplay to follow on from
@@ -40,7 +40,7 @@ import TracksCore
 ///     -TracksOpen "artist:mara solis"   an artist, song:<title>|<artist>,
 ///                                      or album:<title>|<artist>
 ///     -TracksSettings YES          open Settings
-///     -TracksSearchText "mara"     search for this in the sidebar (Mac)
+///     -TracksSearchText "mara"     open Search with this typed (-searchScope history for a scope)
 ///     -TracksMiniPlayer YES        open the Mini Player too (Mac)
 ///     -TracksActivate YES          come to the front, so the window is drawn focused (Mac)
 ///     -statsRange year            the range, since it's stored under that key

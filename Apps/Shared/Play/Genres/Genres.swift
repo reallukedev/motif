@@ -214,6 +214,8 @@ private struct GenreKey: Equatable {
 struct GenreTile: View {
     let item: GenreTileItem
     let height: CGFloat
+    /// Fills its grid cell's width, rather than the shelf's fixed shape.
+    var fillsWidth = false
 
     var body: some View {
         let style = item.genre.style
@@ -243,7 +245,8 @@ struct GenreTile: View {
                     .minimumScaleFactor(0.7)
                     .padding(12)
             }
-            .frame(width: height * 1.75, height: height)
+            .frame(width: fillsWidth ? nil : height * 1.75, height: height)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
             .clipShape(.rect(cornerRadius: 16, style: .continuous))
             .contentShape(.rect(cornerRadius: 16, style: .continuous))
         }

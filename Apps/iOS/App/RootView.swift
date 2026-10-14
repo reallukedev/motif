@@ -26,6 +26,10 @@ struct RootView: View {
                         stack(for: tab, navigator: navigator)
                     }
                 }
+                // At the bar's far end, on its own, as in Music.
+                Tab(value: AppTab.search, role: .search) {
+                    stack(for: .search, navigator: navigator)
+                }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
             .tabViewBottomAccessory(isEnabled: player.hasQueue || model.controlledDevice != nil) {
@@ -114,7 +118,10 @@ struct RootView: View {
             }
             .onChange(of: model.musicSource, initial: true) { old, source in
                 // Pages pushed for one source mean nothing in the other.
-                if old != source { model.playNavigator.path = NavigationPath() }
+                if old != source {
+                    model.playNavigator.path = NavigationPath()
+                    model.search.path = NavigationPath()
+                }
                 if source == .yourMusic { model.prepareYourMusic() }
             }
             .onChange(of: scenePhase) { _, phase in
@@ -174,6 +181,14 @@ struct RootView: View {
             NavigationStack { HistoryScreen().tracksDestinations() }
         case .charts:
             NavigationStack { ChartsScreen().tracksDestinations() }
+        case .search:
+            @Bindable var search = model.search
+            NavigationStack(path: $search.path) {
+                SearchPage()
+                    .playDestinations()
+                    .tracksDestinations()
+            }
+            .environment(\.openPlayRoute, OpenPlayRouteAction(stack: "search") { search.path.append($0) })
         }
     }
 

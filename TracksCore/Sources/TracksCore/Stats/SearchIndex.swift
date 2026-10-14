@@ -37,6 +37,11 @@ public struct SearchIndex: Sendable {
         artists.prefix(limit).map(\.item)
     }
 
+    /// The most played albums of all time.
+    public func topAlbums(limit: Int) -> [AlbumTally] {
+        albums.prefix(limit).map(\.item)
+    }
+
     /// Matches every typed word, ignoring case and accents ("mara sol" finds Mara Solís).
     /// Songs match on their genre too, so "jazz" finds the jazz you've played. Most played
     /// first in each group.

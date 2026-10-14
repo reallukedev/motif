@@ -41,14 +41,16 @@ struct MusicSearchResults: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: PlayMetrics.sectionSpacing) {
-                if model.isShowingSampleData {
-                    // Sample data never reaches Apple Music.
-                } else if isBlank {
+                if isBlank {
                     blank
+                } else if model.isShowingSampleData {
+                    // Sample data never reaches Apple Music.
                 } else if !results.isEmpty {
                     resultSections
                 }
             }
+            // The page's width even when empty, so the overlay's message has it too.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 16)
             .padding(.bottom, 28)
             .animation(.snappy, value: results.isEmpty)
@@ -64,27 +66,38 @@ struct MusicSearchResults: View {
     /// What you looked for lately, as chips to look again, and the moods to browse by.
     @ViewBuilder
     private var blank: some View {
-        if !recents.isEmpty {
-            RecentSearchesSection(recents: recents, clear: { recentStorage = "" }, search: search)
+        if !recents.isEmpty, !model.isShowingSampleData {
+            RecentSearchesSection(recents: recents, clear: { recentStorage = "" }, search: search) {
+                recentStorage = RecentSearches.removing($0, from: recentStorage)
+            }
         }
-        if scope == .appleMusic, model.musicAuthorization == .authorized {
-            BrowseByMoodSection()
+        if showsBrowse {
+            BrowseSections()
         }
+    }
+
+    /// The moods and genres before a search of the catalog: they play from the history, so
+    /// sample data has them too.
+    private var showsBrowse: Bool {
+        scope == .appleMusic && (model.musicAuthorization == .authorized || model.isShowingSampleData)
     }
 
     // MARK: - Results
 
-    /// The best match, if there's a clear one: an artist whose name is what was typed, or the
-    /// first song.
+    /// The best match, if there's a clear one, as ``SearchRanking`` picks it.
     private var topResult: TopResult? {
-        let term = StatsCalculator.folded(query.trimmingCharacters(in: .whitespaces))
-        if let artist = results.artists.first, StatsCalculator.folded(artist.name).hasPrefix(term) || term.hasPrefix(StatsCalculator.folded(artist.name)) {
-            return .artist(artist)
+        let kind = SearchRanking.topKind(
+            for: query,
+            artist: results.artists.first?.name,
+            album: results.albums.first?.title,
+            hasSong: !results.songs.isEmpty
+        )
+        return switch kind {
+        case .artist: results.artists.first.map(TopResult.artist)
+        case .album: results.albums.first.map(TopResult.album)
+        case .song: results.songs.first.map(TopResult.song)
+        case nil: nil
         }
-        if let album = results.albums.first, StatsCalculator.folded(album.title) == term {
-            return .album(album)
-        }
-        return results.songs.first.map(TopResult.song)
     }
 
     enum TopResult {
@@ -126,46 +139,11 @@ struct MusicSearchResults: View {
     private var resultSections: some View {
         let top = topResult
         let songs = Array(results.songs.prefix(8))
-        #if os(macOS)
-        // The top result beside the first songs, as Music lays them out.
-        HStack(alignment: .top, spacing: 28) {
-            if let top {
-                VStack(alignment: .leading, spacing: 10) {
-                    SearchSectionTitle("Top Result")
-                    TopResultCard(result: card(for: top))
-                }
-                .frame(width: 340)
-            }
-            if !songs.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    SearchSectionTitle("Songs")
-                    songRows(Array(songs.prefix(4)), all: songs)
-                }
-                .frame(maxWidth: .infinity)
-            }
+        SearchLead(top: top.map(card), hasSongs: !songs.isEmpty) {
+            SearchSectionTitle("Songs")
+        } songs: {
+            songRows(songs, all: songs)
         }
-        .padding(.horizontal, PlayMetrics.margin)
-        if songs.count > 4 {
-            songRows(Array(songs.dropFirst(4)), all: songs)
-                .padding(.horizontal, PlayMetrics.margin)
-                .padding(.top, -PlayMetrics.sectionSpacing + 8)
-        }
-        #else
-        if let top {
-            VStack(alignment: .leading, spacing: 10) {
-                SearchSectionTitle("Top Result")
-                TopResultCard(result: card(for: top))
-            }
-            .padding(.horizontal, PlayMetrics.margin)
-        }
-        if !songs.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                SearchSectionTitle("Songs")
-                songRows(songs, all: songs)
-            }
-            .padding(.horizontal, PlayMetrics.margin)
-        }
-        #endif
 
         if results.artists.count > (top.isArtist ? 1 : 0) {
             Shelf(title: String(localized: "Artists"), items: Array(results.artists.dropFirst(top.isArtist ? 1 : 0).prefix(10))) { artist in
@@ -235,13 +213,15 @@ struct MusicSearchResults: View {
 
     @ViewBuilder
     private var overlay: some View {
-        if model.isShowingSampleData {
-            ContentUnavailableView(
-                "Not Available with Sample Data",
-                systemImage: "music.note",
-                description: Text("Search History to look through the sample listening.")
-            )
-        } else if model.musicAuthorization != .authorized {
+        if model.isShowingSampleData, !isBlank {
+            ContentUnavailableView {
+                Label("Not Available with Sample Data", systemImage: "music.note")
+            } description: {
+                Text("Search History to look through the sample listening.")
+            } actions: {
+                Button("Search History") { model.search.scope = .history }
+            }
+        } else if model.musicAuthorization != .authorized, !model.isShowingSampleData {
             ContentUnavailableView {
                 Label("Search Apple Music", systemImage: "magnifyingglass")
             } description: {
@@ -252,7 +232,7 @@ struct MusicSearchResults: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
-        } else if isBlank, recents.isEmpty {
+        } else if isBlank, recents.isEmpty, !showsBrowse {
             ContentUnavailableView(
                 scope == .appleMusic ? "Search Apple Music" : "Search Your Library",
                 systemImage: "magnifyingglass",
@@ -269,7 +249,7 @@ struct MusicSearchResults: View {
                 Button("Try Again") { attempt += 1 }
             }
         } else if !isBlank, state == .loaded, results.isEmpty {
-            ContentUnavailableView.search(text: query)
+            SearchNoResults(query: query)
         } else if !isBlank, state == .loading, results.isEmpty {
             ProgressView()
         }

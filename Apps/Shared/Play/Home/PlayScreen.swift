@@ -17,8 +17,6 @@ struct PlayScreen: View {
     @State private var showsSubscriptionOffer = false
     @State private var showsSettings = LaunchScene.opensPlaySettings
     @State private var showsEditor = LaunchScene.opensEditPlay
-    @State private var isSearching = LaunchScene.opensSearch
-    @Environment(\.beginSearch) private var beginSearch
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -60,20 +58,16 @@ struct PlayScreen: View {
                 }
             }
         }
-        #if os(iOS)
-        .tracksSearch(isPresented: $isSearching, scopeKey: "playSearchScope", defaultScope: .appleMusic)
-        #endif
         #if os(macOS)
         .navigationTitle("Listen Now")
         #else
         .navigationTitle("Play")
         #endif
         #if os(iOS)
-        // On the Mac, search is the sidebar's and Settings is the app menu's.
+        // On the Mac, Settings is the app menu's.
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if NearbyDevices.isOn { DevicesButton() }
-                SearchToolbarButton(isPresented: $isSearching)
                 Button("Settings", systemImage: "gearshape") { showsSettings = true }
             }
         }
@@ -236,13 +230,7 @@ struct PlayScreen: View {
                 title: String(localized: "Play Something"),
                 message: String(localized: "Search for a song, or open your library. Tracks keeps every song you play here, and makes mixes from them as you listen.")
             ) {
-                Button("Search Apple Music") {
-                    #if os(macOS)
-                    beginSearch(in: .appleMusic)
-                    #else
-                    isSearching = true
-                    #endif
-                }
+                Button("Search Apple Music") { model.beginSearch(in: .appleMusic) }
                     .buttonStyle(.borderedProminent)
             }
             .padding(.horizontal, PlayMetrics.margin)

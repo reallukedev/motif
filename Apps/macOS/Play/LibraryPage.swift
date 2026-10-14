@@ -46,57 +46,11 @@ struct LibraryPage: View {
     }
 }
 
-/// Search from the sidebar, in Apple Music's catalog, your library, or your history, chosen in
-/// the toolbar as Music chooses between Apple Music and Library.
-struct MacSearchResults: View {
-    let query: String
-    @Binding var scope: SearchScope
-    let search: (String) -> Void
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Group {
-            switch scope {
-            case .history:
-                SearchResultsList(query: query)
-            case .library where model.musicSource == .yourMusic:
-                YourMusicSearchResults(query: query, search: search)
-            case .library:
-                LibrarySearchResults(query: query)
-            case .appleMusic:
-                MusicSearchResults(query: query, scope: .appleMusic, search: search)
-            }
-        }
-        .navigationTitle("Search")
-        // Apple Music's catalog isn't a scope when your own music plays.
-        .onAppear { keepScope() }
-        .onChange(of: model.musicSource) { keepScope() }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("Search In", selection: $scope) {
-                    ForEach(SearchScope.scopes(for: model.musicSource)) { scope in
-                        Text(scope.title(for: model.musicSource)).tag(scope)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-            }
-        }
-    }
-}
-
-private extension MacSearchResults {
-    func keepScope() {
-        let scopes = SearchScope.scopes(for: model.musicSource)
-        if !scopes.contains(scope) { scope = scopes[0] }
-    }
-}
-
 /// Your Apple Music library, searched on the Mac. MusicKit's own library search goes through
 /// the same iTunes library requests that can end the app on the Mac, so this looks through
 /// the library the pages have read (``LibraryCache``), in Swift: artists, albums, songs and
 /// playlists whose names hold every word typed.
-private struct LibrarySearchResults: View {
+struct LibrarySearchResults: View {
     let query: String
     @State private var songs = LibraryPager<Song>()
     @State private var albums = LibraryPager<Album>()
@@ -108,6 +62,18 @@ private struct LibrarySearchResults: View {
     @FocusState private var selectedSong: String?
 
     var body: some View {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView(
+                "Search Your Library",
+                systemImage: "magnifyingglass",
+                description: Text("Find songs, albums, artists and playlists you’ve added.")
+            )
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         LibraryAccessGate {
             List {
                 if !artists.items.isEmpty {
@@ -200,7 +166,7 @@ private struct LibrarySearchResults: View {
             } else if songs.phase == .failed {
                 LibraryLoadFailed { await songs.retry(query: query) }
             } else {
-                ContentUnavailableView.search(text: query)
+                SearchNoResults(query: query)
             }
         }
     }

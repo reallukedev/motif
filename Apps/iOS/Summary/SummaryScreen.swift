@@ -9,7 +9,6 @@ struct SummaryScreen: View {
     /// 0 for this week, month or year; -1 for the one before. Back to 0 when the range changes.
     @State private var periodOffset = LaunchScene.periodOffset
     @State private var showsSettings = LaunchScene.opensSettings
-    @State private var isSearching = LaunchScene.opensSearch
     private var sources = SourceScopeSetting()
 
     var body: some View {
@@ -49,7 +48,6 @@ struct SummaryScreen: View {
             }
         }
         .groupedBackground()
-        .tracksSearch(isPresented: $isSearching, scopeKey: "summarySearchScope", defaultScope: .history)
         .navigationTitle("Summary")
         .sourceScopeSubtitle(sources.scope)
         .toolbar {
@@ -57,7 +55,6 @@ struct SummaryScreen: View {
                 if sources.isOffered {
                     SourceScopeMenu(scope: sources.selection)
                 }
-                SearchToolbarButton(isPresented: $isSearching)
                 Button("Settings", systemImage: "gearshape") { showsSettings = true }
             }
         }

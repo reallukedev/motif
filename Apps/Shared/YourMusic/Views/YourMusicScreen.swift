@@ -21,7 +21,6 @@ struct YourMusicScreen: View {
     @State private var addsServer = false
     /// A server whose password needs typing again.
     @State private var signingIn: SubsonicServer?
-    @State private var isSearching = LaunchScene.opensSearch
     @State private var shelves = Shelves()
 
     enum ImportMode { case files, folder }
@@ -74,8 +73,6 @@ struct YourMusicScreen: View {
         }
         .animation(.snappy, value: music.lastImport?.added)
         #if os(iOS)
-        // Search as Play's own, with History beside your music. The Mac searches from the sidebar.
-        .tracksSearch(isPresented: $isSearching, scopeKey: "yourMusicSearchScope", defaultScope: .library, source: .yourMusic)
         .navigationTitle("Play")
         #else
         .navigationTitle("Listen Now")
@@ -84,7 +81,6 @@ struct YourMusicScreen: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(iOS)
                 if NearbyDevices.isOn { DevicesButton() }
-                SearchToolbarButton(isPresented: $isSearching)
                 #endif
                 Menu("Add Music", systemImage: "plus") {
                     Button("Import Songs", systemImage: "music.note") { importMode = .files }

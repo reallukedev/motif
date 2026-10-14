@@ -143,7 +143,7 @@ struct ControlsCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .textEditing) {
-            // ⌘F, as Music's: the search of everything, in the sidebar.
+            // ⌘F, as in Music: the Search page, with the cursor in its field.
             Button("Search", systemImage: "magnifyingglass") { window?.beginSearch() }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(window == nil)
