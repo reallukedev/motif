@@ -314,12 +314,16 @@ struct CollectionHeader<Cover: View, More: View>: View {
             Menu {
                 more
             } label: {
-                Label("More", systemImage: "ellipsis")
-                    .labelStyle(.iconOnly)
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("More")
             }
+            .menuStyle(.button)
             .menuIndicator(.hidden)
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
+            .buttonStyle(.plain)
             .fixedSize()
             .help("More")
         }
