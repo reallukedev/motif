@@ -69,6 +69,27 @@ public nonisolated struct GrooveTexture: Codable, Equatable, Sendable {
         }
     }
 
+    /// Where each band's sound usually sits, low and high, 0 to 1: its quietest tenth and its
+    /// loudest few moments. A replay spread across this range uses the full height whether the
+    /// song is a crowded, loud master or a soft piano, so every genre moves as much as it
+    /// changes. A band that hardly changes keeps a range wide enough not to magnify noise, about its middle.
+    public func bandRange() -> (floor: [Float], ceiling: [Float]) {
+        let frames = chunkCount * Self.framesPerChunk
+        guard frames > 0 else { return ([], []) }
+        var floor = [Float](repeating: 0, count: bandCount), ceiling = [Float](repeating: 1, count: bandCount)
+        levels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            for band in 0..<bandCount {
+                let values = (0..<frames).map { Float(bytes[$0 * bandCount + band]) / 255 }.sorted()
+                let low = values[frames / 10], high = values[min(frames - 1, frames * 97 / 100)]
+                // Widened about its middle, so a steady band sits mid-way rather than at the top.
+                let span = max(0.2, high - low)
+                floor[band] = max(0, (low + high - span) / 2)
+                ceiling[band] = floor[band] + span
+            }
+        }
+        return (floor, ceiling)
+    }
+
     /// The preview's chunk for the song's `chunk`: forward, then back, then forward again,
     /// before the first as after the last.
     static func chunk(_ chunk: Int, of count: Int) -> Int {

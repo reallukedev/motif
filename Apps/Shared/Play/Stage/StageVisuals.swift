@@ -251,7 +251,7 @@ final class BarSprings {
     private var velocities: [Float] = []
     private var lastTime: Double?
 
-    func step(toward targets: [Float], kick: Float, time: Double, liveliness: Double) -> [Float] {
+    func step(toward targets: [Float], kick: Float, time: Double, liveliness: Double, gentleness: Double = 0.3) -> [Float] {
         let elapsed = Float(min(max(lastTime.map { time - $0 } ?? 0, 0), 0.1))
         lastTime = time
         if positions.count != targets.count {
@@ -260,15 +260,17 @@ final class BarSprings {
             return positions
         }
         // About a seventh of a second to answer, quicker for a busy song; damped enough that a
-        // hit only just leaps past where it's going, so the row flows rather than jitters.
-        let response = Float(0.15 - 0.05 * min(1, max(0, liveliness)))
+        // hit only just leaps past where it's going, so the row flows rather than jitters. A
+        // gentle song answers more slowly and never overshoots: it swells, it doesn't bounce.
+        let gentle = Float(min(1, max(0, gentleness)))
+        let response = Float(0.15 - 0.05 * min(1, max(0, liveliness))) + 0.17 * gentle
         let stiffness = pow(2 * Float.pi / response, 2)
-        let damping = 2 * 0.72 * sqrt(stiffness)
+        let damping = 2 * (0.72 + 0.33 * gentle) * sqrt(stiffness)
         let count = Float(max(1, targets.count - 1))
         let goals = targets.indices.map { index -> Float in
             let place = Float(index) / count
             // The kick lifts the bass most, fading out by the middle.
-            let lift = kick * 0.3 * max(0, 1 - place * 2.2)
+            let lift = kick * 0.3 * (1 - gentle) * max(0, 1 - place * 2.2)
             return max(0, targets[index] + lift)
         }
         // In small steps, so a dropped frame doesn't throw a bar off its spring.

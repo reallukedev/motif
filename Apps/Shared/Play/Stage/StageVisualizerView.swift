@@ -51,7 +51,7 @@ struct StageVisualizerView: View {
                     let bars = BarsVisual.resampled(pulse.bands, count: BarsVisual.count(for: proxy.size.width))
                     let heights = reduceMotion
                         ? bars
-                        : springs.step(toward: bars, kick: pulse.kick, time: time, liveliness: Double(pulse.activity))
+                        : springs.step(toward: bars, kick: pulse.kick, time: time, liveliness: Double(pulse.activity), gentleness: Double(pulse.gentleness))
                     BarsVisual(heights: heights, light: lights[0], kick: Double(reduceMotion ? 0 : pulse.kick))
                 case .glow:
                     let (level, bloom) = eased(glow, pulse, time: time)
@@ -132,6 +132,12 @@ struct StagePulse {
     var motion: Double
     /// How busy the music is, 0 to 1: how much it's been moving over the last few seconds.
     var activity: Float = 0
+    /// How fast `motion` is gathering now: about 1 for a song at 120 beats a minute, easing
+    /// to 0 on pause.
+    var pace: Double = 0
+    /// How gently the song moves, 0 to 1 (see `Groove.gentleness`): what's drawn glides for
+    /// a ballad and springs for a dance track.
+    var gentleness: Float = 0.3
 
     /// The low bands, where the bass and the kick are.
     var bass: Float { bands.prefix(5).reduce(0, +) / 5 }
@@ -194,6 +200,9 @@ final class SmoothedLevels {
     private var motion: Double = 0
     private var pace: Double = 0
     private var activity: Float = 0
+    private var gentleness = 0.3
+    private var range: (floor: [Float], ceiling: [Float]) = ([], [])
+    private var rangeKey: TextureKey?
     private var previous: [Float]?
     /// When they were last worked out: asked twice in one frame, by the background and the
     /// visualizer, they answer the same.
@@ -235,17 +244,30 @@ final class SmoothedLevels {
             // What's new in each band stands out and what's held settles back, as a drum
             // stands out over a held chord to the ear: otherwise a dense mix holds every
             // band near the top and nothing seems to move.
-            if settled.count != replayed.count { settled = replayed }
-            let follow = Float(1 - exp(-elapsed / 0.9))
-            let fresh = zip(replayed, settled).map { level, held in
-                min(1, 0.5 * level + 1.3 * max(0, level - held))
+            // Spread across the song's own range first, so a soft song moves as much as a
+            // loud one.
+            if let texture = groove.texture {
+                let key = TextureKey(texture)
+                if rangeKey != key { range = texture.bandRange(); rangeKey = key }
             }
-            for index in settled.indices { settled[index] += (replayed[index] - settled[index]) * follow }
+            let spread = replayed.indices.map { band -> Float in
+                guard band < range.floor.count else { return replayed[band] }
+                return min(1, max(0, (replayed[band] - range.floor[band]) / (range.ceiling[band] - range.floor[band])))
+            }
+            if settled.count != spread.count { settled = spread }
+            let follow = Float(1 - exp(-elapsed / 0.9))
+            // Hits stand out only where they'll land on the song's own and the song has them
+            // to give: a ballad, or a replay that can't be placed, swells and glides instead.
+            let emphasis = Float(groove.lock * (1 - 0.75 * groove.gentleness))
+            let fresh = zip(spread, settled).map { level, held in
+                min(1, (1 - 0.5 * emphasis) * level + 1.3 * emphasis * max(0, level - held))
+            }
+            for index in settled.indices { settled[index] += (spread[index] - settled[index]) * follow }
             // A quiet song stays a little lower than a loud one, and its ends, which the
             // preview didn't hear, ease in and out.
-            let strength = Float(0.55 + 0.45 * groove.intensity) * GrooveLevels.ease(time: position, duration: song.duration)
+            let strength = Float(0.6 + 0.4 * groove.intensity) * GrooveLevels.ease(time: position, duration: song.duration)
             target = fresh.map { Self.resting + max(0, $0 - Self.resting) * strength }
-            hit = onsets.step(target.prefix(5).reduce(0, +) / 5, elapsed: elapsed)
+            hit = onsets.step(target.prefix(5).reduce(0, +) / 5, elapsed: elapsed) * emphasis
         case .groove:
             let groove = song.groove ?? .calm
             let hits = GrooveLevels.hits(playbackTime: position(of: song, at: time), groove: groove, duration: song.duration)
@@ -264,7 +286,7 @@ final class SmoothedLevels {
         // breathing, they ease.
         (smoother.attack, smoother.release) = switch source {
         case .heard: (0.02, 0.18)
-        case .texture: (0.03, 0.2)
+        case .texture: Self.smoothing(for: song.groove)
         case .groove: (0.012, 0.08)
         case .feel: (0.3, 0.5)
         case .resting: (0.35, 0.45)
@@ -291,8 +313,26 @@ final class SmoothedLevels {
         let goal = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.8 * liveliness)
         pace += (goal - pace) * (1 - exp(-elapsed / 0.6))
         motion = (motion + elapsed * pace).truncatingRemainder(dividingBy: 100_000)
-        last = StagePulse(bands: bands, kick: kick, motion: motion, activity: activity)
+        let gentle = song.groove?.gentleness ?? 0.3
+        gentleness += (gentle - gentleness) * (1 - exp(-elapsed / 1.5))
+        last = StagePulse(bands: bands, kick: kick, motion: motion, activity: activity, pace: pace, gentleness: Float(gentleness))
         return last
+    }
+
+    /// How closely a replay follows its sound: closely where its hits land in time, easing
+    /// into swells for a ballad, or where they can't be placed.
+    private static func smoothing(for groove: Groove?) -> (attack: Double, release: Double) {
+        let soft = max(groove?.gentleness ?? 0.5, 1 - (groove?.lock ?? 0))
+        return (0.03 + 0.1 * soft, 0.2 + 0.35 * soft)
+    }
+
+    /// Which texture a band range was worked out for.
+    private struct TextureKey: Equatable {
+        let size: Int, start: Double, chunk: Double
+
+        init(_ texture: GrooveTexture) {
+            (size, start, chunk) = (texture.levels.count, texture.start, texture.chunkSeconds)
+        }
     }
 
     /// Where the song is: asked a few times a second, and carried on smoothly in between.

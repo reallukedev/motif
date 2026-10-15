@@ -619,4 +619,48 @@ struct GrooveTextureTests {
         #expect(levels.allSatisfy { (0...1).contains($0) })
         #expect(try JSONEncoder().encode(groove).count < 30_000)
     }
+
+    @Test("A soft song's range spreads to the full height, and a steady band sits mid-way, not at the top")
+    func bandRange() throws {
+        let frames = GrooveTexture.framesPerChunk * 4
+        // Band 0 a quiet song's swell, between 20 and 120; band 1 held at 150; band 2 silent.
+        let bytes = (0..<frames).flatMap { frame -> [UInt8] in
+            [UInt8(20 + (frame * 7) % 101), 150, 0]
+        }
+        let texture = GrooveTexture(chunkSeconds: 2, bandCount: 3, levels: Data(bytes))
+        let range = texture.bandRange()
+        func spread(_ value: Float, _ band: Int) -> Float {
+            min(1, max(0, (value - range.floor[band]) / (range.ceiling[band] - range.floor[band])))
+        }
+        #expect(spread(118 / 255, 0) > 0.95)
+        #expect(spread(25 / 255, 0) < 0.08)
+        #expect(abs(spread(150 / 255, 1) - 0.5) < 0.01)
+        #expect(spread(0, 2) == 0)
+        #expect(GrooveTexture(chunkSeconds: 2, bandCount: 3, levels: Data()).bandRange().floor.isEmpty)
+    }
+
+    @Test("A slow, soft ballad is gentle, a quick, punchy track isn't, and an unsure tempo counts as neither")
+    func gentleness() {
+        var ballad = Groove.calm
+        (ballad.tempo, ballad.confidence, ballad.punch) = (68, 0.7, 0.15)
+        var dance = Groove.calm
+        (dance.tempo, dance.confidence, dance.punch) = (126, 0.9, 0.9)
+        #expect(ballad.gentleness > 0.8)
+        #expect(dance.gentleness < 0.1)
+        // Heard as 68 but unsure: maybe really 136. Only how softly it hits counts for sure.
+        var unsure = ballad
+        unsure.confidence = 0.05
+        #expect(unsure.gentleness < ballad.gentleness)
+        #expect(unsure.gentleness > dance.gentleness)
+    }
+
+    @Test("A replay's hits count fully only once the preview is placed in the song")
+    func lock() {
+        var groove = Groove.calm
+        #expect(groove.lock == 0)
+        groove.confidence = 0.8
+        #expect(groove.lock > 0 && groove.lock < 1)
+        groove.songOffset = 42
+        #expect(groove.lock == 1)
+    }
 }

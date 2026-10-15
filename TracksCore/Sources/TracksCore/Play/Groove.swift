@@ -60,6 +60,25 @@ public nonisolated struct Groove: Codable, Equatable, Sendable {
     /// How strongly the song moves a drawing as a whole, 0 to 1, by how loud it is.
     public var intensity: Double { Loudness.intensity(lufs: loudness) }
 
+    /// How surely a replay of the preview's sound lands on what's heard, 0 to 1. Placed in the
+    /// song, exactly. Not placed, a steady beat still keeps the tempo, though its hits may fall
+    /// between the song's own; with no beat to keep, they'd fall anywhere, so its hits should
+    /// soften into swells rather than show.
+    public var lock: Double {
+        if songOffset != nil { return 1 }
+        return confidence >= GrooveLevels.leastConfidence ? 0.4 : 0
+    }
+
+    /// How gently the song moves, 0 to 1: a slow, soft ballad near 1, a quick, punchy dance
+    /// track near 0. A drawing glides for a gentle song and springs for a punchy one. Slow
+    /// counts only when the beat is sure, since an unsure tempo is often half or twice the
+    /// real one.
+    public var gentleness: Double {
+        let soft = 1 - min(1, max(0, punch.isFinite ? punch : 0.5))
+        let slow = confidence >= GrooveLevels.leastConfidence ? min(1, max(0, (110 - tempo) / 40)) : 0.5
+        return min(1, max(0, 0.55 * soft + 0.45 * slow))
+    }
+
     /// Nothing to keep time with: silence, or sound with no beat in it.
     public static let calm = Groove(
         tempo: 90, confidence: 0, low: .quiet, mid: .quiet, high: .quiet,
