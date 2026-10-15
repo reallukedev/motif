@@ -342,6 +342,24 @@ private struct CollectionSongRow: View {
                 .frame(width: 26, alignment: .trailing)
             if showsCover {
                 CoverImage(cover: track.artwork ?? .url(nil, seed: track.album.isEmpty ? track.title : track.album), size: 40)
+                    .overlay {
+                        // As in Music: under the pointer, Play sits over the cover.
+                        if isHovered, track.isPlayable {
+                            Button(action: play) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: CoverImage.radius(for: 40), style: .continuous)
+                                        .fill(.black.opacity(0.4))
+                                    Image(systemName: "play.fill")
+                                        .font(.callout.weight(.bold))
+                                        .foregroundStyle(.white)
+                                }
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Play \(track.title)")
+                            .transition(.opacity)
+                        }
+                    }
             }
             HStack(spacing: 6) {
                 Text(track.title)
@@ -408,10 +426,11 @@ private struct CollectionSongRow: View {
         return AnyShapeStyle(.quaternary.opacity(isHovered ? 0.6 : 0))
     }
 
-    /// The place, Play under the pointer, or a waveform while it plays.
+    /// The place, Play under the pointer where there's no cover to hold it, or a waveform
+    /// while it plays.
     @ViewBuilder
     private var number: some View {
-        if isHovered, track.isPlayable {
+        if isHovered, track.isPlayable, !showsCover {
             Button(action: play) {
                 Image(systemName: "play.fill")
                     .font(.callout)

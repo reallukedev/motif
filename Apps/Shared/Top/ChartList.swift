@@ -112,6 +112,7 @@ private struct ChartListRow: View {
                 #endif
                 ArtworkView(url: entry.artworkURL, seed: entry.artworkSeed, size: cover, isCircle: entry.isArtist)
                     .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                    .overlay { playOverCover }
                 names
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !typeSize.isAccessibilitySize {
@@ -161,31 +162,35 @@ private struct ChartListRow: View {
         }
     }
 
-    /// The place, or Play under the pointer for a song that can play.
+    /// As in Music: under the pointer, Play sits over a song's cover.
     @ViewBuilder
-    private var place: some View {
+    private var playOverCover: some View {
         if isHovered, let song = playableSong {
             Button {
                 playback.play([song], title: song.title)
             } label: {
                 Label("Play \(entry.title)", systemImage: "play.fill")
                     .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: cover, height: cover)
+                    // Rounded as the chart's covers are (see ArtworkView).
+                    .background(.black.opacity(0.4), in: .rect(cornerRadius: max(4, cover * 0.12), style: .continuous))
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .help("Play \(entry.title)")
             .transition(.opacity)
-        } else {
-            Text(position.formatted())
-                .font(.system(.title3, design: .rounded).weight(.semibold))
-                .foregroundStyle(position <= 3 ? .primary : .secondary)
-                .monospacedDigit()
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
         }
+    }
+
+    private var place: some View {
+        Text(position.formatted())
+            .font(.system(.title3, design: .rounded).weight(.semibold))
+            .foregroundStyle(position <= 3 ? .primary : .secondary)
+            .monospacedDigit()
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
     }
 
     private var names: some View {
