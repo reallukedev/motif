@@ -61,22 +61,21 @@ public nonisolated struct Groove: Codable, Equatable, Sendable {
     public var intensity: Double { Loudness.intensity(lufs: loudness) }
 
     /// How surely a replay of the preview's sound lands on what's heard, 0 to 1. Placed in the
-    /// song, exactly. Not placed, a steady beat still keeps the tempo, though its hits may fall
-    /// between the song's own; with no beat to keep, they'd fall anywhere, so its hits should
-    /// soften into swells rather than show.
+    /// song, exactly. Not placed, a steady beat still keeps the song's tempo from its start,
+    /// close enough to show; with no beat to keep, its hits would fall anywhere, so they soften
+    /// into swells instead.
     public var lock: Double {
         if songOffset != nil { return 1 }
-        return confidence >= GrooveLevels.leastConfidence ? 0.4 : 0
+        return confidence >= GrooveLevels.leastConfidence ? 0.85 : 0
     }
 
-    /// How gently the song moves, 0 to 1: a slow, soft ballad near 1, a quick, punchy dance
-    /// track near 0. A drawing glides for a gentle song and springs for a punchy one. Slow
-    /// counts only when the beat is sure, since an unsure tempo is often half or twice the
-    /// real one.
+    /// How gently the song moves, 0 to 1: a soft, quietly mastered ballad near 1, anything that
+    /// hits hard or is mastered loud near 0. A drawing glides for a gentle song and springs for
+    /// the rest. Tempo has no say: a slow rap track hits as hard as any dance track.
     public var gentleness: Double {
-        let soft = 1 - min(1, max(0, punch.isFinite ? punch : 0.5))
-        let slow = confidence >= GrooveLevels.leastConfidence ? min(1, max(0, (110 - tempo) / 40)) : 0.5
-        return min(1, max(0, 0.55 * soft + 0.45 * slow))
+        let soft = min(1, max(0, (0.6 - (punch.isFinite ? punch : 1)) / 0.45))
+        let quiet = min(1, max(0, (0.95 - intensity) / 0.4))
+        return soft * quiet
     }
 
     /// Nothing to keep time with: silence, or sound with no beat in it.

@@ -251,7 +251,7 @@ final class BarSprings {
     private var velocities: [Float] = []
     private var lastTime: Double?
 
-    func step(toward targets: [Float], kick: Float, time: Double, liveliness: Double, gentleness: Double = 0.3) -> [Float] {
+    func step(toward targets: [Float], kick: Float, time: Double, liveliness: Double, gentleness: Double = 0) -> [Float] {
         let elapsed = Float(min(max(lastTime.map { time - $0 } ?? 0, 0), 0.1))
         lastTime = time
         if positions.count != targets.count {

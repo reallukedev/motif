@@ -137,7 +137,7 @@ struct StagePulse {
     var pace: Double = 0
     /// How gently the song moves, 0 to 1 (see `Groove.gentleness`): what's drawn glides for
     /// a ballad and springs for a dance track.
-    var gentleness: Float = 0.3
+    var gentleness: Float = 0
 
     /// The low bands, where the bass and the kick are.
     var bass: Float { bands.prefix(5).reduce(0, +) / 5 }
@@ -200,7 +200,7 @@ final class SmoothedLevels {
     private var motion: Double = 0
     private var pace: Double = 0
     private var activity: Float = 0
-    private var gentleness = 0.3
+    private var gentleness = 0.0
     private var range: (floor: [Float], ceiling: [Float]) = ([], [])
     private var rangeKey: TextureKey?
     private var previous: [Float]?
@@ -313,7 +313,7 @@ final class SmoothedLevels {
         let goal = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.8 * liveliness)
         pace += (goal - pace) * (1 - exp(-elapsed / 0.6))
         motion = (motion + elapsed * pace).truncatingRemainder(dividingBy: 100_000)
-        let gentle = song.groove?.gentleness ?? 0.3
+        let gentle = song.groove?.gentleness ?? 0
         gentleness += (gentle - gentleness) * (1 - exp(-elapsed / 1.5))
         last = StagePulse(bands: bands, kick: kick, motion: motion, activity: activity, pace: pace, gentleness: Float(gentleness))
         return last
