@@ -13,7 +13,7 @@ struct StageView: View {
     @Environment(PlayerModel.self) private var player
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
     @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
-    @AppStorage(StageOption.background) private var background = StageBackground.flow
+    @AppStorage(StageOption.background) private var background = StageBackground.living
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
     @AppStorage(StageOption.showsNext) private var showsNext = true

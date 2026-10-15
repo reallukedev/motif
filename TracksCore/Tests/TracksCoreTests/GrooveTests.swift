@@ -546,6 +546,35 @@ struct GrooveTextureTests {
         }
     }
 
+    @Test("Under a held bass and chords, every band still rises and falls, and none stays up",
+          arguments: [Band.Style.backbeat, .fourOnFloor, .ballad])
+    func nothingStaysUp(style: Band.Style) throws {
+        let song = Band.song(bpm: 112, style: style, start: Band.start(for: 112), seconds: 30)
+        let texture = try #require(GrooveAnalysis.groove(of: song, sampleRate: Band.rate).texture)
+        let moments = stride(from: 0.0, to: 16, by: 0.02).map { texture.levels(at: $0) }
+        for band in 0..<texture.bandCount {
+            let values = moments.map { $0[band] }.sorted()
+            let median = values[values.count / 2], low = values[values.count / 10], high = values[values.count * 9 / 10]
+            #expect(median < 0.8, "band \(band) sits at \(median)")
+            // The kick's bands, under the held bass note, rise on each hit and fall away.
+            if band < 4 { #expect(high - low > 0.25, "band \(band) moves only from \(low) to \(high)") }
+        }
+    }
+
+    @Test("Glides from one moment to the next rather than stepping")
+    func glides() throws {
+        let texture = try #require(GrooveAnalysis.groove(of: Drums.backbeat(bpm: 120), sampleRate: Drums.rate).texture)
+        // A sixtieth of a second apart, nothing in the bass jumps more than a frame's change allows.
+        let frame = texture.chunkSeconds / Double(GrooveTexture.framesPerChunk)
+        var largest: Float = 0
+        for step in 0..<600 {
+            let time = Double(step) / 60
+            let a = Self.low(texture.levels(at: time)), b = Self.low(texture.levels(at: time + 1 / 60.0))
+            largest = max(largest, abs(b - a))
+        }
+        #expect(largest < Float(1 / 60.0 / frame) + 0.01, "jumped \(largest)")
+    }
+
     @Test("A song with no beat replays two seconds at a time")
     func noBeat() throws {
         var random = SeededRandom("noise")
@@ -565,6 +594,20 @@ struct GrooveTextureTests {
     func turnsBack() {
         #expect((0..<9).map { GrooveTexture.chunk($0, of: 3) } == [0, 1, 2, 1, 0, 1, 2, 1, 0])
         #expect(GrooveTexture.chunk(5, of: 1) == 0)
+        #expect((-3..<0).map { GrooveTexture.chunk($0, of: 3) } == [1, 2, 1])
+    }
+
+    @Test("Where the preview's place in the song is known, its stretch replays exactly, gliding between frames")
+    func placed() {
+        // Two chunks of one band: the first rising frame by frame, the second all full.
+        var bytes = (0..<GrooveTexture.framesPerChunk).map { UInt8($0 * 8) }
+        bytes += [UInt8](repeating: 255, count: GrooveTexture.framesPerChunk)
+        let texture = GrooveTexture(chunkSeconds: 3.2, bandCount: 1, levels: Data(bytes))
+        // The preview's first chunk starts 40 seconds into the song.
+        #expect(texture.levels(at: 40.05, origin: 40)[0] == Float(4) / 255)
+        #expect(texture.levels(at: 43.3, origin: 40)[0] == 1)
+        // The bar before it is its neighbour turned back, the second chunk.
+        #expect(texture.levels(at: 39, origin: 40)[0] == 1)
     }
 
     @Test("Any moment is safe, and kept small", arguments: [-5.0, 0, 1_000_000, .nan, .infinity])

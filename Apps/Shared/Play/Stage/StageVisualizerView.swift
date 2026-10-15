@@ -185,7 +185,8 @@ struct SongMoment {
 final class SmoothedLevels {
     static let resting: Float = 0.04
     private var smoother = LevelSmoother(count: AudioLevelMeter.bandCount, resting: SmoothedLevels.resting)
-    private var contrast = LevelContrast()
+    /// Each band's level over the last second or so, for what's new in it.
+    private var settled: [Float] = []
     private var clock = PlaybackClock()
     private var askedAt: Double?
     private var onsets = OnsetFollower()
@@ -229,11 +230,21 @@ final class SmoothedLevels {
         case .texture:
             let groove = song.groove ?? .calm
             let position = position(of: song, at: time)
-            let replayed = contrast.apply(groove.texture?.levels(at: position) ?? [], elapsed: elapsed)
+            let origin = groove.songOffset.map { $0 + (groove.texture?.start ?? 0) }
+            let replayed = groove.texture?.levels(at: position, origin: origin) ?? []
+            // What's new in each band stands out and what's held settles back, as a drum
+            // stands out over a held chord to the ear: otherwise a dense mix holds every
+            // band near the top and nothing seems to move.
+            if settled.count != replayed.count { settled = replayed }
+            let follow = Float(1 - exp(-elapsed / 0.9))
+            let fresh = zip(replayed, settled).map { level, held in
+                min(1, 0.5 * level + 1.3 * max(0, level - held))
+            }
+            for index in settled.indices { settled[index] += (replayed[index] - settled[index]) * follow }
             // A quiet song stays a little lower than a loud one, and its ends, which the
             // preview didn't hear, ease in and out.
             let strength = Float(0.55 + 0.45 * groove.intensity) * GrooveLevels.ease(time: position, duration: song.duration)
-            target = replayed.map { Self.resting + max(0, $0 - Self.resting) * strength }
+            target = fresh.map { Self.resting + max(0, $0 - Self.resting) * strength }
             hit = onsets.step(target.prefix(5).reduce(0, +) / 5, elapsed: elapsed)
         case .groove:
             let groove = song.groove ?? .calm
@@ -253,7 +264,7 @@ final class SmoothedLevels {
         // breathing, they ease.
         (smoother.attack, smoother.release) = switch source {
         case .heard: (0.02, 0.18)
-        case .texture: (0.015, 0.14)
+        case .texture: (0.03, 0.2)
         case .groove: (0.012, 0.08)
         case .feel: (0.3, 0.5)
         case .resting: (0.35, 0.45)
@@ -277,7 +288,7 @@ final class SmoothedLevels {
         default: AmbientLevels.tempo(energy: song.energy)
         }
         let liveliness = source == .feel ? song.energy : Double(activity)
-        let goal = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.6 + 0.9 * liveliness)
+        let goal = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.8 * liveliness)
         pace += (goal - pace) * (1 - exp(-elapsed / 0.6))
         motion = (motion + elapsed * pace).truncatingRemainder(dividingBy: 100_000)
         last = StagePulse(bands: bands, kick: kick, motion: motion, activity: activity)

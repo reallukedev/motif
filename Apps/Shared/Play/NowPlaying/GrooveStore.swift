@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 import MusicKit
 import Observation
+import ShazamKit
 import TracksCore
 import os
 
@@ -30,7 +31,7 @@ final class GrooveStore {
     private(set) var groove: Groove?
     private(set) var key: String?
     @ObservationIgnored private var work: Task<Void, Never>?
-    fileprivate static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Tracks", category: "Groove")
+    nonisolated static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Tracks", category: "Groove")
 
     private init() {}
 
@@ -73,8 +74,8 @@ final class GrooveStore {
             return nil
         }
         do {
-            let groove = try await GrooveFiles.learn(key: key, preview: preview)
-            log.notice("\(song.id.rawValue, privacy: .public): \(groove.tempo, format: .fixed(precision: 2)) BPM, sure \(groove.confidence, format: .fixed(precision: 2)), \(groove.loudness ?? 0, format: .fixed(precision: 1)) LUFS")
+            let groove = try await GrooveFiles.learn(key: key, preview: preview, song: SongMatch(song))
+            log.notice("\(song.id.rawValue, privacy: .public): \(groove.tempo, format: .fixed(precision: 2)) BPM, sure \(groove.confidence, format: .fixed(precision: 2)), \(groove.loudness ?? 0, format: .fixed(precision: 1)) LUFS, preview at \(groove.songOffset ?? -1, format: .fixed(precision: 2)) s")
             return groove
         } catch {
             if !(error is CancellationError) {
@@ -115,8 +116,8 @@ final class GrooveStore {
 private nonisolated enum GrooveFiles {
     /// Kept in Caches, where the system may clear them; one is soon learned again. Named for
     /// the analysis that learned them, so a better one doesn't play back the old one's mistakes.
-    static let folder = URL.cachesDirectory.appending(path: "Grooves 4", directoryHint: .isDirectory)
-    static let older = ["Grooves", "Grooves 2", "Grooves 3"].map { URL.cachesDirectory.appending(path: $0, directoryHint: .isDirectory) }
+    static let folder = URL.cachesDirectory.appending(path: "Grooves 5", directoryHint: .isDirectory)
+    static let older = ["Grooves", "Grooves 2", "Grooves 3", "Grooves 4"].map { URL.cachesDirectory.appending(path: $0, directoryHint: .isDirectory) }
     /// About six megabytes at most, each keeping its preview's sound.
     static let kept = 400
 
@@ -144,10 +145,12 @@ private nonisolated enum GrooveFiles {
     }
 
     @concurrent
-    static func learn(key: String, preview: URL) async throws -> Groove {
+    static func learn(key: String, preview: URL, song: SongMatch) async throws -> Groove {
         let heard = try await hear(preview)
         try Task.checkCancellation()
-        let groove = GrooveAnalysis.groove(of: heard.samples, sampleRate: heard.rate, bandCount: AudioLevelMeter.bandCount)
+        var groove = GrooveAnalysis.groove(of: heard.samples, sampleRate: heard.rate, bandCount: AudioLevelMeter.bandCount)
+        groove.songOffset = await PreviewLocator.offset(of: heard.samples, rate: heard.rate, in: song)
+        try Task.checkCancellation()
         keep(groove, at: file(for: key))
         return groove
     }
@@ -204,5 +207,68 @@ private nonisolated enum GrooveFiles {
     /// A key as a file name: letters, digits and dots only.
     private static func fileName(for key: String) -> String {
         String(key.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || $0 == "." ? Character($0) : "_" })
+    }
+}
+
+/// What identifies a song, to be sure a match is the same recording.
+nonisolated struct SongMatch: Sendable {
+    let catalogID: String?
+    let isrc: String?
+
+    init(_ song: Song) {
+        catalogID = song.id.rawValue.allSatisfy(\.isNumber) ? song.id.rawValue : nil
+        isrc = song.isrc
+    }
+
+    func accepts(_ item: SHMatchedMediaItem) -> Bool {
+        if let catalogID, let found = item.appleMusicID { return found == catalogID }
+        if let isrc, let found = item.isrc { return found.caseInsensitiveCompare(isrc) == .orderedSame }
+        return catalogID == nil && isrc == nil
+    }
+}
+
+/// Finds where a preview sits in its song, so the drawing keeps the song's own beat rather
+/// than guessing where its first bar falls.
+///
+/// A preview is a stretch from somewhere in the song, and nothing says where. Shazam knows:
+/// asked about a few seconds of the preview, it names the recording and how far into it they
+/// are, to a fraction of a second. Only the preview's sound is sent, never anything heard
+/// around you. Nil when Shazam can't say, or names another recording.
+private nonisolated enum PreviewLocator {
+    /// From this far into the preview, past its fade in, for this long.
+    static let from = 6.0
+    static let length = 10.0
+
+    static func offset(of samples: [Float], rate: Double, in song: SongMatch) async -> Double? {
+        let first = Int(from * rate), count = Int(length * rate)
+        guard samples.count >= first + count,
+              let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)),
+              let channel = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = AVAudioFrameCount(count)
+        samples.withUnsafeBufferPointer { source in
+            channel.update(from: source.baseAddress! + first, count: count)
+        }
+        let generator = SHSignatureGenerator()
+        do {
+            try generator.append(buffer, at: nil)
+        } catch {
+            GrooveStore.log.notice("Couldn't sign the preview: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        let result = await SHSession().result(from: generator.signature())
+        switch result {
+        case .match(let match):
+            guard let item = match.mediaItems.first(where: song.accepts) else { return nil }
+            let offset = item.matchOffset - from
+            return offset.isFinite && offset >= 0 ? offset : nil
+        case .noMatch:
+            return nil
+        case .error(let error, _):
+            GrooveStore.log.notice("Shazam couldn't place the preview: \(error.localizedDescription, privacy: .public)")
+            return nil
+        @unknown default:
+            return nil
+        }
     }
 }

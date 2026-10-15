@@ -32,7 +32,7 @@ public nonisolated enum GrooveAnalysis {
             calm.shape = shape(heard.decibels, frames: heard.frames, bandCount: bandCount)
             calm.loudness = level?.loudness
             calm.loudnessRange = level?.range
-            calm.texture = texture(heard, start: 0, chunk: heard.rate * GrooveTexture.freeChunk, seconds: GrooveTexture.freeChunk)
+            calm.texture = texture(of: samples, sampleRate: sampleRate, bandCount: bandCount, start: 0, chunk: GrooveTexture.freeChunk, seconds: GrooveTexture.freeChunk)
             return calm
         }
         let period = pulse.period
@@ -60,35 +60,49 @@ public nonisolated enum GrooveAnalysis {
             loudnessRange: level?.range,
             beats: bars?.beats,
             bars: bars?.loudness,
-            texture: texture(heard, start: first, chunk: period * 4, seconds: 240 / tempo)
+            texture: texture(of: samples, sampleRate: sampleRate, bandCount: bandCount, start: first / heard.rate + heard.delay, chunk: period * 4 / heard.rate, seconds: 240 / tempo)
         )
     }
 
-    /// The stretch's sound in chunks `chunk` frames long from frame `start`, each chunk lasting
-    /// `seconds` when replayed. Each frame holds the loudest moment of its thirty-second, so a
-    /// hit is never missed, on the meter's own scale: the loudest the stretch gets near full,
-    /// and 46 decibels below it nothing. The first and last seconds are left out, as a preview
-    /// fades in and out.
-    private static func texture(_ heard: Heard, start: Double, chunk: Double, seconds: Double) -> GrooveTexture? {
-        guard chunk > 0, seconds > 0 else { return nil }
-        let bandCount = heard.decibels.count / max(1, heard.frames)
-        let loudest = (0..<heard.frames).map { frame in
-            heard.decibels[frame * bandCount ..< (frame + 1) * bandCount].max() ?? -120
-        }.sorted()
-        let top = loudest[min(loudest.count - 1, Int(Double(loudest.count) * 0.99))] + 3
+    /// The stretch's sound in chunks `chunk` seconds long from `start` seconds in, each lasting
+    /// `seconds` when replayed: heard as the meter hears your own music, through the same
+    /// transform, so it looks the same. Each frame holds the loudest moment of its
+    /// thirty-second, so a hit is never missed, the loudest the stretch gets near full and 46
+    /// decibels below it nothing. Whole chunks only, from at least a second and a half in to a
+    /// second and a half from the end, as a preview fades in and out.
+    private static func texture(of samples: [Float], sampleRate: Double, bandCount: Int, start: Double, chunk: Double, seconds: Double) -> GrooveTexture? {
+        let size = SpectrumLayout.size(for: sampleRate)
+        let hop = size / 4
+        guard chunk > 0, seconds > 0, samples.count > size * 2,
+              let analyzer = SpectrumAnalyzer(size: size, sampleRate: sampleRate, bandCount: bandCount) else { return nil }
+        let frames = (samples.count - size) / hop + 1
+        var decibels = [Float](repeating: -120, count: frames * bandCount)
+        samples.withUnsafeBufferPointer { buffer in
+            for frame in 0..<frames {
+                let bands = analyzer.decibels(of: UnsafeBufferPointer(rebasing: buffer[frame * hop ..< frame * hop + size]))
+                for band in 0..<bandCount { decibels[frame * bandCount + band] = bands[band].isFinite ? bands[band] : -120 }
+            }
+        }
+        let loudest = (0..<frames).map { decibels[$0 * bandCount ..< ($0 + 1) * bandCount].max() ?? -120 }.sorted()
+        let top = loudest[min(frames - 1, Int(Double(frames) * 0.99))] + 3
         let range: Float = 46
+        // A frame stands for the middle of its window.
+        func frame(at time: Double) -> Double { (time * sampleRate - Double(size) / 2) / Double(hop) }
+        let duration = Double(samples.count) / sampleRate
         let width = chunk / Double(GrooveTexture.framesPerChunk)
         var levels = Data()
+        var first: Double?
         var place = start
-        while Int(place + chunk) < heard.frames {
-            let from = place / heard.rate + heard.delay, to = (place + chunk) / heard.rate + heard.delay
-            if from >= 1.5, to <= Double(heard.frames) / heard.rate - 1.5 {
-                for frame in 0..<GrooveTexture.framesPerChunk {
-                    let low = Int((place + Double(frame) * width).rounded(.down))
-                    let high = max(low + 1, Int((place + Double(frame + 1) * width).rounded(.up)))
+        while place + chunk <= duration - 1.5 {
+            if place >= 1.5 {
+                first = first ?? place
+                for slice in 0..<GrooveTexture.framesPerChunk {
+                    let from = place + Double(slice) * width
+                    let low = min(frames - 1, max(0, Int(frame(at: from).rounded(.up))))
+                    let high = min(frames - 1, max(low, Int(frame(at: from + width).rounded(.down))))
                     for band in 0..<bandCount {
                         var peak: Float = -120
-                        for index in low..<min(high, heard.frames) { peak = max(peak, heard.decibels[index * bandCount + band]) }
+                        for index in low...high { peak = max(peak, decibels[index * bandCount + band]) }
                         let level = min(1, max(0, (peak - (top - range)) / range))
                         levels.append(UInt8((level * 255).rounded()))
                     }
@@ -96,7 +110,8 @@ public nonisolated enum GrooveAnalysis {
             }
             place += chunk
         }
-        let texture = GrooveTexture(chunkSeconds: seconds, bandCount: bandCount, levels: levels)
+        guard let first else { return nil }
+        let texture = GrooveTexture(chunkSeconds: seconds, bandCount: bandCount, levels: levels, start: first)
         return texture.isPlayable ? texture : nil
     }
 

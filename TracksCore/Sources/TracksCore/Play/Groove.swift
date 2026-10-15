@@ -36,6 +36,9 @@ public nonisolated struct Groove: Codable, Equatable, Sendable {
     public var bars: [Float]?
     /// The preview's own sound, to replay in time with the song (see ``GrooveTexture``).
     public var texture: GrooveTexture?
+    /// Seconds into the song where the preview starts, when that could be found: the beat
+    /// and the preview's sound then line up with the song exactly.
+    public var songOffset: Double?
 
     public init(tempo: Double, confidence: Double, low: GrooveLane, mid: GrooveLane, high: GrooveLane, shape: [Float], dynamics: Double, punch: Double, brightness: Double, loudness: Double? = nil, loudnessRange: Double? = nil, beats: [Float]? = nil, bars: [Float]? = nil, texture: GrooveTexture? = nil) {
         self.tempo = tempo

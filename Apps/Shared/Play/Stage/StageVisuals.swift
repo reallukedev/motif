@@ -259,11 +259,11 @@ final class BarSprings {
             velocities = [Float](repeating: 0, count: targets.count)
             return positions
         }
-        // About a seventh of a second to answer, quicker for a busy song; lightly damped so a
-        // hit leaps past where it's going and settles. Every move is the music's own.
+        // About a seventh of a second to answer, quicker for a busy song; damped enough that a
+        // hit only just leaps past where it's going, so the row flows rather than jitters.
         let response = Float(0.15 - 0.05 * min(1, max(0, liveliness)))
         let stiffness = pow(2 * Float.pi / response, 2)
-        let damping = 2 * 0.5 * sqrt(stiffness)
+        let damping = 2 * 0.72 * sqrt(stiffness)
         let count = Float(max(1, targets.count - 1))
         let goals = targets.indices.map { index -> Float in
             let place = Float(index) / count
