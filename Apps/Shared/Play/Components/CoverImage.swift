@@ -102,9 +102,22 @@ private struct LoadedCover: View {
             }
         }
         .task(id: url) {
-            guard ArtworkImages.shared.cached(key) == nil else { return }
-            guard let fetched = await ArtworkImages.shared.image(for: key), !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.2)) { loaded = (url, fetched) }
+            // Kept here as well as in the cache: the cache can let a big cover go while it's
+            // still on screen, and nothing would ask for it again.
+            if let cached = ArtworkImages.shared.cached(key) {
+                loaded = (url, cached)
+                return
+            }
+            // Once more after a moment if it didn't come, as a dropped request otherwise leaves
+            // the cover's colour standing in for good.
+            for attempt in 0..<2 {
+                if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+                guard !Task.isCancelled else { return }
+                if let fetched = await ArtworkImages.shared.image(for: key), !Task.isCancelled {
+                    withAnimation(.easeOut(duration: 0.2)) { loaded = (url, fetched) }
+                    return
+                }
+            }
         }
     }
 

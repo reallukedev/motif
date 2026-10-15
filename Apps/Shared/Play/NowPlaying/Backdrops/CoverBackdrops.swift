@@ -105,16 +105,30 @@ struct ArtworkBackdrop: View {
 
 /// Living Cover: the cover itself, flowing. Its colours swirl and fold into one another as
 /// ink does in water, turning slowly the way Music's animated backgrounds do, for as long
-/// as the music plays, and settle when it's paused. See `livingCover` in Backdrops.metal.
+/// as the music plays, and settle when it's paused. It moves with the music too: it leans in
+/// a little on each beat and stirs harder when the song is loud. See `livingCover` in
+/// Backdrops.metal.
 struct LivingCoverBackdrop: View {
     let art: BackdropArt
     let isMoving: Bool
     @Environment(PlayerModel.self) private var player: PlayerModel?
+    @State private var levels = SmoothedLevels()
+    /// The beat and the loudness eased for a field this big: a lean, never a jolt.
+    @State private var feel = SoftPulse(bloomAttack: 0.04, bloomRelease: 0.35)
 
     var body: some View {
+        let energy = songEnergy(player?.current)
         BackdropTimeline(isMoving: isMoving, rate: FlowRate.of(player), start: art.start) { time in
+            let now = Date.now.timeIntervalSinceReferenceDate
+            let pulse = levels.next(
+                heard: AudioLevelMeter.shared.current(),
+                time: now,
+                song: SongMoment(player: player, energy: energy),
+                isPlaying: isMoving
+            )
+            let _ = feel.step(bands: pulse.bands, kick: pulse.kick, time: now)
             StretchedBackdrop(factor: 4) { size in
-                Rectangle().fill(Self.shader(size: size, time: time, cover: art.flowing))
+                Rectangle().fill(Self.shader(size: size, time: time, cover: art.flowing, level: feel.level, beat: feel.bloom))
             }
         }
         .overlay {
@@ -123,12 +137,15 @@ struct LivingCoverBackdrop: View {
                 .init(color: .black.opacity(0.3), location: 1),
             ], startPoint: .top, endPoint: .bottom)
         }
+        .listensToAudio()
     }
 
-    private static func shader(size: CGSize, time: Double, cover: CGImage) -> Shader {
+    private static func shader(size: CGSize, time: Double, cover: CGImage, level: Double, beat: Double) -> Shader {
         var shader = ShaderLibrary.livingCover(
             .float2(size),
             .float(time.truncatingRemainder(dividingBy: 20_000)),
+            .float(level),
+            .float(beat),
             .image(Image(decorative: cover, scale: 1))
         )
         shader.dithersColor = true

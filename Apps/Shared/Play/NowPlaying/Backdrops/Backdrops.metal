@@ -75,10 +75,11 @@ float2 centred(float2 position, float2 size) {
 
 // Living Cover: the cover itself, flowing. Three copies of it, softened and turning slowly
 // at their own speeds, as Music's animated backgrounds are made, drift through a field that
-// warps like ink in water, and blend into one another where it folds.
-[[ stitchable ]] half4 livingCover(float2 position, float2 size, float time, texture2d<half> cover) {
+// warps like ink in water, and blend into one another where it folds. With the music it leans
+// in on each beat, stirs harder and glows a little as the song gets loud.
+[[ stitchable ]] half4 livingCover(float2 position, float2 size, float time, float level, float beat, texture2d<half> cover) {
     constexpr sampler art(address::mirrored_repeat, filter::linear);
-    float2 p = backdrop::centred(position, size);
+    float2 p = backdrop::centred(position, size) * (1.0 - 0.045 * beat - 0.02 * level);
     float t = time;
 
     // Two warps, each through the last, drifting on their own.
@@ -86,7 +87,7 @@ float2 centred(float2 position, float2 size) {
                       backdrop::fbm(p * 1.5 + float2(5.2, 1.3) - t * 0.06));
     float2 r = float2(backdrop::fbm(p * 1.5 + 3.0 * q + float2(1.7, 9.2) + t * 0.05),
                       backdrop::fbm(p * 1.5 + 3.0 * q + float2(8.3, 2.8) - t * 0.045));
-    float2 warp = (r - 0.5) * 0.6;
+    float2 warp = (r - 0.5) * (0.5 + 0.25 * level + 0.12 * beat);
 
     float2 a = backdrop::rotation(t * 0.05) * p * 0.8 + warp;
     float2 b = backdrop::rotation(-t * 0.065 + 2.1) * (p + float2(0.14, -0.1)) * 1.2 + warp * 1.3;
@@ -104,6 +105,7 @@ float2 centred(float2 position, float2 size) {
     colour = max(float3(0.0), (colour - 0.3) * 1.15 + 0.3);
     colour *= 1.0 - 0.18 * smoothstep(0.3, 0.8, length(p));
     colour = backdrop::readable(colour, 1.6, 0.47);
+    colour *= 1.0 + 0.08 * beat + 0.04 * level;
     return half4(half3(colour), 1.0h);
 }
 

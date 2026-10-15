@@ -21,11 +21,10 @@ struct StageCustomizer: View {
                         .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                 }
                 Section {
+                    // A pop-up row, as Background's: five choices don't fit side by side.
                     Picker("Visualizer", selection: $visualizer) {
                         ForEach(StageVisualizer.allCases) { Text($0.title).tag($0) }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
                 } header: {
                     Text("Visualizer")
                 } footer: {

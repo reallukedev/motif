@@ -43,7 +43,8 @@ struct GlowVisual: View {
         }
         // A quiet song's cloud sits small and dim; a loud one's fills out and glows.
         .scaleEffect(0.9 + 0.14 * level + 0.04 * bloom)
-        .brightness(0.04 * level + 0.06 * bloom)
+        // Brighter by opacity alone: a brightness filter lifts the clear corners too, which
+        // shows as an edge over the background.
         .opacity(0.35 + 0.55 * level + 0.1 * bloom)
         .blendMode(.plusLighter)
     }
@@ -83,6 +84,15 @@ struct HaloVisual: View {
             .frame(width: proxy.size.width / Self.scale, height: proxy.size.height / Self.scale)
             .drawingGroup()
             .scaleEffect(Self.scale, anchor: .topLeading)
+        }
+        // The bloom's soft tail reaches past this square; faded out before the edge, or the
+        // square's edge shows as a line across the background.
+        .mask {
+            EllipticalGradient(
+                stops: [.init(color: .white, location: 0.55), .init(color: .clear, location: 1)],
+                startRadiusFraction: 0,
+                endRadiusFraction: 0.5
+            )
         }
         .blendMode(.plusLighter)
         .allowsHitTesting(false)
@@ -251,16 +261,16 @@ final class BarSprings {
             velocities = [Float](repeating: 0, count: targets.count)
             return positions
         }
-        // About a fifth of a second to answer, quicker for a lively song; lightly damped so a
-        // hit overshoots a touch and settles.
-        let response = Float(0.22 - 0.08 * min(1, max(0, liveliness)))
+        // About a seventh of a second to answer, quicker for a lively song; lightly damped so a
+        // hit leaps past where it's going and settles.
+        let response = Float(0.15 - 0.05 * min(1, max(0, liveliness)))
         let stiffness = pow(2 * Float.pi / response, 2)
-        let damping = 2 * 0.58 * sqrt(stiffness)
+        let damping = 2 * 0.5 * sqrt(stiffness)
         let count = Float(max(1, targets.count - 1))
         let goals = targets.indices.map { index -> Float in
             let place = Float(index) / count
             // The kick lifts the bass most, fading out by the middle.
-            let lift = kick * 0.22 * max(0, 1 - place * 2.5)
+            let lift = kick * 0.38 * max(0, 1 - place * 2.2)
             let flutter = 1 + (0.1 + 0.32 * place) * Self.flutter(bar: index, at: motion)
             return max(0, targets[index] * flutter + lift)
         }
