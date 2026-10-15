@@ -139,7 +139,8 @@ struct SpectrumGainTests {
         var quiet = SpectrumGain()
         var loudLevels: [Float] = []
         var quietLevels: [Float] = []
-        for _ in 0..<120 {
+        // Once each has played a while: the gain lets go slowly, so a verse stays a verse.
+        for _ in 0..<1800 {
             loudLevels = loud.levels(for: [-6, -18, -30], elapsed: 1 / 60)
             quietLevels = quiet.levels(for: [-20, -32, -44], elapsed: 1 / 60)
         }
@@ -149,13 +150,37 @@ struct SpectrumGainTests {
         #expect(loudLevels[0] > 0.9 && loudLevels[0] <= 1)
     }
 
-    @Test("Rises at once, falls a few decibels a second")
+    @Test("Rises at once, falls under a decibel a second")
     func riseAndFall() {
         var gain = SpectrumGain(top: -30)
         _ = gain.levels(for: [-3], elapsed: 1 / 60)
         #expect(gain.top == 0)
-        for _ in 0..<60 { _ = gain.levels(for: [-40], elapsed: 1 / 60) }
-        #expect(abs(gain.top - -4) < 0.1)
+        for _ in 0..<60 { _ = gain.levels(for: [-20], elapsed: 1 / 60) }
+        #expect(abs(gain.top - -0.3) < 0.05)
+        // Through the silence between two songs, it lets go quickly.
+        for _ in 0..<60 { _ = gain.levels(for: [-90], elapsed: 1 / 60) }
+        #expect(gain.top < -10)
+    }
+
+    @Test("A quiet verse after a loud chorus stays visibly quieter, and the chorus opens up again")
+    func sectionsStayApart() {
+        var gain = SpectrumGain()
+        var contrast = LevelContrast()
+        // How full the bars are, on average, over the second half of a stretch.
+        func fullness(_ decibels: [Float], seconds: Double) -> Float {
+            var total: Float = 0, count: Float = 0
+            for frame in 0..<Int(seconds * 60) {
+                let swing = Float(frame % 20) / 20 * 6
+                let levels = contrast.apply(gain.levels(for: decibels.map { $0 - swing }, elapsed: 1 / 60), elapsed: 1 / 60)
+                if Double(frame) > seconds * 30 { total += levels.reduce(0, +) / Float(levels.count); count += 1 }
+            }
+            return total / count
+        }
+        let chorus = fullness([-6, -12, -20, -28], seconds: 15)
+        let verse = fullness([-16, -22, -30, -38], seconds: 20)
+        let again = fullness([-6, -12, -20, -28], seconds: 4)
+        #expect(verse < 0.75 * chorus, "verse \(verse), chorus \(chorus)")
+        #expect(again > 0.9 * chorus)
     }
 
     @Test("Never turns near silence up into loud bars")

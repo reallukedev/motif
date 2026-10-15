@@ -513,7 +513,7 @@ struct MeterMotionTests {
     func contrastSpreads() {
         var contrast = LevelContrast()
         var levels: [Float] = []
-        for _ in 0..<600 { levels = contrast.apply([0.62, 0.93, 0.8, 0.7], elapsed: 1 / 60) }
+        for _ in 0..<1800 { levels = contrast.apply([0.62, 0.93, 0.8, 0.7], elapsed: 1 / 60) }
         #expect(levels[0] < 0.5)
         #expect(levels[1] > 0.9)
     }

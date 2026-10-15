@@ -162,7 +162,8 @@ public nonisolated final class SpectrumAnalyzer {
 /// still looks quiet, and silence stays still.
 ///
 /// The top follows the loudest band: up at once, so nothing pins at the top for long, and down
-/// slowly, a few decibels a second, so a quiet bar after a loud chorus reads as quiet.
+/// slowly, a fraction of a decibel a second, so a quiet verse after a loud chorus stays a quiet verse
+/// for as long as it lasts, rather than being turned up to match within a few seconds.
 public nonisolated struct SpectrumGain: Equatable, Sendable {
     /// The decibels a full bar stands for.
     public private(set) var top: Float
@@ -172,7 +173,10 @@ public nonisolated struct SpectrumGain: Equatable, Sendable {
     public var lowestTop: Float = -30
     public var highestTop: Float = 6
     /// Decibels a second the top falls when the music gets quieter.
-    public var fall: Float = 4
+    public var fall: Float = 0.3
+    /// Decibels a second it falls through a silence, the gap between two songs, so the next
+    /// one starts from its own level rather than the last one's.
+    public var silentFall: Float = 12
 
     public init(top: Float = -12) {
         self.top = top
@@ -181,7 +185,8 @@ public nonisolated struct SpectrumGain: Equatable, Sendable {
     /// Heights for `decibels`, `elapsed` seconds after the last.
     public mutating func levels(for decibels: [Float], elapsed: Double) -> [Float] {
         let loudest = (decibels.max() ?? -120) + 3
-        let falling = top - fall * Float(min(max(elapsed, 0), 0.5))
+        let isSilent = loudest < top - 30
+        let falling = top - (isSilent ? silentFall : fall) * Float(min(max(elapsed, 0), 0.5))
         top = min(highestTop, max(lowestTop, loudest, falling))
         let bottom = top - range
         return decibels.map { min(1, max(0, ($0 - bottom) / range)) }
@@ -254,6 +259,10 @@ public nonisolated enum AmbientLevels {
 public nonisolated struct LevelContrast: Equatable, Sendable {
     private var ceiling: Float = 0
     private var usual: Float = 0
+    /// How full this part of the song is, over the last second or two, and the fullest it's
+    /// been lately: a verse well under its chorus is drawn smaller as a whole.
+    private var section: Float = 0
+    private var fullest: Float = 0
     /// The most it ever stretches.
     public var maximumGain: Float = 2
 
@@ -264,16 +273,24 @@ public nonisolated struct LevelContrast: Equatable, Sendable {
         let elapsed = min(max(elapsed, 0), 0.5)
         let loudest = levels.max() ?? 0
         let average = levels.reduce(0, +) / Float(levels.count)
-        // Up at once to the loudest bar, down over several seconds, so a quiet verse after a
-        // loud chorus is still a little quieter.
-        ceiling = loudest > ceiling ? loudest : ceiling + (loudest - ceiling) * Float(1 - exp(-elapsed / 4))
-        usual += (average - usual) * Float(1 - exp(-elapsed / 2))
+        // Up at once to the loudest bar, down over a minute or so, and the usual level up in
+        // a couple of seconds but down only slowly: a quiet verse after a loud chorus keeps
+        // looking like one, and the chorus opens up again when it comes back. Through the
+        // silence between songs, both let go at once.
+        let letGo: Double = loudest < 0.08 ? 1 : 60
+        ceiling = loudest > ceiling ? loudest : ceiling + (loudest - ceiling) * Float(1 - exp(-elapsed / letGo))
+        usual += (average - usual) * Float(1 - exp(-elapsed / (average > usual ? 2 : 12)))
         let lift = 0.5 * min(usual, ceiling)
         let gain = min(maximumGain, 0.95 / max(0.05, ceiling - lift))
+        section += (average - section) * Float(1 - exp(-elapsed / 1.5))
+        fullest = section > fullest ? section : fullest + (section - fullest) * Float(1 - exp(-elapsed / letGo))
+        // Half as full as the chorus, about two thirds the size; never under half.
+        let share = fullest > 0.05 ? min(1, section / fullest) : 1
+        let scale = 0.5 + 0.5 * pow(share, 1.5)
         // Near silence, leave it be.
         let weight = min(1, max(0, (ceiling - 0.08) / 0.12))
         return levels.map { level in
-            let stretched = min(1, max(0, (level - lift) * gain))
+            let stretched = min(1, max(0, (level - lift) * gain)) * scale
             return level + (stretched - level) * weight
         }
     }
