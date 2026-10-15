@@ -496,6 +496,10 @@ struct StageView: View {
         .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in activity += 1 })
         .foregroundStyle(.white)
         .padding(24)
+        #if os(macOS)
+        // Below the window's own buttons, which come up with these, rather than crowding them.
+        .padding(.top, 20)
+        #endif
         .background {
             // Shade over the song, deeper top and bottom, so the controls sit over it rather
             // than among it.
