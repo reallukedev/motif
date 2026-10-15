@@ -11,7 +11,8 @@ import os
 /// Apple Music plays in a process of its own, so Tracks never hears the song itself. Each
 /// catalog song has a half-minute preview, though, plain sound anyone may fetch. Tracks
 /// fetches it once, listens to it for the song's tempo, its drums, its shape and how loud it
-/// is, keeps what it learned (a few hundred bytes) and lets the sound go. Nothing about you
+/// is, keeps what it learned, with a sketch of its sound band by band (about fifteen kilobytes),
+/// and lets the sound itself go. Nothing about you
 /// goes with the request.
 ///
 /// Only while something that moves with the music is showing; never under Low Data Mode or in
@@ -114,9 +115,9 @@ final class GrooveStore {
 private nonisolated enum GrooveFiles {
     /// Kept in Caches, where the system may clear them; one is soon learned again. Named for
     /// the analysis that learned them, so a better one doesn't play back the old one's mistakes.
-    static let folder = URL.cachesDirectory.appending(path: "Grooves 3", directoryHint: .isDirectory)
-    static let older = ["Grooves", "Grooves 2"].map { URL.cachesDirectory.appending(path: $0, directoryHint: .isDirectory) }
-    /// About a megabyte at most.
+    static let folder = URL.cachesDirectory.appending(path: "Grooves 4", directoryHint: .isDirectory)
+    static let older = ["Grooves", "Grooves 2", "Grooves 3"].map { URL.cachesDirectory.appending(path: $0, directoryHint: .isDirectory) }
+    /// About six megabytes at most, each keeping its preview's sound.
     static let kept = 400
 
     /// Not under Low Data Mode. On cellular, yes: a preview is half a megabyte, a tenth of the

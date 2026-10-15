@@ -70,6 +70,45 @@ struct PlayContext: Equatable {
     static let tracksRadio = PlayContext(kind: .endless, title: String(localized: "Tracks Radio"))
 }
 
+// Your other devices name what's playing with TracksCore's own words.
+extension PlayContext {
+    init?(_ nearby: NearbyContext) {
+        let kind: Kind? = switch nearby.kind {
+        case .station: .station
+        case .mix: .mix
+        case .album: .album
+        case .playlist: .playlist
+        case .artist: .artist
+        case .songs: .songs
+        case .endless: .endless
+        case nil: nil
+        }
+        guard let kind else { return nil }
+        self.init(kind: kind, title: nearby.title)
+    }
+}
+
+extension NearbyContext {
+    init(_ context: PlayContext) {
+        let kind: Kind = switch context.kind {
+        case .station: .station
+        case .mix: .mix
+        case .album: .album
+        case .playlist: .playlist
+        case .artist: .artist
+        case .songs: .songs
+        case .endless: .endless
+        }
+        self.init(kind: kind, title: context.title)
+    }
+}
+
+extension NearbySong {
+    init(_ track: PlayerTrack) {
+        self.init(title: track.title, artist: track.artistName, album: track.albumTitle, duration: track.duration)
+    }
+}
+
 /// A song from Tracks’ history, known by id and by name. The demo player plays these by name,
 /// since sample songs have no catalog ids.
 nonisolated struct HistorySong: Equatable, Sendable {

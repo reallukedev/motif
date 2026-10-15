@@ -526,3 +526,54 @@ struct MeterMotionTests {
         #expect(levels.allSatisfy { $0 < 0.08 })
     }
 }
+
+@Suite("Groove texture", .serialized)
+struct GrooveTextureTests {
+    private static func low(_ bands: [Float]) -> Float { bands.prefix(5).reduce(0, +) / 5 }
+
+    @Test("Replays a backbeat's kicks on the song's own bars, and lets them fall between")
+    func backbeat() throws {
+        let groove = GrooveAnalysis.groove(of: Drums.backbeat(bpm: 120), sampleRate: Drums.rate)
+        let texture = try #require(groove.texture)
+        #expect(texture.chunkSeconds == 2)
+        #expect(texture.bandCount == 24)
+        #expect(texture.chunkCount >= 10)
+        // Bar after bar, forward and back: the kick on one, gone by the and of one.
+        for bar in [0, 3, 17, 40] {
+            let start = Double(bar) * 2
+            let hit = Self.low(texture.levels(at: start + 0.01)), after = Self.low(texture.levels(at: start + 0.35))
+            #expect(hit > after + 0.15, "bar \(bar): \(hit) then \(after)")
+        }
+    }
+
+    @Test("A song with no beat replays two seconds at a time")
+    func noBeat() throws {
+        var random = SeededRandom("noise")
+        let noise = (0..<Int(Drums.rate * 30)).map { _ in Float(Double(random.next() % 20_000) / 40_000 - 0.25) }
+        let groove = GrooveAnalysis.groove(of: noise, sampleRate: Drums.rate)
+        let texture = try #require(groove.texture)
+        #expect(texture.chunkSeconds == GrooveTexture.freeChunk)
+        #expect(texture.isPlayable)
+    }
+
+    @Test("Silence has nothing to replay")
+    func silence() {
+        #expect(GrooveAnalysis.groove(of: [Float](repeating: 0, count: Int(Drums.rate * 30)), sampleRate: Drums.rate).texture == nil)
+    }
+
+    @Test("Chunks play forward, then back, never jumping")
+    func turnsBack() {
+        #expect((0..<9).map { GrooveTexture.chunk($0, of: 3) } == [0, 1, 2, 1, 0, 1, 2, 1, 0])
+        #expect(GrooveTexture.chunk(5, of: 1) == 0)
+    }
+
+    @Test("Any moment is safe, and kept small", arguments: [-5.0, 0, 1_000_000, .nan, .infinity])
+    func safe(position: Double) throws {
+        let groove = GrooveAnalysis.groove(of: Drums.backbeat(bpm: 97), sampleRate: Drums.rate)
+        let texture = try #require(groove.texture)
+        let levels = texture.levels(at: position)
+        #expect(levels.count == 24)
+        #expect(levels.allSatisfy { (0...1).contains($0) })
+        #expect(try JSONEncoder().encode(groove).count < 30_000)
+    }
+}

@@ -838,8 +838,9 @@ final class PlayerModel {
     }
 
     /// Starts Tracks Radio or a mood again from the song it was on, for one left paused when
-    /// Tracks last closed. False when it can't be made now: Tracks Radio turned off, say.
-    private func resumeLive(_ context: PlayContext, startingWith first: MixSong) async -> Bool {
+    /// Tracks last closed or brought from another device. False when it can't be made now:
+    /// Tracks Radio turned off, say.
+    func resumeLive(_ context: PlayContext, startingWith first: MixSong) async -> Bool {
         if context == .tracksRadio {
             guard PlayPreferences.isTracksRadioOn, let mix = await makeTracksRadio?(), !mix.isEmpty else { return false }
             await startLive(mix, from: .tracksRadio, startingWith: first)

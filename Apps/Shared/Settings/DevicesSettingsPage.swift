@@ -10,6 +10,7 @@ struct DevicesSettingsPage: View {
     @Environment(\.openURL) private var openURL
     @AppStorage(NearbyDevices.storageKey) private var isOn = true
     @AppStorage(NowPlayingHandoff.storageKey) private var offersHandoff = true
+    @AppStorage(NearbyDevices.bringsQueueKey) private var bringsQueue = true
 
     private var status: NearbyDevicesStatus {
         let playingOn: String? = {
@@ -55,6 +56,7 @@ struct DevicesSettingsPage: View {
                 if !model.nearby.away.isEmpty {
                     awaySection
                 }
+                bringsQueueSection
                 handoffSection
             }
 
@@ -162,6 +164,16 @@ struct DevicesSettingsPage: View {
         }
     }
 
+    private var bringsQueueSection: some View {
+        Section {
+            SettingsSwitch("Bring Up Next", detail: Text(bringsQueueFooter), isOn: $bringsQueue)
+        } footer: {
+            #if os(iOS)
+            Text(bringsQueueFooter)
+            #endif
+        }
+    }
+
     private var handoffSection: some View {
         Section {
             SettingsSwitch(
@@ -206,6 +218,17 @@ struct DevicesSettingsPage: View {
         case .iPhone: String(localized: "Devices stay here for 30 days after they were last nearby. This list is kept on this iPhone only.")
         case .iPad: String(localized: "Devices stay here for 30 days after they were last nearby. This list is kept on this iPad only.")
         default: String(localized: "Devices stay here for 30 days after they were last nearby. This list is kept on this Mac only.")
+        }
+    }
+
+    private var bringsQueueFooter: String {
+        switch (NearbyDevices.thisKind, bringsQueue) {
+        case (.iPhone, true): String(localized: "Music moved to this iPhone brings the album, playlist or mix it's playing from, and what's up next.")
+        case (.iPad, true): String(localized: "Music moved to this iPad brings the album, playlist or mix it's playing from, and what's up next.")
+        case (_, true): String(localized: "Music moved to this Mac brings the album, playlist or mix it's playing from, and what's up next.")
+        case (.iPhone, false): String(localized: "Music moved to this iPhone brings just the song.")
+        case (.iPad, false): String(localized: "Music moved to this iPad brings just the song.")
+        case (_, false): String(localized: "Music moved to this Mac brings just the song.")
         }
     }
 

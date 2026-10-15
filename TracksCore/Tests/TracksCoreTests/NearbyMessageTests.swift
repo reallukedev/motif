@@ -14,6 +14,11 @@ struct NearbyMessageTests {
         .pause,
         .seek(84.5),
         .takeOver(NearbyState(title: "Juno", artist: "Sabrina Carpenter", album: "Short n' Sweet", isPlaying: true, position: 42, duration: 223)),
+        .takeOver(NearbyState(
+            title: "Juno", artist: "Sabrina Carpenter", isPlaying: true, position: 42,
+            context: NearbyContext(kind: .album, title: "Short n' Sweet"),
+            upNext: [NearbySong(title: "Bed Chem", artist: "Sabrina Carpenter", album: "Short n' Sweet", duration: 171)]
+        )),
     ])
     func roundTrip(message: NearbyMessage) throws {
         let framed = try NearbyFraming.frame(message)
@@ -66,5 +71,56 @@ struct NearbyMessageTests {
         var paused = later
         paused.isPlaying = false
         #expect(!first.isSame(as: paused))
+    }
+
+    @Test("a song from a device before queues were sent still reads, with none, and carries on alone")
+    func stateWithoutQueue() throws {
+        let old = Data(#"{"takeOver":{"_0":{"title":"Juno","artist":"Sabrina Carpenter","isPlaying":true,"sentAt":0,"canSkipBack":true,"canSkipForward":true}}}"#.utf8)
+        guard case .takeOver(let state) = try NearbyFraming.message(from: old) else {
+            Issue.record("Expected a takeOver")
+            return
+        }
+        #expect(state.context == nil)
+        #expect(state.upNext == nil)
+        #expect(state.carry(bringsQueue: true) == .song)
+    }
+
+    @Test("a context of a kind this version doesn't know still reads, and is named for the device")
+    func unknownContextKind() throws {
+        let body = Data(#"{"state":{"_0":{"title":"Juno","isPlaying":true,"sentAt":0,"canSkipBack":true,"canSkipForward":true,"context":{"kindName":"podcast","title":"Later"},"upNext":[{"title":"Bed Chem","artist":"Sabrina Carpenter"}]}}}"#.utf8)
+        guard case .state(let state) = try NearbyFraming.message(from: body) else {
+            Issue.record("Expected a state")
+            return
+        }
+        #expect(state.context?.kind == nil)
+        #expect(state.carry(bringsQueue: true) == .queue(nil, [NearbySong(title: "Bed Chem", artist: "Sabrina Carpenter")]))
+    }
+
+    @Test("how a song carries on, by what it's playing from")
+    func carry() {
+        let next = (1...20).map { NearbySong(title: "Song \($0)", artist: "Artist") }
+        let album = NearbyContext(kind: .album, title: "Short n' Sweet")
+        let radio = NearbyContext(kind: .endless, title: "Tracks Radio")
+        func state(_ context: NearbyContext?, _ upNext: [NearbySong]?) -> NearbyState {
+            NearbyState(title: "Juno", artist: "Sabrina Carpenter", isPlaying: true, context: context, upNext: upNext)
+        }
+
+        // Up Next comes along, as many songs as are carried, behind what it's playing from.
+        #expect(state(album, next).carry(bringsQueue: true) == .queue(album, Array(next.prefix(NearbyState.carriedSongs))))
+        // The last song of an album still brings the album.
+        #expect(state(album, []).carry(bringsQueue: true) == .queue(album, []))
+        // Turned off, it's the song alone, whatever came with it.
+        #expect(state(album, next).carry(bringsQueue: false) == .song)
+        #expect(state(radio, nil).carry(bringsQueue: false) == .song)
+        // A live mix picks again from the song rather than bringing its picks.
+        #expect(state(radio, next).carry(bringsQueue: true) == .live(radio))
+        // A station's songs can't be queued.
+        #expect(state(NearbyContext(kind: .station, title: "Hits"), next).carry(bringsQueue: true) == .song)
+        // Songs with nothing to name them by are named for the device: the device's own label
+        // from an earlier move isn't carried back.
+        let moved = NearbyContext(kind: .songs, title: "From Luke's iPhone")
+        #expect(state(moved, Array(next.prefix(2))).carry(bringsQueue: true) == .queue(nil, Array(next.prefix(2))))
+        #expect(state(moved, []).carry(bringsQueue: true) == .song)
+        #expect(state(nil, nil).carry(bringsQueue: true) == .song)
     }
 }

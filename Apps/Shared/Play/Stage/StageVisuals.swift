@@ -223,9 +223,10 @@ struct BarsVisual: View {
         .blendMode(.plusLighter)
     }
 
-    /// About one bar every 20 points, as many as there's room for between 8 and 64.
+    /// About one bar every 20 points, between 8 and 40: past that, bars only repeat the bands
+    /// beside them.
     static func count(for width: CGFloat) -> Int {
-        min(64, max(8, Int(width / 20)))
+        min(40, max(8, Int(width / 20)))
     }
 
     /// The bands spread across `count` bars, eased between neighbours, so a wide screen gets
@@ -243,17 +244,14 @@ struct BarsVisual: View {
 }
 
 /// Each bar on a spring of its own, so a hit makes it leap and settle with a little bounce, as
-/// things move in iOS, rather than snap. A lively song springs quicker than a slow one.
-///
-/// The sound is known by band, smoother than a real spectrum, so each bar also has a life of its
-/// own: a flutter that runs with the song's tempo, small in the bass, which moves as one with the
-/// kick, and larger toward the treble, where cymbals and voices shimmer.
+/// things move in iOS, rather than snap. A busy song springs quicker than a slow one. Nothing
+/// moves a bar but the music.
 final class BarSprings {
     private var positions: [Float] = []
     private var velocities: [Float] = []
     private var lastTime: Double?
 
-    func step(toward targets: [Float], kick: Float, motion: Double, time: Double, liveliness: Double) -> [Float] {
+    func step(toward targets: [Float], kick: Float, time: Double, liveliness: Double) -> [Float] {
         let elapsed = Float(min(max(lastTime.map { time - $0 } ?? 0, 0), 0.1))
         lastTime = time
         if positions.count != targets.count {
@@ -261,8 +259,8 @@ final class BarSprings {
             velocities = [Float](repeating: 0, count: targets.count)
             return positions
         }
-        // About a seventh of a second to answer, quicker for a lively song; lightly damped so a
-        // hit leaps past where it's going and settles.
+        // About a seventh of a second to answer, quicker for a busy song; lightly damped so a
+        // hit leaps past where it's going and settles. Every move is the music's own.
         let response = Float(0.15 - 0.05 * min(1, max(0, liveliness)))
         let stiffness = pow(2 * Float.pi / response, 2)
         let damping = 2 * 0.5 * sqrt(stiffness)
@@ -270,9 +268,8 @@ final class BarSprings {
         let goals = targets.indices.map { index -> Float in
             let place = Float(index) / count
             // The kick lifts the bass most, fading out by the middle.
-            let lift = kick * 0.38 * max(0, 1 - place * 2.2)
-            let flutter = 1 + (0.1 + 0.32 * place) * Self.flutter(bar: index, at: motion)
-            return max(0, targets[index] * flutter + lift)
+            let lift = kick * 0.3 * max(0, 1 - place * 2.2)
+            return max(0, targets[index] + lift)
         }
         // In small steps, so a dropped frame doesn't throw a bar off its spring.
         let steps = max(1, Int((elapsed / (1.0 / 240)).rounded(.up)))
@@ -285,15 +282,6 @@ final class BarSprings {
             }
         }
         return positions
-    }
-
-    /// A smooth wander between -1 and 1, different for every bar, a few times a beat.
-    private static func flutter(bar: Int, at motion: Double) -> Float {
-        let seed = Double(bar) * 12.9898
-        let speed = 3.1 + (sin(seed) * 0.5 + 0.5) * 2.4
-        let a = sin(motion * speed + seed)
-        let b = sin(motion * speed * 1.73 + seed * 2.3)
-        return Float((a * 0.6 + b * 0.4))
     }
 }
 

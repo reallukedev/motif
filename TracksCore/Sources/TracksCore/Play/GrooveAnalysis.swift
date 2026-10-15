@@ -32,6 +32,7 @@ public nonisolated enum GrooveAnalysis {
             calm.shape = shape(heard.decibels, frames: heard.frames, bandCount: bandCount)
             calm.loudness = level?.loudness
             calm.loudnessRange = level?.range
+            calm.texture = texture(heard, start: 0, chunk: heard.rate * GrooveTexture.freeChunk, seconds: GrooveTexture.freeChunk)
             return calm
         }
         let period = pulse.period
@@ -43,10 +44,12 @@ public nonisolated enum GrooveAnalysis {
         } ?? 0
         let strongest = max(1e-6, lanes.map { $0.hits.max() ?? 0 }.max() ?? 0)
         lanes = lanes.map { finished($0, rotatedBy: downbeat, strongest: strongest) }
-        let bars = level.flatMap { bars(heard, level: $0, period: period, downbeat: pulse.phase + Double(downbeat / 4) * period) }
+        let first = pulse.phase + Double(downbeat / 4) * period
+        let bars = level.flatMap { bars(heard, level: $0, period: period, downbeat: first) }
+        let tempo = steadied(60 * heard.rate / period)
 
         return Groove(
-            tempo: steadied(60 * heard.rate / period),
+            tempo: tempo,
             confidence: Double(min(1, pulse.confidence * 1.6 * min(1, peaks / 1.5))),
             low: lanes[0], mid: lanes[1], high: lanes[2],
             shape: shape(heard.decibels, frames: heard.frames, bandCount: bandCount),
@@ -56,8 +59,45 @@ public nonisolated enum GrooveAnalysis {
             loudness: level?.loudness,
             loudnessRange: level?.range,
             beats: bars?.beats,
-            bars: bars?.loudness
+            bars: bars?.loudness,
+            texture: texture(heard, start: first, chunk: period * 4, seconds: 240 / tempo)
         )
+    }
+
+    /// The stretch's sound in chunks `chunk` frames long from frame `start`, each chunk lasting
+    /// `seconds` when replayed. Each frame holds the loudest moment of its thirty-second, so a
+    /// hit is never missed, on the meter's own scale: the loudest the stretch gets near full,
+    /// and 46 decibels below it nothing. The first and last seconds are left out, as a preview
+    /// fades in and out.
+    private static func texture(_ heard: Heard, start: Double, chunk: Double, seconds: Double) -> GrooveTexture? {
+        guard chunk > 0, seconds > 0 else { return nil }
+        let bandCount = heard.decibels.count / max(1, heard.frames)
+        let loudest = (0..<heard.frames).map { frame in
+            heard.decibels[frame * bandCount ..< (frame + 1) * bandCount].max() ?? -120
+        }.sorted()
+        let top = loudest[min(loudest.count - 1, Int(Double(loudest.count) * 0.99))] + 3
+        let range: Float = 46
+        let width = chunk / Double(GrooveTexture.framesPerChunk)
+        var levels = Data()
+        var place = start
+        while Int(place + chunk) < heard.frames {
+            let from = place / heard.rate + heard.delay, to = (place + chunk) / heard.rate + heard.delay
+            if from >= 1.5, to <= Double(heard.frames) / heard.rate - 1.5 {
+                for frame in 0..<GrooveTexture.framesPerChunk {
+                    let low = Int((place + Double(frame) * width).rounded(.down))
+                    let high = max(low + 1, Int((place + Double(frame + 1) * width).rounded(.up)))
+                    for band in 0..<bandCount {
+                        var peak: Float = -120
+                        for index in low..<min(high, heard.frames) { peak = max(peak, heard.decibels[index * bandCount + band]) }
+                        let level = min(1, max(0, (peak - (top - range)) / range))
+                        levels.append(UInt8((level * 255).rounded()))
+                    }
+                }
+            }
+            place += chunk
+        }
+        let texture = GrooveTexture(chunkSeconds: seconds, bandCount: bandCount, levels: levels)
+        return texture.isPlayable ? texture : nil
     }
 
     /// How loud a stretch of sound is: as a whole, in LUFS, how far it ranges, and, for any

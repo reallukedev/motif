@@ -101,6 +101,10 @@ final class NearbyDevices {
     static let storageKey = "showsNearbyDevices"
     static var isOn: Bool { UserDefaults.standard.object(forKey: storageKey) as? Bool ?? true }
 
+    /// Music moving here brings what it's playing from and Up Next with it, not just the song.
+    static let bringsQueueKey = "bringsQueueFromDevices"
+    static var bringsQueue: Bool { UserDefaults.standard.object(forKey: bringsQueueKey) as? Bool ?? true }
+
     private static let knownKey = "nearbyKnownDevices"
     /// The sample's devices are never saved over the real ones.
     @ObservationIgnored private var isSample = false

@@ -15,6 +15,11 @@ public struct NearbyState: Codable, Sendable, Equatable {
     public var sentAt: Date
     public var canSkipBack: Bool
     public var canSkipForward: Bool
+    /// What the song is playing from: an album, a playlist, a mix. Missing from devices that
+    /// came before it.
+    public var context: NearbyContext?
+    /// The songs coming up after this one, the first few of them.
+    public var upNext: [NearbySong]?
 
     public init(
         title: String? = nil,
@@ -26,7 +31,9 @@ public struct NearbyState: Codable, Sendable, Equatable {
         duration: TimeInterval? = nil,
         sentAt: Date = .now,
         canSkipBack: Bool = true,
-        canSkipForward: Bool = true
+        canSkipForward: Bool = true,
+        context: NearbyContext? = nil,
+        upNext: [NearbySong]? = nil
     ) {
         self.title = title
         self.artist = artist
@@ -38,6 +45,8 @@ public struct NearbyState: Codable, Sendable, Equatable {
         self.sentAt = sentAt
         self.canSkipBack = canSkipBack
         self.canSkipForward = canSkipForward
+        self.context = context
+        self.upNext = upNext
     }
 
     /// Whether there's a song to show at all.
@@ -66,6 +75,73 @@ public struct NearbyState: Codable, Sendable, Equatable {
             theirs.position = nil
         }
         return mine == theirs
+    }
+}
+
+/// What a song on another device is playing from, as its player names it.
+public struct NearbyContext: Codable, Sendable, Equatable {
+    /// A ``Kind``'s wire name, kept as text so a kind added later doesn't stop the rest reading.
+    public var kindName: String
+    public var title: String
+
+    public enum Kind: String, Sendable {
+        case station, mix, album, playlist, artist, songs
+        /// Tracks Radio or a mood, picked as it plays.
+        case endless
+    }
+
+    public var kind: Kind? { Kind(rawValue: kindName) }
+
+    public init(kind: Kind, title: String) {
+        self.kindName = kind.rawValue
+        self.title = title
+    }
+}
+
+/// A song in another device's Up Next, by name, for this one to find in its own music.
+public struct NearbySong: Codable, Sendable, Equatable {
+    public var title: String
+    public var artist: String
+    public var album: String?
+    public var duration: TimeInterval?
+
+    public init(title: String, artist: String, album: String? = nil, duration: TimeInterval? = nil) {
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.duration = duration
+    }
+}
+
+/// How a song from another device carries on here.
+public enum NearbyCarry: Equatable, Sendable {
+    /// The song by itself.
+    case song
+    /// The song, what it's playing from, and the songs after it. A nil context is named for
+    /// the device it came from.
+    case queue(NearbyContext?, [NearbySong])
+    /// Tracks Radio or a mood, picking again from this song.
+    case live(NearbyContext)
+}
+
+extension NearbyState {
+    /// How many songs of Up Next go along with a song: enough to carry on for an hour, few
+    /// enough that Handoff's small message holds them.
+    public static let carriedSongs = 15
+
+    /// How this song carries on on the device it moves to. With `bringsQueue` off, or from a
+    /// station, whose songs can't be queued, it's the song alone.
+    public func carry(bringsQueue: Bool) -> NearbyCarry {
+        guard bringsQueue else { return .song }
+        let songs = Array((upNext ?? []).prefix(Self.carriedSongs))
+        switch context {
+        case let context? where context.kind == .station: return .song
+        case let context? where context.kind == .endless: return .live(context)
+        case let context? where context.kind != .songs && context.kind != nil: return .queue(context, songs)
+        // Songs with nothing to name them by, or a kind from a later version, are named for
+        // the device they came from.
+        default: return songs.isEmpty ? .song : .queue(nil, songs)
+        }
     }
 }
 

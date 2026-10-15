@@ -92,7 +92,6 @@ private struct FlowBackdrop: View {
     let isPlaying: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSettled = false
-    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
     @Environment(\.isOnScreen) private var isOnScreen
     @Environment(PlayerModel.self) private var player: PlayerModel?
 
@@ -102,19 +101,19 @@ private struct FlowBackdrop: View {
             let pulse = reduceMotion ? .still(isPlaying: isPlaying) : levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying)
             let bass = pulse.bass
             let mid = Float(pulse.bands[6..<14].reduce(0, +) / 8)
-            // Slow, whatever the song: the drift is the room, the bass is the music.
-            // The drift keeps its own time, which stops while paused and goes on from there.
-            let t = Float(reduceMotion ? 0 : drift.phase(at: time).truncatingRemainder(dividingBy: 10_000))
-            let wander: Float = 0.13
+            // The drift keeps the song's pace, hurrying for a busy track and gliding for a
+            // ballad, and glides to a stop on pause; the bass and the mids push it about.
+            let t = Float(reduceMotion ? 0 : pulse.motion.truncatingRemainder(dividingBy: 10_000))
+            let wander: Float = 0.11 + 0.05 * pulse.activity
             let points: [SIMD2<Float>] = [
                 [0, 0], [0.5 + wander * sin(t * 0.21), 0], [1, 0],
                 [0, 0.5 + wander * cos(t * 0.17)],
-                [0.5 + (wander + mid * 0.08) * sin(t * 0.31), 0.5 + (wander + bass * 0.12) * cos(t * 0.27)],
+                [0.5 + (wander + mid * 0.12) * sin(t * 0.31), 0.5 + (wander + bass * 0.18) * cos(t * 0.27)],
                 [1, 0.5 + wander * sin(t * 0.19 + 1)],
                 [0, 1], [0.5 + wander * cos(t * 0.23), 1], [1, 1],
             ]
             let (deep, middle, light) = (colors[0], colors[1], colors[2])
-            let glow = light.mix(with: .white, by: Double(0.1 + bass * 0.35))
+            let glow = light.mix(with: .white, by: Double(0.08 + bass * 0.4 + pulse.kick * 0.1))
             MeshGradient(
                 width: 3,
                 height: 3,
@@ -128,14 +127,14 @@ private struct FlowBackdrop: View {
             )
             .overlay {
                 // The kick, as light from the middle.
-                RadialGradient(colors: [.white.opacity(Double(bass) * 0.22 + Double(pulse.kick) * 0.12), .clear], center: .center, startRadius: 0, endRadius: 700)
+                RadialGradient(colors: [.white.opacity(Double(bass) * 0.2 + Double(pulse.kick) * 0.2), .clear], center: .center, startRadius: 0, endRadius: 700)
                     .blendMode(.plusLighter)
             }
             .overlay {
                 LinearGradient(colors: [.black.opacity(0.1), .black.opacity(0.4)], startPoint: .top, endPoint: .bottom)
             }
         }
-        .settles(isPlaying: isPlaying, into: $isSettled, drift: $drift)
+        .settles(isPlaying: isPlaying, into: $isSettled)
     }
 }
 
@@ -150,7 +149,6 @@ private struct BloomBackdrop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var art: BackdropArt?
     @State private var isSettled = false
-    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
 
     init(cover: CoverArt?, levels: SmoothedLevels, energy: Double, isPlaying: Bool) {
         self.cover = cover
@@ -176,10 +174,10 @@ private struct BloomBackdrop: View {
                             .resizable()
                             .interpolation(.high)
                             .frame(width: side, height: side)
-                            .scaleEffect(1.1 + bass * 0.12 + kick * 0.025)
-                            .rotationEffect(.degrees(reduceMotion ? 0 : (drift.phase(at: time) * 3).truncatingRemainder(dividingBy: 360)))
+                            .scaleEffect(1.1 + bass * 0.14 + kick * 0.045)
+                            .rotationEffect(.degrees(reduceMotion ? 0 : (pulse.motion * 3).truncatingRemainder(dividingBy: 360)))
                             .saturation(1.35)
-                            .brightness(Double(bass) * 0.14 + Double(kick) * 0.05 - 0.1)
+                            .brightness(Double(bass) * 0.14 + Double(kick) * 0.08 - 0.1)
                             .transition(.opacity)
                     }
                 }
@@ -191,7 +189,7 @@ private struct BloomBackdrop: View {
             LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
         }
         .clipped()
-        .settles(isPlaying: isPlaying, into: $isSettled, drift: $drift)
+        .settles(isPlaying: isPlaying, into: $isSettled)
         .task(id: cover) {
             guard let cover else { return }
             let found = await BackdropArtStore.shared.art(for: cover)
@@ -203,18 +201,15 @@ private struct BloomBackdrop: View {
 
 extension View {
     /// Sets `isSettled` a moment after the music pauses, once what moves with it has fallen
-    /// still, so the drawing can stop; clears it as soon as the music plays. `drift`, the
-    /// slow motion's own time, glides to a stop with it and picks up from there.
-    func settles(isPlaying: Bool, into isSettled: Binding<Bool>, drift: Binding<BackdropClock>) -> some View {
+    /// still, so the drawing can stop; clears it as soon as the music plays.
+    func settles(isPlaying: Bool, into isSettled: Binding<Bool>) -> some View {
         task(id: isPlaying) {
-            let now = Date.now.timeIntervalSinceReferenceDate
-            drift.wrappedValue.setSpeed(isPlaying ? 1 : 0, at: now)
             guard !isPlaying else {
                 isSettled.wrappedValue = false
                 return
             }
-            let still = drift.wrappedValue.secondsToRest(from: now) ?? 0
-            try? await Task.sleep(for: .seconds(max(1.5, still)))
+            // The drift takes a couple of seconds to glide to a stop.
+            try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
             isSettled.wrappedValue = true
         }

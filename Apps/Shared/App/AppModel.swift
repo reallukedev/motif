@@ -240,7 +240,10 @@ final class AppModel {
             isPlaying: player.isPlaying,
             position: player.playbackTime,
             duration: track.duration,
-            canSkipBack: player.context?.isStation != true
+            canSkipBack: player.context?.isStation != true,
+            context: player.context.map { NearbyContext($0) },
+            // A live mix's picks are its own: the device it moves to picks again.
+            upNext: player.isLive ? nil : player.upNext.prefix(NearbyState.carriedSongs).map { NearbySong($0) }
         )
     }
 
@@ -328,11 +331,12 @@ final class AppModel {
         await play(state, named: device.name, pausing: device)
     }
 
-    /// Plays a song from another device, by name, pausing it there if it's nearby to ask.
+    /// Plays a song from another device, by name, pausing it there if it's nearby to ask. With
+    /// Bring Up Next on, what it was playing from and the songs after it come too.
     private func play(_ state: NearbyState, named name: String, pausing device: NearbyDevices.Device?) async -> Bool {
         guard let title = state.title, let artist = state.artist else { return false }
         if let device, controlledDeviceID == device.id { controlledDeviceID = nil }
-        let context = PlayContext.songs(String(localized: "From \(name)"))
+        let carry = state.carry(bringsQueue: NearbyDevices.bringsQueue)
         var sources = [musicSource]
         if QuickSwitch.isOn, QuickSwitch.isAvailable(yourMusic) {
             sources.append(musicSource == .appleMusic ? .yourMusic : .appleMusic)
@@ -340,7 +344,19 @@ final class AppModel {
         for source in sources {
             guard let request = await request(for: title, by: artist, album: state.album, duration: state.duration, in: source) else { continue }
             switchSource(to: source)
-            await player.start(request, from: context)
+            var following: [NearbySong] = []
+            switch carry {
+            case .live(let live):
+                let context = PlayContext(kind: .endless, title: live.title)
+                if let first = Self.mixSong(for: request), await player.resumeLive(context, startingWith: first) { break }
+                // Can't be made here: the song plays by itself, as Tracks Radio turned off would.
+                await player.start(request, from: .songs(String(localized: "From \(name)")))
+            case .queue(let context, let songs):
+                following = songs
+                await player.start(request, from: context.flatMap { PlayContext($0) } ?? .songs(String(localized: "From \(name)")))
+            case .song:
+                await player.start(request, from: .songs(String(localized: "From \(name)")))
+            }
             // Where it had got to, once it's playing here.
             if let position = state.position(at: .now), position > 3 {
                 for _ in 0..<20 where player.status != .playing {
@@ -349,9 +365,43 @@ final class AppModel {
                 player.seek(to: position)
             }
             if let device { nearby.pause(device) }
+            await queue(following, in: source)
             return true
         }
         return false
+    }
+
+    /// A song about to play, as a live mix starts from it.
+    private static func mixSong(for request: PlayRequest) -> MixSong? {
+        switch request {
+        case .local(let tracks, _): tracks.first?.mixSong()
+        case .songs(let songs, _): songs.first.map {
+            MixSong(
+                songIdentity: HistoryImport.key(title: $0.title, artistName: $0.artistName),
+                songID: $0.id.rawValue,
+                title: $0.title,
+                artistName: $0.artistName,
+                albumTitle: $0.albumTitle,
+                artworkURL: nil,
+                plays: 0,
+                lastHeard: .distantPast
+            )
+        }
+        default: nil
+        }
+    }
+
+    /// Queues songs by name behind the one playing, found one by one in the music source.
+    /// Stops if something else starts meanwhile, so they never land in a queue of its own.
+    private func queue(_ songs: [NearbySong], in source: MusicSource) async {
+        guard !songs.isEmpty, let context = player.context else { return }
+        for song in songs {
+            guard musicSource == source, player.current != nil, player.context == context else { return }
+            if let more = await request(for: song.title, by: song.artist, album: song.album, duration: song.duration, in: source),
+               musicSource == source, player.context == context {
+                player.append(more)
+            }
+        }
     }
 
     /// Switches source live and carries on with the same song from the same place, when the
@@ -370,7 +420,7 @@ final class AppModel {
         let wasPlaying = player.status == .playing
         let position = player.playbackTime
         let wasLive = player.isLive
-        let following = Array(player.upNext.prefix(Self.carriedSongs))
+        let following = player.upNext.prefix(NearbyState.carriedSongs).map { NearbySong($0) }
         guard let request = await request(for: track.title, by: track.artistName, album: track.albumTitle, duration: track.duration, in: source) else {
             switchSource(to: source)
             return false
@@ -388,19 +438,9 @@ final class AppModel {
         if !wasPlaying, player.status == .playing { player.togglePlayPause() }
         // What was coming up comes along too, found one by one behind the song already
         // playing; Tracks Radio's picks are followed by Autoplay instead.
-        if !wasLive {
-            for next in following {
-                guard musicSource == source, player.current != nil else { break }
-                if let more = await self.request(for: next.title, by: next.artistName, album: next.albumTitle, duration: next.duration, in: source) {
-                    player.append(more)
-                }
-            }
-        }
+        if !wasLive { await queue(following, in: source) }
         return true
     }
-
-    /// How many songs of Up Next follow a song carried over to the other source.
-    private static let carriedSongs = 15
 
     /// A song by name, as the music source plays it.
     private func request(for title: String, by artist: String, album: String?, duration: TimeInterval?, in source: MusicSource) async -> PlayRequest? {

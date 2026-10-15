@@ -34,8 +34,10 @@ public nonisolated struct Groove: Codable, Equatable, Sendable {
     public var beats: [Float]?
     /// How loud each of those bars was, in LU above or below ``loudness``.
     public var bars: [Float]?
+    /// The preview's own sound, to replay in time with the song (see ``GrooveTexture``).
+    public var texture: GrooveTexture?
 
-    public init(tempo: Double, confidence: Double, low: GrooveLane, mid: GrooveLane, high: GrooveLane, shape: [Float], dynamics: Double, punch: Double, brightness: Double, loudness: Double? = nil, loudnessRange: Double? = nil, beats: [Float]? = nil, bars: [Float]? = nil) {
+    public init(tempo: Double, confidence: Double, low: GrooveLane, mid: GrooveLane, high: GrooveLane, shape: [Float], dynamics: Double, punch: Double, brightness: Double, loudness: Double? = nil, loudnessRange: Double? = nil, beats: [Float]? = nil, bars: [Float]? = nil, texture: GrooveTexture? = nil) {
         self.tempo = tempo
         self.confidence = confidence
         self.low = low
@@ -49,6 +51,7 @@ public nonisolated struct Groove: Codable, Equatable, Sendable {
         self.loudnessRange = loudnessRange
         self.beats = beats
         self.bars = bars
+        self.texture = texture
     }
 
     /// How strongly the song moves a drawing as a whole, 0 to 1, by how loud it is.
@@ -219,7 +222,7 @@ public nonisolated enum GrooveLevels {
     /// From 0.4 to full over the song's first ``ends`` seconds, and back over its last, since
     /// most songs build in and fade out and the preview heard neither. Full for a song of no
     /// known length, such as a live stream, or one too short to have ends.
-    static func ease(time: Double, duration: Double?) -> Float {
+    public static func ease(time: Double, duration: Double?) -> Float {
         guard let duration, duration.isFinite, duration > ends * 3 else { return 1 }
         func rise(_ seconds: Double) -> Float {
             let x = min(1, max(0, seconds / ends))

@@ -31,8 +31,6 @@ struct StageVisualizerView: View {
     @State private var halo = SoftPulse(bloomAttack: 0.03, bloomRelease: 0.25)
     @State private var history = WaveHistory()
     @State private var springs = BarSprings()
-    /// The slow drift and turn, which glide to a stop on pause and go on from there.
-    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
     /// Set once the music has paused and the light has settled, so the drawing stops.
     @State private var isSettled = false
 
@@ -47,13 +45,13 @@ struct StageVisualizerView: View {
                     song: SongMoment(player: player, energy: energy),
                     isPlaying: isPlaying
                 )
-                let phase = reduceMotion ? 0 : drift.phase(at: time)
+                let phase = reduceMotion ? 0 : pulse.motion
                 switch style {
                 case .bars:
                     let bars = BarsVisual.resampled(pulse.bands, count: BarsVisual.count(for: proxy.size.width))
                     let heights = reduceMotion
                         ? bars
-                        : springs.step(toward: bars, kick: pulse.kick, motion: pulse.motion, time: time, liveliness: energy)
+                        : springs.step(toward: bars, kick: pulse.kick, time: time, liveliness: Double(pulse.activity))
                     BarsVisual(heights: heights, light: lights[0], kick: Double(reduceMotion ? 0 : pulse.kick))
                 case .glow:
                     let (level, bloom) = eased(glow, pulse, time: time)
@@ -77,12 +75,10 @@ struct StageVisualizerView: View {
         .accessibilityHidden(true)
         // Again on coming back on screen, so light caught mid-fall finishes settling.
         .task(id: [isPlaying, isOnScreen]) {
-            let now = Date.now.timeIntervalSinceReferenceDate
-            drift.setSpeed(isPlaying ? 1 : 0, at: now)
             isSettled = false
             guard !isPlaying else { return }
-            // The glow's light takes a few seconds to settle.
-            try? await Task.sleep(for: .seconds(max(3, drift.secondsToRest(from: now) ?? 0)))
+            // The glow's light and the drift take a few seconds to settle.
+            try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
             isSettled = true
         }
@@ -134,6 +130,8 @@ struct StagePulse {
     /// Seconds of motion so far, gathering quicker for a faster, livelier song, and stopped
     /// while paused: for what ripples and drifts, so a ballad breathes and a dance track hurries.
     var motion: Double
+    /// How busy the music is, 0 to 1: how much it's been moving over the last few seconds.
+    var activity: Float = 0
 
     /// The low bands, where the bass and the kick are.
     var bass: Float { bands.prefix(5).reduce(0, +) / 5 }
@@ -175,25 +173,33 @@ struct SongMoment {
 /// The music from one frame to the next, at the same pace whatever the frame rate.
 ///
 /// Your own music is heard, band by band, and its kick felt from the bass. A song Tracks can't
-/// hear plays back from its learned groove, in time with where the song is: a hit on every
-/// beat at its tempo, with its kick, snare and hats lighter on top, all as strong as the song
-/// is loud. Until that's learned, or
-/// when it can't be, or its beat is too unsure to show, a slow breath with no beat at all
-/// (see ``AmbientLevels``): a made-up beat against the real one looks like random flashing.
+/// hear replays its preview's own sound in time with where the song is (see
+/// ``GrooveTexture``), as if heard: every hit and fill, every held chord and quiet moment,
+/// as strong as the song is loud. A groove learned before it kept its sound plays back as
+/// hits on its beat (see ``GrooveLevels``). Until it's learned, or when it can't be, a slow
+/// breath with no beat at all (see ``AmbientLevels``): a made-up beat against the real one
+/// looks like random flashing.
+///
+/// How busy the music is, measured from how much it moves, sets the pace of everything that
+/// drifts: a crowded dance track hurries, a ballad drifts.
 final class SmoothedLevels {
     static let resting: Float = 0.04
     private var smoother = LevelSmoother(count: AudioLevelMeter.bandCount, resting: SmoothedLevels.resting)
+    private var contrast = LevelContrast()
     private var clock = PlaybackClock()
     private var askedAt: Double?
     private var onsets = OnsetFollower()
     private var kick: Float = 0
     private var motion: Double = 0
+    private var pace: Double = 0
+    private var activity: Float = 0
+    private var previous: [Float]?
     /// When they were last worked out: asked twice in one frame, by the background and the
     /// visualizer, they answer the same.
     private var lastTime: Double?
     private var last = StagePulse(bands: [Float](repeating: SmoothedLevels.resting, count: AudioLevelMeter.bandCount), kick: 0, motion: 0)
 
-    private enum Source { case resting, heard, groove, feel }
+    private enum Source { case resting, heard, texture, groove, feel }
 
     func next(heard: [Float]?, time: Double, song: SongMoment, isPlaying: Bool) -> StagePulse {
         if let lastTime, abs(time - lastTime) < 0.004 { return last }
@@ -204,6 +210,8 @@ final class SmoothedLevels {
             .resting
         } else if heard?.count == count {
             .heard
+        } else if let texture = song.groove?.texture, texture.isPlayable, texture.bandCount == count {
+            .texture
         } else if let groove = song.groove, groove.confidence >= GrooveLevels.leastConfidence {
             .groove
         } else {
@@ -218,16 +226,18 @@ final class SmoothedLevels {
         case .heard:
             target = heard ?? []
             hit = onsets.step(target.prefix(5).reduce(0, +) / 5, elapsed: elapsed)
+        case .texture:
+            let groove = song.groove ?? .calm
+            let position = position(of: song, at: time)
+            let replayed = contrast.apply(groove.texture?.levels(at: position) ?? [], elapsed: elapsed)
+            // A quiet song stays a little lower than a loud one, and its ends, which the
+            // preview didn't hear, ease in and out.
+            let strength = Float(0.55 + 0.45 * groove.intensity) * GrooveLevels.ease(time: position, duration: song.duration)
+            target = replayed.map { Self.resting + max(0, $0 - Self.resting) * strength }
+            hit = onsets.step(target.prefix(5).reduce(0, +) / 5, elapsed: elapsed)
         case .groove:
             let groove = song.groove ?? .calm
-            let position: Double
-            if let askedAt, time - askedAt < 0.25, let carried = clock.position(at: time) {
-                position = carried
-            } else {
-                askedAt = time
-                position = clock.position(reported: song.position(), at: time, isPlaying: true)
-            }
-            let hits = GrooveLevels.hits(playbackTime: position, groove: groove, duration: song.duration)
+            let hits = GrooveLevels.hits(playbackTime: position(of: song, at: time), groove: groove, duration: song.duration)
             target = GrooveLevels.levels(hits: hits, groove: groove, count: count)
             hit = hits.kick
         case .feel:
@@ -238,10 +248,12 @@ final class SmoothedLevels {
                 target = target.map { Self.resting + ($0 - Self.resting) * intensity }
             }
         }
-        // Heard, they follow the sound closely, quick up and a natural fall; from a groove,
-        // closer still, since the hits already have their own shape; breathing, they ease.
+        // Heard or replayed, they follow the sound closely, quick up and a natural fall; from
+        // a groove's hits, closer still, since the hits already have their own shape;
+        // breathing, they ease.
         (smoother.attack, smoother.release) = switch source {
         case .heard: (0.02, 0.18)
+        case .texture: (0.015, 0.14)
         case .groove: (0.012, 0.08)
         case .feel: (0.3, 0.5)
         case .resting: (0.35, 0.45)
@@ -249,11 +261,35 @@ final class SmoothedLevels {
         let bands = smoother.step(toward: target, elapsed: elapsed)
         // Up at once on a hit, then away quickly, so a pause never cuts one off.
         kick = max(hit, kick * Float(exp(-elapsed / 0.08)))
-        // A song at 120 beats a minute moves at one second a second; paused, nothing does.
-        let tempo = source == .groove ? song.groove?.tempo ?? 90 : AmbientLevels.tempo(energy: song.energy)
-        let pace = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.4 * song.energy)
+
+        // How busy: how far the bands travel a second, over the last couple of seconds. A
+        // crowded track's bands are always on the move; a ballad's glide.
+        if let previous, previous.count == bands.count, elapsed > 0 {
+            let travel = zip(bands, previous).reduce(Float(0)) { $0 + abs($1.0 - $1.1) } / Float(bands.count)
+            let busy = min(1, travel / Float(elapsed) / 1.4)
+            activity += (busy - activity) * Float(1 - exp(-elapsed / 2))
+        }
+        previous = bands
+        // A song at 120 beats a minute moves at about a second a second, quicker the busier
+        // it is; paused, it glides to a stop.
+        let tempo = switch source {
+        case .texture, .groove: song.groove?.tempo ?? 90
+        default: AmbientLevels.tempo(energy: song.energy)
+        }
+        let liveliness = source == .feel ? song.energy : Double(activity)
+        let goal = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.6 + 0.9 * liveliness)
+        pace += (goal - pace) * (1 - exp(-elapsed / 0.6))
         motion = (motion + elapsed * pace).truncatingRemainder(dividingBy: 100_000)
-        last = StagePulse(bands: bands, kick: kick, motion: motion)
+        last = StagePulse(bands: bands, kick: kick, motion: motion, activity: activity)
         return last
+    }
+
+    /// Where the song is: asked a few times a second, and carried on smoothly in between.
+    private func position(of song: SongMoment, at time: Double) -> Double {
+        if let askedAt, time - askedAt < 0.25, let carried = clock.position(at: time) {
+            return carried
+        }
+        askedAt = time
+        return clock.position(reported: song.position(), at: time, isPlaying: true)
     }
 }
