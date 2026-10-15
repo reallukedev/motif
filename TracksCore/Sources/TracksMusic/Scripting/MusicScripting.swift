@@ -154,8 +154,28 @@ public enum MusicScripting {
         }
 
         let hasTrack = value("name of current track") != nil
-        let hasDuration = value("duration of current track") != nil
-        return PlayerPresence(state: state, isRadio: hasTrack && !hasDuration)
+        let duration = PlayerPresence.seconds(value("duration of current track"))
+        return PlayerPresence(
+            state: state,
+            isRadio: hasTrack && duration == nil,
+            position: PlayerPresence.seconds(value("player position")),
+            duration: duration.flatMap { $0 > 0 ? $0 : nil }
+        )
+    }
+
+    /// Moves Music to `seconds` into the song. False if Music didn't take it.
+    @discardableResult
+    public static func seek(to seconds: Double, timeoutSeconds: Int = 2) -> Bool {
+        guard isMusicRunning, seconds.isFinite, seconds >= 0 else { return false }
+        // AppleScript reads a number with a point whatever the region's decimal mark.
+        let source = """
+        with timeout of \(timeoutSeconds) seconds
+            tell application id "com.apple.Music" to set player position to \(String(format: "%.2f", seconds))
+        end timeout
+        """
+        var error: NSDictionary?
+        _ = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        return error == nil
     }
 }
 #endif

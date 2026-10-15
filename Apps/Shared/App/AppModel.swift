@@ -348,8 +348,11 @@ final class AppModel {
             switch carry {
             case .live(let live):
                 let context = PlayContext(kind: .endless, title: live.title)
-                if let first = Self.mixSong(for: request), await player.resumeLive(context, startingWith: first) { break }
-                // Can't be made here: the song plays by itself, as Tracks Radio turned off would.
+                // Tracks Radio and moods start again here; another live mix, or one that can't be
+                // made here, leaves the song to play by itself.
+                let restarts = context == .tracksRadio || Mood.allCases.contains { $0.title == live.title }
+                if restarts, let first = Self.mixSong(for: request),
+                   await player.resumeLive(context, startingWith: first), player.current != nil { break }
                 await player.start(request, from: .songs(String(localized: "From \(name)")))
             case .queue(let context, let songs):
                 following = songs

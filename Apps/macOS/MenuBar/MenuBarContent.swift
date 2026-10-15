@@ -147,6 +147,8 @@ private struct HistoryPausedNote: View {
 private struct TracksPlayerHeader: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(CaptureSettings.showsMenuBarProgressKey, store: CaptureSettings.sharedDefaults)
+    private var showsProgress = true
     @State private var previousPresses = 0
     @State private var nextPresses = 0
 
@@ -177,6 +179,16 @@ private struct TracksPlayerHeader: View {
                     }
                 }
                 .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: track.id)
+
+                if showsProgress, let duration = track.duration, duration > 0, player.context?.isStation != true {
+                    MenuBarProgress(
+                        duration: duration,
+                        isPlaying: player.isPlaying,
+                        time: { player.playbackTime },
+                        onSeek: { player.seek(to: $0) }
+                    )
+                    .id(track.id)
+                }
 
                 GlassEffectContainer(spacing: 18) {
                     HStack(spacing: 18) {
@@ -227,6 +239,8 @@ private struct NowPlayingHeader: View {
     let latest: Capture?
     @Environment(CaptureService.self) private var capture
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(CaptureSettings.showsMenuBarProgressKey, store: CaptureSettings.sharedDefaults)
+    private var showsProgress = true
 
     var body: some View {
         VStack(spacing: 12) {
@@ -247,6 +261,19 @@ private struct NowPlayingHeader: View {
             }
             // The next song crossfades in rather than snapping.
             .animation(LiveUpdate.animation(reduceMotion: reduceMotion), value: title)
+
+            // Only for the song Music has on, playing or paused, when it says how long that
+            // is: a station has no length, and the last song kept isn't on.
+            if showsProgress, capture.nowPlaying != nil, monitor.music.state == .playing || monitor.music.state == .paused,
+               !monitor.music.isRadio, let duration = monitor.music.duration, monitor.music.position != nil {
+                MenuBarProgress(
+                    duration: duration,
+                    isPlaying: monitor.music.isPlaying,
+                    time: { monitor.position() ?? 0 },
+                    onSeek: { monitor.seek(to: $0) }
+                )
+                .id(title)
+            }
 
             TransportControls(monitor: monitor)
         }

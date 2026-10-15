@@ -79,6 +79,7 @@ struct CaptureSettingsDefaultsTests {
         #expect(settings.menuBarLabelStyle == .note)
         #expect(settings.menuBarLabelFormat == MenuBarLabelFormat.default)
         #expect(settings.animatesMenuBar)
+        #expect(settings.showsMenuBarProgress)
     }
 
     @Test("the Today widget lists what play back will play next")

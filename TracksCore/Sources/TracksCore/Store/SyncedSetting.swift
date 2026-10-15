@@ -108,6 +108,7 @@ extension SyncedSetting {
         SyncedSetting(key: CaptureSettings.menuBarLabelStyleKey),
         SyncedSetting(key: CaptureSettings.menuBarLabelFormatKey),
         SyncedSetting(key: CaptureSettings.animatesMenuBarKey),
+        SyncedSetting(key: CaptureSettings.showsMenuBarProgressKey),
     ]
 
     /// The mirrored settings by key, for looking one up when a change names it.

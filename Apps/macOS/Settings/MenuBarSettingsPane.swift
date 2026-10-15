@@ -12,6 +12,8 @@ struct MenuBarSettingsPane: View {
     private var format = MenuBarLabelFormat.default
     @AppStorage(CaptureSettings.animatesMenuBarKey, store: CaptureSettings.sharedDefaults)
     private var animates = true
+    @AppStorage(CaptureSettings.showsMenuBarProgressKey, store: CaptureSettings.sharedDefaults)
+    private var showsProgress = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -61,6 +63,13 @@ struct MenuBarSettingsPane: View {
                             ? Text("The new song fades in. Reduce Motion turns this off.")
                             : Text("The new song replaces the old one at once."),
                         isOn: $animates
+                    )
+                    SettingsSwitch(
+                        "Show Song Progress",
+                        detail: showsProgress
+                            ? Text("The menu bar window shows how far into the song you are. Click or drag it to move.")
+                            : Text("The menu bar window shows the song and its controls only."),
+                        isOn: $showsProgress
                     )
                 } header: {
                     Text("While Music Plays")

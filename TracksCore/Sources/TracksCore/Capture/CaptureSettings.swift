@@ -23,6 +23,7 @@ public struct CaptureSettings: Sendable {
     public static let menuBarLabelStyleKey = "menuBarLabelStyle"
     public static let menuBarLabelFormatKey = "menuBarLabelFormat"
     public static let animatesMenuBarKey = "animatesMenuBar"
+    public static let showsMenuBarProgressKey = "showsMenuBarProgress"
     public static let excludedStationsKey = "excludedStations"
     public static let blockedArtistsKey = "blockedArtists"
     public static let showsUpNextInWidgetKey = "showsUpNextInWidget"
@@ -161,6 +162,12 @@ public struct CaptureSettings: Sendable {
     public var animatesMenuBar: Bool {
         get { defaults.object(forKey: Self.animatesMenuBarKey) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Self.animatesMenuBarKey) }
+    }
+
+    /// Whether the menu bar window shows the song's progress, to see and drag. On by default.
+    public var showsMenuBarProgress: Bool {
+        get { defaults.object(forKey: Self.showsMenuBarProgressKey) as? Bool ?? true }
+        nonmutating set { defaults.set(newValue, forKey: Self.showsMenuBarProgressKey) }
     }
 
     /// The user's own format, used only by ``MenuBarLabelStyle/custom``.
