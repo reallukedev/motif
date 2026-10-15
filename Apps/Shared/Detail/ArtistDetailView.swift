@@ -1,11 +1,14 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 struct ArtistDetailView: View {
     let artistID: String
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: ArtistProfile?
+    /// The id whose profile was last worked out from a loaded library, so "No Plays" waits
+    /// for the answer instead of showing while the first one is still on its way.
+    @State private var loadedID: String?
     @State private var showsAllSongs = false
 
     var body: some View {
@@ -15,8 +18,12 @@ struct ArtistDetailView: View {
                     .padding()
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
-            } else if model.library.isLoaded {
+            } else if loadedID == artistID {
                 ContentUnavailableView("No Plays", systemImage: "music.microphone")
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 120)
             }
         }
         .groupedBackground()
@@ -25,12 +32,16 @@ struct ArtistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: "\(artistID)|\(model.library.revision)") {
-            let (id, history) = (artistID, model.library.history)
+            let (id, history, isLoaded) = (artistID, model.library.history, model.library.isLoaded)
             let next = await OffMainActor.run { StatsCalculator.artistProfile(id: id, history: history) }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: profile?.artist.id == artistID, reduceMotion: reduceMotion) {
-                profile = next
+            // A lookup that changed nothing on this page doesn't redraw it.
+            if next != profile {
+                LiveUpdate.apply(isLive: profile?.artist.id == artistID, reduceMotion: reduceMotion) {
+                    profile = next
+                }
             }
+            if isLoaded { loadedID = id }
         }
     }
 
@@ -111,7 +122,7 @@ struct StatStrip: View {
         if typeSize.isAccessibilitySize {
             Card(padding: 14) {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    ForEach(items.enumerated(), id: \.offset) { _, item in
                         VStack(alignment: .leading, spacing: 0) {
                             Text(item.title)
                                 .font(.caption)
@@ -131,7 +142,7 @@ struct StatStrip: View {
     private var strip: some View {
         Card(padding: 14) {
             HStack(alignment: .top, spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                ForEach(items.enumerated(), id: \.offset) { index, item in
                     if index > 0 {
                         Divider().frame(maxHeight: 36)
                     }

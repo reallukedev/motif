@@ -1,5 +1,5 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 /// A horizontal shelf of artists, like the Music app's.
 struct TopArtistsShelf: View {
@@ -36,6 +36,7 @@ struct TopArtistsShelf: View {
         }
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.viewAligned)
+        .shelfBleed()
     }
 }
 
@@ -48,7 +49,7 @@ struct TopSongsCard: View {
         let shown = Array(songs.prefix(limit))
         Card(padding: 0) {
             VStack(spacing: 0) {
-                ForEach(Array(shown.enumerated()), id: \.element.id) { index, song in
+                ForEach(shown.enumerated(), id: \.element.id) { index, song in
                     NavigationLink(value: Route.song(song.id)) {
                         SongRow(song: song, rank: index + 1, widestRank: shown.count)
                             .padding(.horizontal, Metrics.cardPadding)
@@ -199,5 +200,18 @@ struct TopAlbumsShelf: View {
         }
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.viewAligned)
+        .shelfBleed()
+    }
+}
+
+extension View {
+    /// On iPhone a shelf runs out to the screen's edges, as Music's do, rather than stopping
+    /// at the page's margin. The Mac keeps it inside the column, clear of the sidebar.
+    func shelfBleed() -> some View {
+        #if os(iOS)
+        scrollClipDisabled()
+        #else
+        self
+        #endif
     }
 }

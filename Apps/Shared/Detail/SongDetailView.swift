@@ -1,13 +1,17 @@
 import SwiftUI
-import MotifCore
+import TracksCore
 
 struct SongDetailView: View {
     let songID: String
     @Environment(AppModel.self) private var model
     @Environment(PlaybackController.self) private var playback
+    @Environment(\.playSongs) private var playSongs
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var profile: SongProfile?
+    /// The id whose profile was last worked out from a loaded library, so "No Plays" waits
+    /// for the answer instead of showing while the first one is still on its way.
+    @State private var loadedID: String?
     @State private var showsAllPlays = false
 
     var body: some View {
@@ -17,8 +21,12 @@ struct SongDetailView: View {
                     .padding()
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
-            } else if model.library.isLoaded {
+            } else if loadedID == songID {
                 ContentUnavailableView("No Plays", systemImage: "music.note")
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 120)
             }
         }
         .groupedBackground()
@@ -27,12 +35,16 @@ struct SongDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: "\(songID)|\(model.library.revision)") {
-            let (id, history) = (songID, model.library.history)
+            let (id, history, isLoaded) = (songID, model.library.history, model.library.isLoaded)
             let next = await OffMainActor.run { StatsCalculator.songProfile(id: id, history: history) }
             guard !Task.isCancelled else { return }
-            LiveUpdate.apply(isLive: profile?.song.id == songID, reduceMotion: reduceMotion) {
-                profile = next
+            // A lookup that changed nothing on this page doesn't redraw it.
+            if next != profile {
+                LiveUpdate.apply(isLive: profile?.song.id == songID, reduceMotion: reduceMotion) {
+                    profile = next
+                }
             }
+            if isLoaded { loadedID = id }
         }
     }
 
@@ -114,9 +126,10 @@ struct SongDetailView: View {
                     }
                 }
                 Card(padding: 0) {
-                    VStack(spacing: 0) {
+                    // Lazy: a favourite can have thousands of plays once they're all shown.
+                    LazyVStack(spacing: 0) {
                         let plays = showsAllPlays ? profile.plays : Array(profile.plays.prefix(8))
-                        ForEach(Array(plays.enumerated()), id: \.offset) { index, date in
+                        ForEach(plays.enumerated(), id: \.offset) { index, date in
                             HStack {
                                 Text(Format.day(date))
                                 Spacer()
@@ -147,17 +160,20 @@ struct SongDetailView: View {
         if !song.songID.isEmpty, !model.isShowingSampleData {
             HStack(spacing: 12) {
                 Button("Play", systemImage: "play.fill") {
-                    Task {
-                        await playback.play(PlaybackItem(songID: song.songID, title: song.title, artistName: song.artistName))
+                    let item = PlaybackItem(songID: song.songID, title: song.title, artistName: song.artistName)
+                    if let playSongs {
+                        playSongs([item], title: song.title)
+                    } else {
+                        Task { await playback.play(item) }
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                Button("Apple Music", systemImage: "arrow.up.forward.app") {
+                .buttonStyle(.glassProminent)
+                Button("Show in Music", systemImage: "arrow.up.forward.app") {
                     if let url = URL(string: "https://music.apple.com/song/\(song.songID)") {
                         openURL(url)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
             }
             .buttonBorderShape(.capsule)
             .controlSize(.large)
