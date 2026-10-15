@@ -17,8 +17,9 @@ import os
 /// The gain rides each song so a loud master and a quiet one fill the same height, and a gentle
 /// stretch after it spreads bars that keep to a narrow part of it (see ``LevelContrast``).
 ///
-/// Apple Music plays in a process Tracks can't hear, so for it there are no levels, and the
-/// visualizer plays back each song's groove instead (see ``GrooveStore``).
+/// Apple Music plays in a process Tracks can't tap. On the Mac, the Mac's own sound is heard
+/// instead, once it's allowed (see ``SystemAudioListener``); on iPhone, or until then, there
+/// are no levels, and the visualizer plays back each song's groove (see ``GrooveStore``).
 nonisolated final class AudioLevelMeter: @unchecked Sendable {
     static let shared = AudioLevelMeter()
     static let bandCount = 24
@@ -31,11 +32,17 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     // MARK: - Watching
 
     func startListening() {
-        _ = listeners.add(1, ordering: .relaxed)
+        let (_, now) = listeners.add(1, ordering: .relaxed)
+        #if os(macOS)
+        if now == 1 { SystemAudioListener.shared.start() }
+        #endif
     }
 
     func stopListening() {
-        _ = listeners.subtract(1, ordering: .relaxed)
+        let (_, now) = listeners.subtract(1, ordering: .relaxed)
+        #if os(macOS)
+        if now == 0 { SystemAudioListener.shared.stop() }
+        #endif
     }
 
     fileprivate var isListening: Bool { listeners.load(ordering: .relaxed) > 0 }
@@ -52,7 +59,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
 
     @MainActor private struct Song {
         weak var item: AVPlayerItem?
-        let sound: Sound
+        let sound: HeardSound
     }
 
     /// The bands, 0 to 1, low to high, for what's being heard now. Nil when nothing Tracks can
@@ -73,6 +80,13 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
             // Two songs meeting, gaplessly, add up as sound does.
             total = total.map { zip($0, decibels).map { 10 * log10(pow(10, $0 / 10) + pow(10, $1 / 10)) } } ?? decibels
         }
+        #if os(macOS)
+        // Apple Music, or anything else playing on the Mac, heard as it goes to the speakers.
+        let mac = SystemAudioListener.shared
+        if total == nil, mac.isHearing {
+            total = measure(mac.sound, at: SystemAudioListener.now())
+        }
+        #endif
         let bands = total.map { contrast.apply(gain.levels(for: $0, elapsed: elapsed), elapsed: elapsed) }
         last = (now, bands)
         return bands
@@ -130,7 +144,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     }
 
     @MainActor
-    private func measure(_ sound: Sound, at time: Double) -> [Float]? {
+    private func measure(_ sound: HeardSound, at time: Double) -> [Float]? {
         guard let rate = sound.sampleRate, let analyzer = analyzer(for: rate) else { return nil }
         let size = analyzer.size
         if window.count != size { window = [Float](repeating: 0, count: size) }
@@ -150,7 +164,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
         Task { @MainActor in
             guard let track = try? await asset.loadTracks(withMediaType: .audio).first else { return }
             if let timebase = item.timebase, CMTimebaseGetRate(timebase) != 0 { return }
-            let sound = Sound()
+            let sound = HeardSound()
             guard let tap = makeTap(for: sound) else { return }
             let parameters = AVMutableAudioMixInputParameters(track: track)
             parameters.audioTapProcessor = tap
@@ -164,7 +178,7 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
         }
     }
 
-    private static func makeTap(for sound: Sound) -> MTAudioProcessingTap? {
+    private static func makeTap(for sound: HeardSound) -> MTAudioProcessingTap? {
         var callbacks = MTAudioProcessingTapCallbacks(
             version: kMTAudioProcessingTapCallbacksVersion_0,
             clientInfo: Unmanaged.passRetained(sound).toOpaque(),
@@ -172,17 +186,17 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
                 storage.pointee = clientInfo
             },
             finalize: { tap in
-                Unmanaged<Sound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
+                Unmanaged<HeardSound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
             },
             prepare: { tap, _, format in
-                Unmanaged<Sound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue().prepare(format.pointee)
+                Unmanaged<HeardSound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue().prepare(format.pointee)
             },
             unprepare: nil,
             process: { tap, frames, _, buffers, framesOut, flagsOut in
                 var range = CMTimeRange.invalid
                 guard MTAudioProcessingTapGetSourceAudio(tap, frames, buffers, flagsOut, &range, framesOut) == noErr,
                       AudioLevelMeter.shared.isListening else { return }
-                let sound = Unmanaged<Sound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
+                let sound = Unmanaged<HeardSound>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
                 sound.hear(buffers, frames: Int(framesOut.pointee), at: range.start)
             }
         )
@@ -192,9 +206,9 @@ nonisolated final class AudioLevelMeter: @unchecked Sendable {
     }
 }
 
-/// One song's sound: the last few seconds of it, both channels mixed to one, and where in the
+/// One song's sound, or the Mac's: the last few seconds of it, both channels mixed to one, and where in the
 /// song they are. Written on the audio thread, without allocating; read when a frame's drawn.
-private nonisolated final class Sound: @unchecked Sendable {
+nonisolated final class HeardSound: @unchecked Sendable {
     private struct Ring {
         var samples: [Float] = []
         var sampleRate: Double = 0

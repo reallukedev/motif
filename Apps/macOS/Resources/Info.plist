@@ -44,6 +44,11 @@
 
     <!-- Required for Apple events to Music.app. Without it sends fail with
          errAEEventNotPermitted (-1743) and no prompt is shown. -->
+    <!-- Stage's visualizer and the backgrounds that move with the music hear what the Mac
+         plays, Apple Music included, through a private Core Audio tap. -->
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Tracks listens to the music your Mac is playing so Stage and the backgrounds that move with the music follow every beat. Nothing is recorded or kept.</string>
+
     <key>NSAppleEventsUsageDescription</key>
     <string>Tracks asks Music what is playing, and controls playback from the menu bar.</string>
 
