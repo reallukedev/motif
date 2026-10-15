@@ -32,11 +32,23 @@ public enum PlaylistOrder: Hashable, Sendable, RawRepresentable {
     public var needsEverySong: Bool { self != .playlist }
 
     /// The items in this order. Songs the order can't tell apart keep the playlist's order.
-    public func sorted<Item>(_ items: [Item], keys: (Item) -> LibrarySortKeys) -> [Item] {
+    /// `listedNewestFirst` says the playlist's own order already has the newest at the top, as
+    /// Favorite Songs does on iPhone, where it's the other way round on the Mac.
+    public func sorted<Item>(_ items: [Item], listedNewestFirst: Bool = false, keys: (Item) -> LibrarySortKeys) -> [Item] {
         switch self {
         case .playlist: items
-        case .newestFirst: items.reversed()
+        case .newestFirst: listedNewestFirst ? items : items.reversed()
         case .library(let order): LibrarySort.sorted(items, by: order, keys: keys)
         }
+    }
+
+    /// Whether songs listed in this order were added newest first: more of them follow one added
+    /// later than one added earlier. Unknown dates don't count; with none known, it's not.
+    public static func isNewestFirst(added dates: [Date?]) -> Bool {
+        let known = dates.compactMap(\.self)
+        guard known.count > 1 else { return false }
+        let steps = zip(known, known.dropFirst())
+        let back = steps.filter { $0 > $1 }.count, forward = steps.filter { $0 < $1 }.count
+        return back > forward
     }
 }

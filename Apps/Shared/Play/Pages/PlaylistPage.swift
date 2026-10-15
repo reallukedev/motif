@@ -109,7 +109,7 @@ struct PlaylistPage: View {
 
     // MARK: - Order
 
-    /// Liked songs keep the order they were liked in, so the newest likes are at the end.
+    /// Favorite Songs opens with the newest likes first.
     private static let favoriteSongsNames: Set<String> = ["Favorite Songs", "Favourite Songs"]
 
     private var isFavoriteSongs: Bool {
@@ -316,7 +316,7 @@ struct PlaylistPage: View {
     /// Every track in the order chosen, with its place in the playlist.
     private var orderedTracks: [(index: Int, track: Track)] {
         let all = tracks.enumerated().map { (index: $0.offset, track: $0.element) }
-        return order.sorted(all) { entry in
+        return order.sorted(all, listedNewestFirst: isListedNewestFirst) { entry in
             LibrarySortKeys(
                 title: entry.track.title,
                 artist: entry.track.artistName,
@@ -324,6 +324,15 @@ struct PlaylistPage: View {
                 plays: feed.facts[HistoryImport.key(title: entry.track.title, artistName: entry.track.artistName)]?.plays ?? 0
             )
         }
+    }
+
+    /// Whether the playlist already lists its newest songs first, by when they joined your
+    /// library: Favorite Songs comes newest first on iPhone and oldest first on the Mac.
+    private var isListedNewestFirst: Bool {
+        guard order == .newestFirst else { return false }
+        return PlaylistOrder.isNewestFirst(added: tracks.map { track in
+            if case .song(let song) = track { song.libraryAddedDate } else { nil }
+        })
     }
 
     /// The tracks as listed, less the explicit ones when they're off. Each keeps its place in

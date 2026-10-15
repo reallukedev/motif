@@ -121,4 +121,20 @@ struct LibraryOrderingTests {
         }
         #expect(PlaylistOrder(rawValue: "shuffled") == nil)
     }
+
+    @Test("Newest first stays newest first whichever way the playlist lists its songs")
+    func newestFirstEitherWay() {
+        let day = 86_400.0
+        let oldestFirst: [Date?] = [Date(timeIntervalSince1970: 0), nil, Date(timeIntervalSince1970: day), Date(timeIntervalSince1970: 3 * day)]
+        let newestFirst = Array(oldestFirst.reversed())
+        #expect(!PlaylistOrder.isNewestFirst(added: oldestFirst))
+        #expect(PlaylistOrder.isNewestFirst(added: newestFirst))
+        // Nothing to go on: it's taken as the playlist holds them, oldest first.
+        #expect(!PlaylistOrder.isNewestFirst(added: [nil, nil, Date(timeIntervalSince1970: 0)]))
+        // One song re-added out of turn doesn't flip a list that's otherwise newest first.
+        #expect(PlaylistOrder.isNewestFirst(added: [5, 4, 9, 3, 2, 1].map { Date(timeIntervalSince1970: $0 * day) }))
+
+        let items = ["New", "Middle", "Old"].map { Item(title: $0) }
+        #expect(titles(PlaylistOrder.newestFirst.sorted(items, listedNewestFirst: true) { $0.keys }) == ["New", "Middle", "Old"])
+    }
 }
