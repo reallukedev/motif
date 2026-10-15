@@ -6,6 +6,7 @@ struct StageCustomizer: View {
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
     @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
     @AppStorage(StageOption.background) private var background = StageBackground.living
+    @AppStorage(LivingCoverOption.movesWithMusic) private var movesWithMusic = true
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
     @AppStorage(StageOption.showsNext) private var showsNext = true
@@ -34,10 +35,17 @@ struct StageCustomizer: View {
                     Picker("Background", selection: $background) {
                         ForEach(StageBackground.allCases) { Text($0.title).tag($0) }
                     }
+                    if background == .living {
+                        Toggle("Move with the Music", isOn: $movesWithMusic)
+                    }
                 } header: {
                     Text("Background")
                 } footer: {
-                    Text(background.footer)
+                    if background == .living {
+                        Text(PlaySettingsWords.livingCoverFooter(movesWithMusic: movesWithMusic))
+                    } else {
+                        Text(background.footer)
+                    }
                 }
                 Section("Show") {
                     Toggle("Album", isOn: $showsAlbum)

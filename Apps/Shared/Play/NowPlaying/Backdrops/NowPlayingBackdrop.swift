@@ -438,16 +438,25 @@ private struct BackdropMiniature: View {
     }
 }
 
-/// Settings ▸ Play ▸ Now Playing: the background, how it changes between songs, and whether
-/// the player shows the quality you're hearing.
+/// Settings ▸ Play ▸ Now Playing: the background, whether Living Cover moves with the music,
+/// how the background changes between songs, and whether the player shows the quality you're
+/// hearing.
 struct NowPlayingBackdropSection: View {
     @AppStorage(NowPlayingBackground.storageKey) private var chosen = NowPlayingBackground.defaultValue
+    @AppStorage(LivingCoverOption.movesWithMusic) private var movesWithMusic = true
     @AppStorage(BackdropChange.storageKey) private var change = BackdropChange.crossfade
     @AppStorage(AudioQualityBadge.showsKey) private var showsQuality = true
 
     var body: some View {
         Section {
             NowPlayingBackdropPicker()
+            if chosen == .living {
+                SettingsSwitch(
+                    "Move with the Music",
+                    detail: Text(PlaySettingsWords.livingCoverDetail(movesWithMusic: movesWithMusic)),
+                    isOn: $movesWithMusic
+                )
+            }
             Picker("Between Songs", selection: $change) {
                 ForEach(BackdropChange.allCases) { option in
                     Text(option.title).tag(option)
@@ -465,9 +474,16 @@ struct NowPlayingBackdropSection: View {
             Text(chosen.footer)
                 .contentTransition(.opacity)
             #else
-            // The iPhone's switch has no detail line: its sentence follows the background's.
-            Text("\(Text(chosen.footer)) \(PlaySettingsWords.audioQualityDetail(isShown: showsQuality))")
-                .contentTransition(.opacity)
+            // The iPhone's switches have no detail line: their sentences follow the background's.
+            let quality = PlaySettingsWords.audioQualityDetail(isShown: showsQuality)
+            Group {
+                if chosen == .living {
+                    Text("\(PlaySettingsWords.livingCoverFooter(movesWithMusic: movesWithMusic)) \(quality)")
+                } else {
+                    Text("\(Text(chosen.footer)) \(quality)")
+                }
+            }
+            .contentTransition(.opacity)
             #endif
         }
     }

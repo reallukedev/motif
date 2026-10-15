@@ -11,6 +11,7 @@ struct NowPlayingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.isOnScreen) private var isOnScreen
     @State private var showsQueue = LaunchScene.opensQueue
     @State private var showsBack = LaunchScene.opensSleeve
     /// Tracks Radio's tuning, from Up Next or the song's menu. Presented from here, outside the
@@ -54,6 +55,8 @@ struct NowPlayingView: View {
         .onChange(of: player.current?.songIdentity) { showsBack = false }
         .sensoryFeedback(.selection, trigger: turns)
         .playerFeedback()
+        // Under Stage nothing here can be seen, so its background and clocks rest.
+        .environment(\.isOnScreen, isOnScreen && !StagePresenter.shared.isShowing)
         .fullScreenCover(isPresented: Bindable(StagePresenter.shared).isShowing) {
             StageView { StagePresenter.shared.isShowing = false }
                 .environment(player)

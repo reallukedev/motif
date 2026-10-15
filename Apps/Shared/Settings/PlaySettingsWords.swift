@@ -200,6 +200,21 @@ enum PlaySettingsWords {
         AudioQualityWords.showsAudioQuality(isShown)
     }
 
+    /// Move with the Music's detail on the Mac, under the switch.
+    static func livingCoverDetail(movesWithMusic: Bool) -> String {
+        movesWithMusic
+            ? String(localized: "Breathes with the bass, stirs with the snare and glints with the cymbals, at the song’s own pace.")
+            : String(localized: "Flows at a calm pace of its own, whatever’s playing.")
+    }
+
+    /// Living Cover's footer where Move with the Music has no detail line: iPhone's Settings,
+    /// and Stage's choices on both.
+    static func livingCoverFooter(movesWithMusic: Bool) -> String {
+        movesWithMusic
+            ? String(localized: "The cover comes alive and moves with the music: it breathes with the bass, stirs with the snare and glints with the cymbals, and settles when it’s paused.")
+            : String(localized: "The cover comes alive: its colours flow and swirl into one another at a calm pace of their own, and settle when it’s paused.")
+    }
+
     // MARK: - Tracks Radio
 
     /// Where Tracks Radio shows, which depends on the source and on what the layout shows.

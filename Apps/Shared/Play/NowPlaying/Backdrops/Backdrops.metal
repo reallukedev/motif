@@ -75,23 +75,38 @@ float2 centred(float2 position, float2 size) {
 
 // Living Cover: the cover itself, flowing. Three copies of it, softened and turning slowly
 // at their own speeds, as Music's animated backgrounds are made, drift through a field that
-// warps like ink in water, and blend into one another where it folds. With the music it leans
-// in on each beat, stirs harder and glows a little as the song gets loud.
-[[ stitchable ]] half4 livingCover(float2 position, float2 size, float time, float level, float beat, texture2d<half> cover) {
+// warps like ink in water, and blend into one another where it folds.
+//
+// It feels the music (see `LivingCoverFeel`). `phases` are where each copy's turn is, the
+// deep one turning with the bass, the middle with the mids and the top with the highs, and
+// where the warp's flow is, which keeps the music's tempo, surging on each kick. `feel` is the
+// bass's swell, which leans the cover in; the kick, a push out from the middle; the stir,
+// which turns the middle more than the edges, as a spoon turns ink; and the glint of the
+// cymbals in the highlights. `mood` is the music's depth, its colours richer as it gets loud;
+// how much the flow folds, more for a crowded mix; a quiet passage's slow breath; and the
+// highlights' warmth. `lift` opens the cover out as the music jumps to loud. With every phase
+// the same time and the rest zero, it flows calmly on its own.
+[[ stitchable ]] half4 livingCover(float2 position, float2 size, float4 phases, float4 feel, float4 mood, float lift, texture2d<half> cover) {
     constexpr sampler art(address::mirrored_repeat, filter::linear);
-    float2 p = backdrop::centred(position, size) * (1.0 - 0.045 * beat - 0.02 * level);
-    float t = time;
+    float swell = feel.x, thump = feel.y, twist = feel.z, glint = feel.w;
+    float depth = mood.x, churn = mood.y, breath = mood.z, warmth = mood.w;
+    float t = phases.w;
+
+    float2 p = backdrop::centred(position, size);
+    float near = exp(-dot(p, p) * 4.0);
+    p *= 1.0 - 0.12 * swell - 0.05 * breath - 0.06 * thump - 0.2 * thump * near + 0.12 * lift;
+    p = backdrop::rotation(0.8 * twist * near) * p;
 
     // Two warps, each through the last, drifting on their own.
     float2 q = float2(backdrop::fbm(p * 1.5 + float2(0.0, t * 0.07)),
                       backdrop::fbm(p * 1.5 + float2(5.2, 1.3) - t * 0.06));
     float2 r = float2(backdrop::fbm(p * 1.5 + 3.0 * q + float2(1.7, 9.2) + t * 0.05),
                       backdrop::fbm(p * 1.5 + 3.0 * q + float2(8.3, 2.8) - t * 0.045));
-    float2 warp = (r - 0.5) * (0.5 + 0.25 * level + 0.12 * beat);
+    float2 warp = (r - 0.5) * (0.5 + 0.28 * churn + 0.08 * depth) * (1.0 - 0.3 * lift);
 
-    float2 a = backdrop::rotation(t * 0.05) * p * 0.8 + warp;
-    float2 b = backdrop::rotation(-t * 0.065 + 2.1) * (p + float2(0.14, -0.1)) * 1.2 + warp * 1.3;
-    float2 c = backdrop::rotation(t * 0.035 + 4.2) * (p - float2(0.12, 0.16)) * 0.55 - warp * 0.8;
+    float2 a = backdrop::rotation(phases.x * 0.05) * p * 0.8 + warp;
+    float2 b = backdrop::rotation(-phases.y * 0.065 + 2.1) * (p + float2(0.14, -0.1)) * 1.2 + warp * 1.3;
+    float2 c = backdrop::rotation(phases.z * 0.035 + 4.2) * (p - float2(0.12, 0.16)) * 0.55 - warp * 0.8;
     float3 first = float3(cover.sample(art, 0.5 + a).rgb);
     float3 second = float3(cover.sample(art, 0.5 + b).rgb);
     float3 third = float3(cover.sample(art, 0.5 + c).rgb);
@@ -101,11 +116,21 @@ float2 centred(float2 position, float2 size) {
     float3 colour = mix(mix(first, second, blend), third, over * 0.7);
 
     // A touch more contrast, so its colours stand apart rather than meet in grey, and a
-    // little deeper toward the edges, as a room is lit from the middle.
-    colour = max(float3(0.0), (colour - 0.3) * 1.15 + 0.3);
-    colour *= 1.0 - 0.18 * smoothstep(0.3, 0.8, length(p));
-    colour = backdrop::readable(colour, 1.6, 0.47);
-    colour *= 1.0 + 0.08 * beat + 0.04 * level;
+    // little deeper toward the edges, as a room is lit from the middle. Loud, both a little
+    // more: the colours deepen as a chorus does, and richer still as the music lifts.
+    colour = max(float3(0.0), (colour - 0.3) * (1.1 + 0.1 * depth) + 0.3);
+    colour *= 1.0 - (0.14 + 0.08 * depth) * smoothstep(0.3, 0.8, length(p));
+    colour = backdrop::readable(colour, 1.45 + 0.3 * depth + 0.3 * lift, 0.47);
+
+    // Only the highlights take the song's warmth and the cymbals' glint, so the deep
+    // colours under the words stay where they are.
+    float highlight = smoothstep(0.18, 0.42, backdrop::luma(colour));
+    float3 tint = warmth > 0.0 ? float3(1.06, 1.0, 0.9) : float3(0.93, 0.99, 1.07);
+    colour *= mix(float3(1.0), tint, abs(warmth) * 0.55 * highlight);
+    float speck = backdrop::noise(p * 13.0 + float2(t * 0.5, -t * 0.4)) * backdrop::noise(p * 9.0 - float2(t * 0.3, t * 0.45));
+    colour *= 1.0 + glint * 0.4 * speck * speck * highlight;
+
+    colour *= 1.0 + 0.1 * thump + 0.04 * swell + 0.06 * lift;
     return half4(half3(colour), 1.0h);
 }
 

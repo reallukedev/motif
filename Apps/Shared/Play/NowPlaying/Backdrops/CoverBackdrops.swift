@@ -105,52 +105,117 @@ struct ArtworkBackdrop: View {
 
 /// Living Cover: the cover itself, flowing. Its colours swirl and fold into one another as
 /// ink does in water, turning slowly the way Music's animated backgrounds do, for as long
-/// as the music plays, and settle when it's paused. It moves with the music too: it leans in
-/// a little on each beat and stirs harder when the song is loud. See `livingCover` in
-/// Backdrops.metal.
+/// as the music plays, and settle when it's paused. See `livingCover` in Backdrops.metal.
+///
+/// Set to move with the music, as it is unless turned off in Settings, it feels the song as
+/// well as flowing with it (see ``LivingCoverFeel``): it leans in as the bass fills out, is
+/// pushed softly from the middle by each kick, stirs on the snare and glints with the
+/// cymbals; it deepens as the song gets loud, folds more as it gets busy, and breathes slowly
+/// through a quiet passage. Its flow keeps the music's tempo, speeding up through a chorus,
+/// surging on each kick and gliding down through a breakdown, and each of its layers turns
+/// with its own part of the sound; when the music jumps to loud it opens out for a moment.
+/// Nothing in it flashes: every part eases in and out at a pace of its own. Turned off, it
+/// flows on its own, at a calm pace, and doesn't listen.
 struct LivingCoverBackdrop: View {
     let art: BackdropArt
     let isMoving: Bool
     @Environment(PlayerModel.self) private var player: PlayerModel?
-    @State private var levels = SmoothedLevels()
-    /// The beat and the loudness eased for a field this big: a lean, never a jolt.
-    @State private var feel = SoftPulse(bloomAttack: 0.04, bloomRelease: 0.35)
+    @Environment(\.backdropLevels) private var sharedLevels
+    @Environment(\.colorSchemeContrast) private var contrast
+    @AppStorage(LivingCoverOption.movesWithMusic) private var movesWithMusic = true
+    @State private var ownLevels = SmoothedLevels()
+    @State private var feel = LivingCoverMotion()
 
     var body: some View {
         let energy = songEnergy(player?.current)
-        BackdropTimeline(isMoving: isMoving, rate: FlowRate.of(player), start: art.start) { time in
-            let now = Date.now.timeIntervalSinceReferenceDate
-            let pulse = levels.next(
-                heard: AudioLevelMeter.shared.current(),
-                time: now,
-                song: SongMoment(player: player, energy: energy),
-                isPlaying: isMoving
-            )
-            let _ = feel.step(bands: pulse.bands, kick: pulse.kick, time: now)
-            StretchedBackdrop(factor: 4) { size in
-                Rectangle().fill(Self.shader(size: size, time: time, cover: art.flowing, level: feel.level, beat: feel.bloom))
+        ZStack {
+            BackdropTimeline(isMoving: isMoving, rate: FlowRate.of(player), start: art.start) { time in
+                let frame = movesWithMusic ? felt(energy: energy) : Self.calm(at: time)
+                StretchedBackdrop(factor: 4) { size in
+                    Rectangle().fill(Self.shader(size: size, cover: art.flowing, frame: frame))
+                }
             }
+            // Its flow keeps a different time with the music and without it, so turning it on
+            // or off crosses over rather than jumping, the one leaving staying whole until it's
+            // covered so nothing dips to black.
+            .id(movesWithMusic)
+            .transition(.asymmetric(insertion: .opacity, removal: .opacity.animation(.linear(duration: 0.05).delay(0.6))))
         }
+        .animation(.easeInOut(duration: 0.6), value: movesWithMusic)
         .overlay {
             LinearGradient(stops: [
                 .init(color: .black.opacity(0), location: 0.4),
                 .init(color: .black.opacity(0.3), location: 1),
             ], startPoint: .top, endPoint: .bottom)
         }
-        .listensToAudio()
+        .listensToAudio(movesWithMusic)
     }
 
-    private static func shader(size: CGSize, time: Double, cover: CGImage, level: Double, beat: Double) -> Shader {
+    /// This moment of the music, felt: how the cover moves with it, and where its flow and
+    /// its layers' turns are, each keeping time with its part of the music.
+    private func felt(energy: Double) -> LivingCoverFeel.Frame {
+        let now = Date.now.timeIntervalSinceReferenceDate
+        let song = SongMoment(player: player, energy: energy)
+        let heard = AudioLevelMeter.shared.current()
+        let pulse = (sharedLevels ?? ownLevels).next(heard: heard, time: now, song: song, isPlaying: isMoving)
+        var character = LivingCoverFeel.Character(groove: song.groove, isHeard: heard != nil)
+        character.gentleness = Double(pulse.gentleness)
+        var frame = feel.step(pulse, isPlaying: isMoving, character: character, time: now)
+        // Specks of light make words harder to read; with Increase Contrast, none.
+        if contrast == .increased { frame.shimmer = 0 }
+        // Each song's cover starts from a place of its own, as it does without the music.
+        frame.flow += art.start
+        frame.deep += art.start
+        frame.middle += art.start
+        frame.top += art.start
+        return frame
+    }
+
+    /// Flowing on its own: every layer on the one clock, nothing else moving.
+    private static func calm(at time: Double) -> LivingCoverFeel.Frame {
+        var frame = LivingCoverFeel.Frame.rest
+        (frame.flow, frame.deep, frame.middle, frame.top) = (time, time, time, time)
+        return frame
+    }
+
+    private static func shader(size: CGSize, cover: CGImage, frame: LivingCoverFeel.Frame) -> Shader {
+        func phase(_ value: Double) -> Double { value.truncatingRemainder(dividingBy: 20_000) }
         var shader = ShaderLibrary.livingCover(
             .float2(size),
-            .float(time.truncatingRemainder(dividingBy: 20_000)),
-            .float(level),
-            .float(beat),
+            .float4(phase(frame.deep), phase(frame.middle), phase(frame.top), phase(frame.flow)),
+            .float4(frame.swell, frame.thump, frame.twist, frame.shimmer),
+            .float4(frame.body, frame.churn, frame.breath, frame.warmth),
+            .float(frame.lift),
             .image(Image(decorative: cover, scale: 1))
         )
         shader.dithersColor = true
         return shader
     }
+}
+
+/// Living Cover's feel, stepped on as each frame is drawn.
+private final class LivingCoverMotion {
+    private var feel = LivingCoverFeel()
+    private var lastTime: Double?
+
+    func step(_ pulse: StagePulse, isPlaying: Bool, character: LivingCoverFeel.Character, time: Double) -> LivingCoverFeel.Frame {
+        // Back after a while away, it picks up where the music is rather than catching up.
+        let elapsed = min(max(lastTime.map { time - $0 } ?? 0, 0), 0.25)
+        lastTime = time
+        return feel.step(bands: pulse.bands, kick: pulse.kick, activity: pulse.activity, pace: pulse.pace, isPlaying: isPlaying, character: character, elapsed: elapsed)
+    }
+}
+
+/// Living Cover's choices, as their stored keys.
+enum LivingCoverOption {
+    /// Living Cover moves with the music, wherever it's shown. On by default.
+    static let movesWithMusic = "livingCoverMovesWithMusic"
+}
+
+extension EnvironmentValues {
+    /// The music a screen already follows, for a background on it to share: Stage's, so its
+    /// visualizer and its background move to the same moment, measured once.
+    @Entry var backdropLevels: SmoothedLevels?
 }
 
 /// Reeded Glass: the cover behind a pane of ribbed glass, each reed showing a slice of it,

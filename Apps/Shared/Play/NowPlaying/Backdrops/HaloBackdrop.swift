@@ -102,12 +102,14 @@ extension View {
     /// Has ``AudioLevelMeter`` hear your own music while this is shown and on screen, and
     /// stop when it goes, or when its window or the app does. Meanwhile ``GrooveStore``
     /// learns the groove of each song that plays, so nothing is fetched while nothing shows.
-    func listensToAudio() -> some View {
-        modifier(AudioListening())
+    /// Off, as for a background set not to move with the music, it doesn't listen at all.
+    func listensToAudio(_ isOn: Bool = true) -> some View {
+        modifier(AudioListening(isOn: isOn))
     }
 }
 
 private struct AudioListening: ViewModifier {
+    let isOn: Bool
     @Environment(\.isOnScreen) private var isOnScreen
     @Environment(PlayerModel.self) private var player: PlayerModel?
     @State private var isShown = false
@@ -125,6 +127,7 @@ private struct AudioListening: ViewModifier {
                 update()
             }
             .onChange(of: isOnScreen) { update() }
+            .onChange(of: isOn) { update() }
             // By the song as well as the queue entry: a station's entry is often in the queue
             // before its song is known.
             .task(id: GrooveRequest(track: player?.current?.id, song: player?.current?.song?.id.rawValue, isListening: isListening)) {
@@ -140,7 +143,7 @@ private struct AudioListening: ViewModifier {
     }
 
     private func update() {
-        let wants = isShown && isOnScreen
+        let wants = isOn && isShown && isOnScreen
         guard wants != isListening else { return }
         isListening = wants
         if wants {

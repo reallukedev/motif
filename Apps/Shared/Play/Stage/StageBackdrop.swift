@@ -65,6 +65,7 @@ struct StageBackdrop: View {
                 BloomBackdrop(cover: cover, levels: levels, energy: energy, isPlaying: isPlaying)
             default:
                 NowPlayingBackdrop(cover: cover, tint: tint, isPlaying: isPlaying, style: style.nowPlaying, focus: focus)
+                    .environment(\.backdropLevels, levels)
             }
         }
         .animation(.easeInOut(duration: 0.6), value: style)
