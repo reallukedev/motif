@@ -105,9 +105,13 @@ struct StageView: View {
         .contentShape(.rect)
         .onTapGesture(perform: toggleControls)
         #if os(macOS)
-        // As in the TV app: moving the pointer brings the controls up.
+        // As in the TV app: moving the pointer brings the controls up, and leaving the
+        // window puts them away at once.
         .onContinuousHover { phase in
-            if case .active = phase { pointerMoved() }
+            switch phase {
+            case .active: pointerMoved()
+            case .ended: pointerLeft()
+            }
         }
         #endif
         .task(id: IdleKey(activity: activity, isShown: showsControls, customizing: customizing)) {
@@ -597,6 +601,12 @@ struct StageView: View {
         showsHint = false
         showsControls = true
         activity += 1
+    }
+
+    private func pointerLeft() {
+        guard showsControls, !customizing, !voiceOver, !LaunchScene.opensStageControls else { return }
+        showsHint = false
+        showsControls = false
     }
     #endif
 }
