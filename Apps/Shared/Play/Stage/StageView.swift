@@ -113,6 +113,8 @@ struct StageView: View {
             case .ended: pointerLeft()
             }
         }
+        // The window's buttons come and go with the controls.
+        .preference(key: StageControlsShownKey.self, value: controlsShown)
         #endif
         .task(id: IdleKey(activity: activity, isShown: showsControls, customizing: customizing)) {
             await putControlsAwayWhenIdle()
@@ -612,6 +614,15 @@ struct StageView: View {
 }
 
 #if os(macOS)
+/// Whether Stage's controls are up, for its window to show its buttons with them.
+struct StageControlsShownKey: PreferenceKey {
+    static let defaultValue = true
+
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = nextValue()
+    }
+}
+
 /// When the pointer last restarted Stage's idle wait. Not observed: a move redraws nothing.
 private final class PointerMoves {
     private var last = Date.distantPast

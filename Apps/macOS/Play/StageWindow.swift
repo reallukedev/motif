@@ -29,16 +29,41 @@ struct StageWindow: Scene {
 private struct StageWindowContent: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var window: NSWindow?
+    @State private var controlsShown = true
 
     var body: some View {
         StageView { close() }
             .frame(minWidth: 640, minHeight: 400)
             .background { WindowReader(window: $window) }
             .onChange(of: window) { _, window in
+                showButtons(controlsShown, animated: false)
                 guard let window, !window.styleMask.contains(.fullScreen) else { return }
                 window.collectionBehavior.insert(.fullScreenPrimary)
                 window.toggleFullScreen(nil)
             }
+            .onPreferenceChange(StageControlsShownKey.self) { isShown in
+                controlsShown = isShown
+                showButtons(isShown, animated: true)
+            }
+    }
+
+    /// Close, minimize and zoom come and go with Stage's controls, as the pointer arrives
+    /// and leaves, so nothing sits over the song in a window left showing it.
+    private func showButtons(_ isShown: Bool, animated: Bool) {
+        guard let window else { return }
+        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap(window.standardWindowButton)
+        if isShown { buttons.forEach { $0.isHidden = false } }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animated ? 0.3 : 0
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            buttons.forEach { $0.animator().alphaValue = isShown ? 1 : 0 }
+        } completionHandler: {
+            // Faded out, they stop taking clicks too, unless they've been brought back since.
+            MainActor.assumeIsolated {
+                guard !controlsShown else { return }
+                buttons.forEach { $0.isHidden = true }
+            }
+        }
     }
 
     /// Leaves full screen first, so the space it made goes with it.
