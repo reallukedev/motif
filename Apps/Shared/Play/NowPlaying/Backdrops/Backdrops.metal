@@ -95,7 +95,7 @@ float2 centred(float2 position, float2 size) {
     float2 p = backdrop::centred(position, size);
     float near = exp(-dot(p, p) * 4.0);
     p *= 1.0 - 0.12 * swell - 0.05 * breath - 0.06 * thump - 0.2 * thump * near + 0.12 * lift;
-    p = backdrop::rotation(0.8 * twist * near) * p;
+    p = backdrop::rotation(0.35 * twist * near) * p;
 
     // Two warps, each through the last, drifting on their own.
     float2 q = float2(backdrop::fbm(p * 1.5 + float2(0.0, t * 0.07)),
@@ -104,9 +104,9 @@ float2 centred(float2 position, float2 size) {
                       backdrop::fbm(p * 1.5 + 3.0 * q + float2(8.3, 2.8) - t * 0.045));
     float2 warp = (r - 0.5) * (0.5 + 0.28 * churn + 0.08 * depth) * (1.0 - 0.3 * lift);
 
-    float2 a = backdrop::rotation(phases.x * 0.05) * p * 0.8 + warp;
-    float2 b = backdrop::rotation(-phases.y * 0.065 + 2.1) * (p + float2(0.14, -0.1)) * 1.2 + warp * 1.3;
-    float2 c = backdrop::rotation(phases.z * 0.035 + 4.2) * (p - float2(0.12, 0.16)) * 0.55 - warp * 0.8;
+    float2 a = backdrop::rotation(phases.x * 0.02) * p * 0.8 + warp;
+    float2 b = backdrop::rotation(-phases.y * 0.025 + 2.1) * (p + float2(0.14, -0.1)) * 1.2 + warp * 1.3;
+    float2 c = backdrop::rotation(phases.z * 0.015 + 4.2) * (p - float2(0.12, 0.16)) * 0.55 - warp * 0.8;
     float3 first = float3(cover.sample(art, 0.5 + a).rgb);
     float3 second = float3(cover.sample(art, 0.5 + b).rgb);
     float3 third = float3(cover.sample(art, 0.5 + c).rgb);

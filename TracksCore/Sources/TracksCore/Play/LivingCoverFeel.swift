@@ -7,10 +7,10 @@ import Foundation
 /// - The flow keeps the music's tempo. It runs at the song's own pace, faster as the music
 ///   gets louder and busier, so a chorus visibly speeds up, a quiet verse slows to a drift and
 ///   a breakdown glides down. Each kick surges it forward and it coasts between them. Each of
-///   the cover's three layers turns on a clock of its own, driven by its part of the sound:
-///   the deep one by the bass, with the kick's surge, the middle one by the mids, the top one
-///   by the highs. A bass-heavy track rolls the deep layer, a bright one spins the top, and a
-///   ballad drifts everywhere. No clock ever runs backwards.
+///   the cover's three layers turns slowly on a clock of its own, leaning on its part of the
+///   sound: the deep one on the bass, the middle one on the mids, the top one on the highs. A
+///   bass-heavy track rolls the deep layer a little more, a bright one the top, but none ever
+///   spins: the flow carries the tempo. No clock ever runs backwards.
 /// - A lift, when the music jumps from a quieter stretch to a loud one, a drop or a chorus
 ///   arriving: for a second or two the cover opens out, loosens and grows richer, then
 ///   settles.
@@ -286,13 +286,16 @@ public nonisolated struct LivingCoverFeel: Equatable, Sendable {
         let follow = 1 - exp(-elapsed / Pace.layers)
         let layer = zip(layerLevels ?? heard, heard).map { $0 + ($1 - $0) * follow }
         layerLevels = layer
+        // The layers only lean into the music's speed, so the cover drifts rather than spins:
+        // the flow carries the tempo, the kick's surge and all.
+        let lean = isPlaying ? 0.5 + 0.5 * velocity : velocity
         func turn(_ level: Double) -> Double { 0.3 + level * 1.4 }
 
         next.speed = velocity + surge
         next.flow = Self.wrapped(frame.flow + next.speed * elapsed)
-        next.deep = Self.wrapped(frame.deep + (velocity * turn(layer[0]) + surge) * elapsed)
-        next.middle = Self.wrapped(frame.middle + velocity * turn(layer[1]) * elapsed)
-        next.top = Self.wrapped(frame.top + velocity * turn(layer[2]) * elapsed)
+        next.deep = Self.wrapped(frame.deep + lean * turn(layer[0]) * elapsed)
+        next.middle = Self.wrapped(frame.middle + lean * turn(layer[1]) * elapsed)
+        next.top = Self.wrapped(frame.top + lean * turn(layer[2]) * elapsed)
     }
 
     /// A lift: when the music, followed closely, rises well above the last few seconds, and
