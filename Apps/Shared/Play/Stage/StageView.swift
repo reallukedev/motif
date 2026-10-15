@@ -12,7 +12,7 @@ struct StageView: View {
     let onClose: () -> Void
     @Environment(PlayerModel.self) private var player
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
-    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.glow
+    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
     @AppStorage(StageOption.background) private var background = StageBackground.flow
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
@@ -193,7 +193,7 @@ struct StageView: View {
                     .frame(maxWidth: wide ? .infinity : nil, alignment: .leading)
             }
             Spacer(minLength: 0)
-            if visualizer == .waveform {
+            if visualizer.isStrip {
                 visualizerView(track).frame(height: max(size.height * 0.2, 72))
                     .padding(.bottom, 20)
             }
@@ -219,7 +219,7 @@ struct StageView: View {
             Spacer(minLength: 0)
             // No cover large enough here for the halo to light, so the waveform.
             if visualizer != .off {
-                visualizerView(track, style: visualizer == .glow ? .glow : .waveform)
+                visualizerView(track, style: visualizer == .halo ? .waveform : visualizer)
                     .frame(height: size.height * (visualizer == .glow ? 0.34 : wide ? 0.2 : 0.26))
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, 24)
@@ -275,7 +275,7 @@ struct StageView: View {
                         .backdropFocus()
                 }
                 .frame(width: side, height: side)
-            case .waveform:
+            case .bars, .waveform:
                 visualizerView(track).frame(height: size.height * 0.42)
             case .off:
                 CoverImage(cover: track.cover, size: side * 0.8)
@@ -319,8 +319,8 @@ struct StageView: View {
                 }
                 Spacer(minLength: 12)
                 if visualizer != .off {
-                    // Too small for light around the cover; the waveform reads at any size.
-                    visualizerView(track, style: .waveform)
+                    // Too small for light around the cover; bars and the waveform read at any size.
+                    visualizerView(track, style: visualizer == .bars ? .bars : .waveform)
                         .frame(width: min(220, size.width * 0.3), height: 48)
                 }
             }

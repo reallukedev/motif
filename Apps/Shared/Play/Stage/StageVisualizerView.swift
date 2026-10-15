@@ -1,9 +1,10 @@
 import SwiftUI
 import TracksCore
 
-/// The sound, drawn, one of three ways: a glow of the cover's colours that swells with the
-/// music, a halo of light blooming from behind the cover on each beat, or a waveform of the
-/// last few seconds passing by. See ``GlowVisual``, ``HaloVisual`` and ``WaveformVisual``.
+/// The sound, drawn, one of four ways: bars from low notes to high that spring with the music,
+/// a glow of the cover's colours that swells with it, a halo of light blooming from behind the
+/// cover on each beat, or a waveform of the last few seconds passing by. See ``BarsVisual``,
+/// ``GlowVisual``, ``HaloVisual`` and ``WaveformVisual``.
 ///
 /// It hears your own music. Apple Music plays where Tracks can't hear it, so for it the drawing
 /// follows each song's beat, feel and loudness, learned from its preview (see
@@ -29,13 +30,14 @@ struct StageVisualizerView: View {
     @State private var glow = SoftPulse(bloomAttack: 0.12, bloomRelease: 0.7)
     @State private var halo = SoftPulse(bloomAttack: 0.03, bloomRelease: 0.25)
     @State private var history = WaveHistory()
+    @State private var springs = BarSprings()
     /// The slow drift and turn, which glide to a stop on pause and go on from there.
     @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
     /// Set once the music has paused and the light has settled, so the drawing stops.
     @State private var isSettled = false
 
     var body: some View {
-        let lights = Self.lights(palette, whiteness: style == .glow ? 0.06 : 0.18)
+        let lights = Self.lights(palette, whiteness: style == .glow ? 0.06 : style == .bars ? 0.35 : 0.18)
         GeometryReader { proxy in
             TimelineView(.animation(minimumInterval: interval, paused: style == .off || reduceMotion || isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
@@ -47,6 +49,12 @@ struct StageVisualizerView: View {
                 )
                 let phase = reduceMotion ? 0 : drift.phase(at: time)
                 switch style {
+                case .bars:
+                    let bars = BarsVisual.resampled(pulse.bands, count: BarsVisual.count(for: proxy.size.width))
+                    let heights = reduceMotion
+                        ? bars
+                        : springs.step(toward: bars, kick: pulse.kick, motion: pulse.motion, time: time, liveliness: energy)
+                    BarsVisual(heights: heights, light: lights[0], kick: Double(reduceMotion ? 0 : pulse.kick))
                 case .glow:
                     let (level, bloom) = eased(glow, pulse, time: time)
                     GlowVisual(colors: lights, level: level, bloom: bloom, phase: phase)
@@ -89,7 +97,7 @@ struct StageVisualizerView: View {
         #if os(macOS)
         return 1 / 30
         #else
-        return style == .waveform ? 1 / 60 : 1 / 30
+        return style.isStrip ? 1 / 60 : 1 / 30
         #endif
     }
 

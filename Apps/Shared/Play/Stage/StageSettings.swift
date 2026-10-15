@@ -35,6 +35,8 @@ enum StageLayout: String, CaseIterable, Identifiable {
 
 /// How the visualizer draws the sound.
 enum StageVisualizer: String, CaseIterable, Identifiable {
+    /// The music from low notes to high, each band a bar that springs with it.
+    case bars
     /// The cover's colours as a soft cloud that swells with the music.
     case glow
     /// Light blooming from behind the cover on each beat.
@@ -50,9 +52,10 @@ enum StageVisualizer: String, CaseIterable, Identifiable {
     /// carries on.
     init?(rawValue: String) {
         switch rawValue {
+        case "bars": self = .bars
         case "glow": self = .glow
         case "halo", "orb": self = .halo
-        case "waveform", "bars", "wave": self = .waveform
+        case "waveform", "wave": self = .waveform
         case "off": self = .off
         default: return nil
         }
@@ -60,6 +63,7 @@ enum StageVisualizer: String, CaseIterable, Identifiable {
 
     var title: LocalizedStringKey {
         switch self {
+        case .bars: "Bars"
         case .glow: "Glow"
         case .halo: "Halo"
         case .waveform: "Waveform"
@@ -69,6 +73,7 @@ enum StageVisualizer: String, CaseIterable, Identifiable {
 
     var footer: LocalizedStringKey {
         switch self {
+        case .bars: "The music from low notes to high, each bar springing with its part of the sound."
         case .glow: "The cover's colours drift behind it and swell with the music."
         case .halo: "Light blooms from behind the cover on every beat, most on the first of each bar."
         case .waveform: "The last few seconds of the music pass by, as Voice Memos draws a recording."
@@ -78,6 +83,9 @@ enum StageVisualizer: String, CaseIterable, Identifiable {
 
     /// Whether it's drawn around the cover, and so needs one large enough to surround.
     var surroundsCover: Bool { self == .glow || self == .halo }
+
+    /// Whether it's a strip of its own, under the cover or the song, rather than light.
+    var isStrip: Bool { self == .bars || self == .waveform }
 }
 
 /// Which way up Stage is on iPhone. Landscape by default: Stage is for a screen propped on

@@ -173,6 +173,120 @@ struct WaveformVisual: View {
     }
 }
 
+/// The music from low notes to high, as Music's playing indicator draws it: a row of capsules
+/// rising from one line, each the sound at its pitch. Kicks land in the bass on the left, the
+/// snare in the middle, cymbals shimmer at the right, and the whole row stands as tall as the
+/// song is loud. At rest it's a row of dots.
+struct BarsVisual: View {
+    /// Each bar's height, 0 to 1, low notes to high, one per bar, already sprung.
+    let heights: [Float]
+    /// The cover's light, which the bars rise out of.
+    let light: Color
+    /// The beat as it lands, 0 to 1: the bars brighten a little with it.
+    let kick: Double
+
+    var body: some View {
+        Canvas { context, size in
+            let levels = heights
+            guard !levels.isEmpty else { return }
+            let pitch = size.width / CGFloat(levels.count)
+            let width = pitch * 0.56
+            var bars = Path()
+            for (index, level) in levels.enumerated() {
+                let x = CGFloat(index) * pitch + (pitch - width) / 2
+                // Curved so the loud parts stand clear of the rest and the row has a shape,
+                // rather than sitting at one height.
+                let shaped = pow(min(1, CGFloat(max(0, level)) * 1.2), 1.35)
+                let height = width + shaped * (size.height - width)
+                bars.addRoundedRect(
+                    in: CGRect(x: x, y: size.height - height, width: width, height: height),
+                    cornerSize: CGSize(width: width / 2, height: width / 2),
+                    style: .continuous
+                )
+            }
+            context.fill(bars, with: .linearGradient(
+                Gradient(colors: [light.opacity(0.75 + 0.15 * kick), .white.opacity(0.92)]),
+                startPoint: CGPoint(x: 0, y: size.height),
+                endPoint: CGPoint(x: 0, y: size.height * 0.15)
+            ))
+        }
+        .blendMode(.plusLighter)
+    }
+
+    /// About one bar every 20 points, as many as there's room for between 8 and 64.
+    static func count(for width: CGFloat) -> Int {
+        min(64, max(8, Int(width / 20)))
+    }
+
+    /// The bands spread across `count` bars, eased between neighbours, so a wide screen gets
+    /// a fuller row that still follows the sound's shape.
+    static func resampled(_ heights: [Float], count: Int) -> [Float] {
+        guard heights.count > 1, count > 1 else { return heights }
+        return (0..<count).map { bar in
+            let position = Float(bar) / Float(count - 1) * Float(heights.count - 1)
+            let index = min(heights.count - 2, Int(position))
+            let fraction = position - Float(index)
+            let eased = fraction * fraction * (3 - 2 * fraction)
+            return heights[index] + (heights[index + 1] - heights[index]) * eased
+        }
+    }
+}
+
+/// Each bar on a spring of its own, so a hit makes it leap and settle with a little bounce, as
+/// things move in iOS, rather than snap. A lively song springs quicker than a slow one.
+///
+/// The sound is known by band, smoother than a real spectrum, so each bar also has a life of its
+/// own: a flutter that runs with the song's tempo, small in the bass, which moves as one with the
+/// kick, and larger toward the treble, where cymbals and voices shimmer.
+final class BarSprings {
+    private var positions: [Float] = []
+    private var velocities: [Float] = []
+    private var lastTime: Double?
+
+    func step(toward targets: [Float], kick: Float, motion: Double, time: Double, liveliness: Double) -> [Float] {
+        let elapsed = Float(min(max(lastTime.map { time - $0 } ?? 0, 0), 0.1))
+        lastTime = time
+        if positions.count != targets.count {
+            positions = targets
+            velocities = [Float](repeating: 0, count: targets.count)
+            return positions
+        }
+        // About a fifth of a second to answer, quicker for a lively song; lightly damped so a
+        // hit overshoots a touch and settles.
+        let response = Float(0.22 - 0.08 * min(1, max(0, liveliness)))
+        let stiffness = pow(2 * Float.pi / response, 2)
+        let damping = 2 * 0.58 * sqrt(stiffness)
+        let count = Float(max(1, targets.count - 1))
+        let goals = targets.indices.map { index -> Float in
+            let place = Float(index) / count
+            // The kick lifts the bass most, fading out by the middle.
+            let lift = kick * 0.22 * max(0, 1 - place * 2.5)
+            let flutter = 1 + (0.1 + 0.32 * place) * Self.flutter(bar: index, at: motion)
+            return max(0, targets[index] * flutter + lift)
+        }
+        // In small steps, so a dropped frame doesn't throw a bar off its spring.
+        let steps = max(1, Int((elapsed / (1.0 / 240)).rounded(.up)))
+        let dt = elapsed / Float(steps)
+        for _ in 0..<steps {
+            for index in positions.indices {
+                let force = stiffness * (goals[index] - positions[index]) - damping * velocities[index]
+                velocities[index] += force * dt
+                positions[index] = max(0, positions[index] + velocities[index] * dt)
+            }
+        }
+        return positions
+    }
+
+    /// A smooth wander between -1 and 1, different for every bar, a few times a beat.
+    private static func flutter(bar: Int, at motion: Double) -> Float {
+        let seed = Double(bar) * 12.9898
+        let speed = 3.1 + (sin(seed) * 0.5 + 0.5) * 2.4
+        let a = sin(motion * speed + seed)
+        let b = sin(motion * speed * 1.73 + seed * 2.3)
+        return Float((a * 0.6 + b * 0.4))
+    }
+}
+
 extension Color {
     /// This colour as light: as bright as its hue allows, softened toward white. A grey or a
     /// black becomes white light.

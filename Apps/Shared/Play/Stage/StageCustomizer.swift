@@ -4,7 +4,7 @@ import SwiftUI
 /// shown. On iPhone it's a half-height sheet, so Stage changes above it as you choose.
 struct StageCustomizer: View {
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
-    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.glow
+    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
     @AppStorage(StageOption.background) private var background = StageBackground.flow
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
