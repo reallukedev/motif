@@ -154,6 +154,7 @@ extension View {
 private struct HeroTitle: ViewModifier {
     let title: String
     @State private var isShown = false
+    @State private var isUnderBar = false
 
     func body(content: Content) -> some View {
         #if os(iOS)
@@ -173,7 +174,22 @@ private struct HeroTitle: ViewModifier {
                 }
             }
         #else
+        // The name in the bar once the big one has gone under it. Empty rather than removed
+        // before then: a Mac window without a title drops the bar's material.
         content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > Self.threshold
+            } action: { _, shown in
+                isShown = shown
+            }
+            .navigationTitle(isShown ? title : "")
+            // The field meets the top edge clean until the page scrolls under the bar.
+            .toolbarBackgroundVisibility(isUnderBar ? .automatic : .hidden, for: .windowToolbar)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 8
+            } action: { _, under in
+                isUnderBar = under
+            }
         #endif
     }
 
@@ -354,12 +370,7 @@ struct MoodView: View {
         #if DEBUG
         .launchScroll()
         #endif
-        #if os(macOS)
-        .navigationTitle(mood.title)
-        // The mood's field runs on under the toolbar, which says nothing the field doesn't.
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        #else
+        #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
         #endif
         .task { await load() }

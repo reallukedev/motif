@@ -72,7 +72,8 @@ struct PlayScreen: View {
             }
         }
         #if os(macOS)
-        .navigationTitle("Listen Now")
+        // No title over the page, and its glow meets the top edge until it scrolls under the bar.
+        .headerUnderBar()
         #else
         .navigationTitle("Play")
         #endif

@@ -1,13 +1,16 @@
 import SwiftUI
 import TracksCore
 
-/// The sound, drawn: bars that rise with each band of it, low notes to high, under caps that
-/// hang and drop as a hardware meter's; a wave of light shaped by them; or an orb of rays
-/// around the cover. Each kick lands as a bloom on the orb and a flash along the wave.
+/// The sound, drawn, one of three ways: a glow of the cover's colours that swells with the
+/// music, a halo of light blooming from behind the cover on each beat, or a waveform of the
+/// last few seconds passing by. See ``GlowVisual``, ``HaloVisual`` and ``WaveformVisual``.
 ///
 /// It hears your own music. Apple Music plays where Tracks can't hear it, so for it the drawing
-/// follows each song's beat and feel, learned from its preview (see ``GrooveStore``): its
-/// tempo, where its drums fall, how hard it hits. A ballad breathes; a dance track punches.
+/// follows each song's beat, feel and loudness, learned from its preview (see
+/// ``GrooveStore``): a quiet ballad moves gently, a loud dance track hits hard.
+///
+/// Paused, it settles and stops drawing, and off screen it doesn't draw at all. Under Reduce
+/// Motion it's still.
 struct StageVisualizerView: View {
     let style: StageVisualizer
     /// The cover's colours, deep to light.
@@ -17,205 +20,99 @@ struct StageVisualizerView: View {
     let isPlaying: Bool
     /// Shared with Stage's background, so both move to the same moment of sound.
     let levels: SmoothedLevels
-    /// Behind a square cover, the orb is light alone: rays around a square read as a clock face.
-    var isBehindCover = false
+    /// The side of the cover centred in this view, for the glow and the halo around it.
+    var cover: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isOnScreen) private var isOnScreen
     @Environment(PlayerModel.self) private var player: PlayerModel?
-    @State private var caps = BarCaps()
-    /// Set a moment after the music pauses, once the bars have fallen, so the drawing stops.
+    /// The glow swells slowly and never flashes; the halo breathes on each beat.
+    @State private var glow = SoftPulse(bloomAttack: 0.12, bloomRelease: 0.7)
+    @State private var halo = SoftPulse(bloomAttack: 0.03, bloomRelease: 0.25)
+    @State private var history = WaveHistory()
+    /// The slow drift and turn, which glide to a stop on pause and go on from there.
+    @State private var drift = BackdropClock(speed: 0, at: Date.now.timeIntervalSinceReferenceDate)
+    /// Set once the music has paused and the light has settled, so the drawing stops.
     @State private var isSettled = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: Self.interval(reduceMotion: reduceMotion), paused: style == .off || isSettled || !isOnScreen)) { context in
-            Canvas { canvas, size in
+        let lights = Self.lights(palette, whiteness: style == .glow ? 0.06 : 0.18)
+        GeometryReader { proxy in
+            TimelineView(.animation(minimumInterval: interval, paused: style == .off || reduceMotion || isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
-                let pulse = levels.next(
+                let pulse = reduceMotion ? .still(isPlaying: isPlaying) : levels.next(
                     heard: AudioLevelMeter.shared.current(),
                     time: time,
                     song: SongMoment(player: player, energy: energy),
-                    isPlaying: isPlaying,
-                    // Reduce Motion: it still says it's playing, gently.
-                    calm: reduceMotion
+                    isPlaying: isPlaying
                 )
+                let phase = reduceMotion ? 0 : drift.phase(at: time)
                 switch style {
-                case .bars: drawBars(pulse, time: time, in: &canvas, size: size)
-                case .wave: drawWave(pulse, in: &canvas, size: size)
-                case .orb: drawOrb(pulse, in: &canvas, size: size)
-                case .off: break
+                case .glow:
+                    let (level, bloom) = eased(glow, pulse, time: time)
+                    GlowVisual(colors: lights, level: level, bloom: bloom, phase: phase)
+                case .halo:
+                    let (level, bloom) = eased(halo, pulse, time: time)
+                    HaloVisual(colors: lights, level: level, bloom: bloom, phase: phase, cover: cover, radius: CoverImage.radius(for: cover))
+                case .waveform:
+                    let capacity = WaveformVisual.capacity(for: proxy.size.width)
+                    if reduceMotion {
+                        WaveformVisual(samples: Self.stillWave(capacity: capacity, isPlaying: isPlaying), shift: 0)
+                    } else {
+                        let drawn = history.step(WaveHistory.loudness(bands: pulse.bands, kick: pulse.kick), time: time, isPlaying: isPlaying, capacity: capacity)
+                        WaveformVisual(samples: drawn.samples, shift: drawn.shift)
+                    }
+                case .off:
+                    Color.clear
                 }
             }
         }
         .accessibilityHidden(true)
-        // Again on coming back on screen, so bars caught mid-fall finish falling.
+        // Again on coming back on screen, so light caught mid-fall finishes settling.
         .task(id: [isPlaying, isOnScreen]) {
+            let now = Date.now.timeIntervalSinceReferenceDate
+            drift.setSpeed(isPlaying ? 1 : 0, at: now)
             isSettled = false
             guard !isPlaying else { return }
-            // The bars fall to rest in about a second.
-            try? await Task.sleep(for: .seconds(1.5))
+            // The glow's light takes a few seconds to settle.
+            try? await Task.sleep(for: .seconds(max(3, drift.secondsToRest(from: now) ?? 0)))
             guard !Task.isCancelled else { return }
             isSettled = true
         }
     }
 
-    /// Every frame on iPhone, where a drum should land the moment it's heard. On the Mac each
-    /// frame lays out the window too, so it draws every other one there, as the backgrounds
-    /// do (see ``BackdropFrameRate``); the levels move by time, so the motion is the same.
-    private static func interval(reduceMotion: Bool) -> Double {
+    /// The waveform scrolls, so every frame on iPhone, where a drum should land the moment
+    /// it's heard. On the Mac each frame lays out the window too, so it draws every other one
+    /// there, as the backgrounds do (see ``BackdropFrameRate``). The glow and the halo are
+    /// soft light, which looks the same at thirty.
+    private var interval: Double {
+        if LowPowerMode.shared.isOn { return 1 / 20 }
         #if os(macOS)
-        return reduceMotion || LowPowerMode.shared.isOn ? 1 / 20 : 1 / 30
+        return 1 / 30
         #else
-        return reduceMotion || LowPowerMode.shared.isOn ? 1 / 30 : 1 / 60
+        return style == .waveform ? 1 / 60 : 1 / 30
         #endif
     }
 
-    /// The cover's colours, deep to light, at least three.
-    private var colors: [Color] {
-        var found = palette.isEmpty ? [Color(white: 0.55), Color(white: 0.75), .white] : palette
-        while found.count < 3 { found.append((found.last ?? .white).mix(with: .white, by: 0.35)) }
-        return found
+    private func eased(_ soft: SoftPulse, _ pulse: StagePulse, time: Double) -> (level: Double, bloom: Double) {
+        if reduceMotion { return (isPlaying ? 0.5 : 0.2, 0) }
+        soft.step(bands: pulse.bands, kick: pulse.kick, time: time)
+        return (soft.level, soft.bloom)
     }
 
-    /// The cover's lightest colour lifted toward white: light, whatever the cover, so it reads
-    /// on any background.
-    private var light: Color { (colors.last ?? .white).mix(with: .white, by: 0.5) }
-
-    // MARK: - Bars
-
-    private func drawBars(_ pulse: StagePulse, time: Double, in context: inout GraphicsContext, size: CGSize) {
-        let bands = pulse.bands
-        // Fewer, wider bars where there's little room, each the average of the bands it
-        // stands for, so a small strip still reads as bars rather than a picket fence.
-        let groups = size.width / CGFloat(bands.count) >= 14 ? 1 : size.width / CGFloat(bands.count) >= 7 ? 2 : 3
-        let levels = stride(from: 0, to: bands.count, by: groups).map { start in
-            bands[start..<min(bands.count, start + groups)].reduce(0, +) / Float(min(groups, bands.count - start))
-        }
-        let pitch = size.width / CGFloat(levels.count)
-        let width = min(pitch * 0.46, 16)
-        let gradient = Gradient(colors: [light.opacity(0.8), .white])
-        let shading = GraphicsContext.Shading.linearGradient(gradient, startPoint: CGPoint(x: 0, y: size.height), endPoint: .zero)
-        // Room at the top for the caps.
-        let reach = size.height - width * 0.9
-        let peaks = caps.step(levels, time: time)
-        var path = Path()
-        var tops = Path()
-        let capHeight = max(2, width * 0.32)
-        for (index, level) in levels.enumerated() {
-            let x = CGFloat(index) * pitch + (pitch - width) / 2
-            let height = max(width, CGFloat(level) * reach)
-            path.addRoundedRect(in: CGRect(x: x, y: size.height - height, width: width, height: height), cornerSize: CGSize(width: width / 2, height: width / 2), style: .continuous)
-            // Each cap rides just over its bar, then hangs and drops on its own.
-            let peak = max(height, CGFloat(peaks[index]) * reach) + capHeight * 1.6
-            tops.addRoundedRect(in: CGRect(x: x, y: size.height - peak, width: width, height: capHeight), cornerSize: CGSize(width: capHeight / 2, height: capHeight / 2), style: .continuous)
-        }
-        context.fill(path, with: shading)
-        context.fill(tops, with: .color(.white.opacity(0.75 + 0.25 * Double(pulse.kick))))
+    /// The cover's colours as light, four at least.
+    private static func lights(_ palette: [Color], whiteness: Double) -> [Color] {
+        var found = palette.isEmpty ? [Color(white: 0.6), Color(white: 0.8)] : palette
+        while found.count < 4 { found.append(found[found.count % max(1, palette.count)]) }
+        return found.map { $0.asLight(whiteness: whiteness) }
     }
 
-    // MARK: - Wave
-
-    /// Three ribbons of light in the cover's colours, laid over one another, each as tall at
-    /// each point as the sound at that pitch: low notes on the left, high on the right, and
-    /// tapering to nothing at both ends, as Siri's wave does.
-    private func drawWave(_ pulse: StagePulse, in context: inout GraphicsContext, size: CGSize) {
-        let bands = pulse.bands
-        let time = pulse.motion
-        let kick = Double(pulse.kick)
-        let middle = size.height / 2
-        let steps = 72
-        let layers: [(color: Color, speed: Double, ripples: Double, offset: Double)] = [
-            (colors[0].mix(with: .white, by: 0.25), 0.9, 1.3, 0),
-            (colors[1].mix(with: .white, by: 0.3), -1.25, 1.9, 2.1),
-            (colors[2].mix(with: .white, by: 0.35), 1.6, 2.6, 4.2),
-        ]
-        context.blendMode = .plusLighter
-        for layer in layers {
-            var top: [CGPoint] = []
-            top.reserveCapacity(steps + 1)
-            for step in 0...steps {
-                let x = Double(step) / Double(steps)
-                let taper = pow(sin(.pi * x), 2)
-                let ripple = 0.72 + 0.28 * sin(2 * .pi * x * layer.ripples - time * layer.speed + layer.offset)
-                let height = min(1, pow(Double(Self.level(bands, at: x)), 0.75) * (1 + 0.1 * kick)) * taper * ripple * middle * 0.94
-                top.append(CGPoint(x: x * size.width, y: middle - height))
-            }
-            var ribbon = Path()
-            ribbon.move(to: CGPoint(x: 0, y: middle))
-            for point in top { ribbon.addLine(to: point) }
-            for point in top.reversed() { ribbon.addLine(to: CGPoint(x: point.x, y: 2 * middle - point.y)) }
-            ribbon.closeSubpath()
-            // Each kick lights the ribbons up.
-            context.fill(ribbon, with: .color(layer.color.opacity(0.42 + 0.22 * kick)))
-        }
-        // A fine line of light along the middle, where the ribbons meet.
-        context.blendMode = .normal
-        context.fill(
-            Path(CGRect(x: 0, y: middle - 0.75 - kick, width: size.width, height: 1.5 + 2 * kick)),
-            with: .linearGradient(
-                Gradient(colors: [.white.opacity(0), .white.opacity(0.7 + 0.3 * kick), .white.opacity(0)]),
-                startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0)
-            )
-        )
-    }
-
-    /// The level at `x`, 0 to 1 across the bands, eased between them.
-    private static func level(_ bands: [Float], at x: Double) -> Float {
-        let position = x * Double(bands.count - 1)
-        let index = min(bands.count - 2, Int(position))
-        let fraction = Float(position - Double(index))
-        let eased = fraction * fraction * (3 - 2 * fraction)
-        return bands[index] + (bands[index + 1] - bands[index]) * eased
-    }
-
-    // MARK: - Orb
-
-    /// A glow that swells with the bass and blooms on each kick, a ring of light thrown out by
-    /// the kick, and, around a round cover, a ring of rays, each as long as the sound at its
-    /// pitch: low notes at the top, high at the foot, mirrored so the ring is whole.
-    private func drawOrb(_ pulse: StagePulse, in context: inout GraphicsContext, size: CGSize) {
-        let bands = pulse.bands
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        // The cover takes a little over half the orb; see StageView's layouts.
-        let radius = min(size.width, size.height) * (isBehindCover ? 0.3 : 0.28)
-        let bass = CGFloat(pulse.bass)
-        let kick = CGFloat(pulse.kick)
-        let glow = radius * (isBehindCover ? 1.5 + bass * 0.45 : 1.3 + bass * 0.5) * (1 + 0.12 * kick)
-        context.fill(
-            Path(ellipseIn: CGRect(x: center.x - glow, y: center.y - glow, width: glow * 2, height: glow * 2)),
-            with: .radialGradient(
-                Gradient(colors: [light.opacity(0.22 + 0.4 * bass + 0.2 * kick), colors[1].opacity(0.2 * (0.5 + bass)), .clear]),
-                center: center, startRadius: radius * 0.6, endRadius: glow
-            )
-        )
-        // As the kick falls away its ring spreads out and fades, quick at first, then slower.
-        if kick > 0.04 {
-            let ring = radius * (isBehindCover ? 1.02 : 1.1) + radius * 0.55 * (1 - kick)
-            context.stroke(
-                Path(ellipseIn: CGRect(x: center.x - ring, y: center.y - ring, width: ring * 2, height: ring * 2)),
-                with: .color(light.opacity(0.4 * kick)),
-                lineWidth: max(1.5, radius * 0.02)
-            )
-        }
-        guard !isBehindCover else { return }
-        let half = bands + [bands.last ?? 0]
-        let rays = 72
-        let inner = radius + max(4, radius * 0.07)
-        let lineWidth = max(2, 2 * .pi * inner / CGFloat(rays) * 0.42)
-        for ray in 0..<rays {
-            let around = (Double(ray) + 0.5) / Double(rays)
-            // Down one side and back up the other, so both halves read low to high from the top.
-            let pitch = around < 0.5 ? around * 2 : (1 - around) * 2
-            let level = CGFloat(Self.level(half, at: pitch))
-            let angle = around * 2 * .pi - .pi / 2
-            let outer = inner + max(lineWidth * 0.2, pow(level, 0.85) * radius * 0.72 * (1 + 0.08 * kick))
-            var spoke = Path()
-            spoke.move(to: CGPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
-            spoke.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer))
-            context.stroke(
-                spoke,
-                with: .color(light.mix(with: .white, by: Double(level) * 0.7).opacity(0.5 + Double(level) * 0.5)),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-            )
+    /// A waveform that doesn't move, for Reduce Motion: a gentle, even rhythm while playing,
+    /// a line of dots otherwise.
+    private static func stillWave(capacity: Int, isPlaying: Bool) -> [Float] {
+        guard isPlaying else { return [Float](repeating: 0, count: capacity) }
+        return (0..<capacity).map { index in
+            let beat = Float(index % 6) / 6
+            return 0.18 + 0.22 * (1 - beat) * (index % 24 < 6 ? 1 : 0.7)
         }
     }
 }
@@ -224,7 +121,7 @@ struct StageVisualizerView: View {
 struct StagePulse {
     /// Each band, 0 to 1, low notes to high.
     var bands: [Float]
-    /// The kick, 0 to 1: full as it lands, then falling away. Nothing under Reduce Motion.
+    /// The kick, 0 to 1: full as it lands, then falling away.
     var kick: Float
     /// Seconds of motion so far, gathering quicker for a faster, livelier song, and stopped
     /// while paused: for what ripples and drifts, so a ballad breathes and a dance track hurries.
@@ -232,18 +129,31 @@ struct StagePulse {
 
     /// The low bands, where the bass and the kick are.
     var bass: Float { bands.prefix(5).reduce(0, +) / 5 }
+
+    /// A frame that doesn't move, for Reduce Motion: a gentle, fuller-low shape while playing,
+    /// resting otherwise.
+    static func still(isPlaying: Bool) -> StagePulse {
+        let count = AudioLevelMeter.bandCount
+        let bands = isPlaying
+            ? (0..<count).map { 0.32 - 0.14 * Float($0) / Float(count - 1) }
+            : [Float](repeating: SmoothedLevels.resting, count: count)
+        return StagePulse(bands: bands, kick: 0, motion: 0)
+    }
 }
 
 /// What the drawing knows of the song playing: its groove, once learned (see ``GrooveStore``),
-/// where it is, and its feel.
+/// where it is, how long it is, and its feel.
 struct SongMoment {
     var groove: Groove?
     var energy: Double
+    /// Nil for a radio stream, which has no ends to ease.
+    var duration: Double?
     private let player: PlayerModel?
 
     init(player: PlayerModel?, energy: Double) {
         groove = GrooveStore.shared.groove(for: player?.current)
         self.energy = energy
+        duration = player?.current?.duration
         self.player = player
     }
 
@@ -257,9 +167,11 @@ struct SongMoment {
 /// The music from one frame to the next, at the same pace whatever the frame rate.
 ///
 /// Your own music is heard, band by band, and its kick felt from the bass. A song Tracks can't
-/// hear plays back from its learned groove, in time with where the song is: kick, snare and
-/// hats where the song has them, at its tempo. Until that's learned, or when it can't be, a
-/// gentle swell with a soft beat at the tempo the song's feel suggests (see ``AmbientLevels``).
+/// hear plays back from its learned groove, in time with where the song is: a hit on every
+/// beat at its tempo, with its kick, snare and hats lighter on top, all as strong as the song
+/// is loud. Until that's learned, or
+/// when it can't be, or its beat is too unsure to show, a slow breath with no beat at all
+/// (see ``AmbientLevels``): a made-up beat against the real one looks like random flashing.
 final class SmoothedLevels {
     static let resting: Float = 0.04
     private var smoother = LevelSmoother(count: AudioLevelMeter.bandCount, resting: SmoothedLevels.resting)
@@ -275,7 +187,7 @@ final class SmoothedLevels {
 
     private enum Source { case resting, heard, groove, feel }
 
-    func next(heard: [Float]?, time: Double, song: SongMoment, isPlaying: Bool, calm: Bool) -> StagePulse {
+    func next(heard: [Float]?, time: Double, song: SongMoment, isPlaying: Bool) -> StagePulse {
         if let lastTime, abs(time - lastTime) < 0.004 { return last }
         let elapsed = min(max(lastTime.map { time - $0 } ?? 0, 0), 0.25)
         lastTime = time
@@ -284,7 +196,7 @@ final class SmoothedLevels {
             .resting
         } else if heard?.count == count {
             .heard
-        } else if song.groove != nil {
+        } else if let groove = song.groove, groove.confidence >= GrooveLevels.leastConfidence {
             .groove
         } else {
             .feel
@@ -307,47 +219,33 @@ final class SmoothedLevels {
                 askedAt = time
                 position = clock.position(reported: song.position(), at: time, isPlaying: true)
             }
-            let hits = GrooveLevels.hits(playbackTime: position, groove: groove)
+            let hits = GrooveLevels.hits(playbackTime: position, groove: groove, duration: song.duration)
             target = GrooveLevels.levels(hits: hits, groove: groove, count: count)
             hit = hits.kick
         case .feel:
-            target = AmbientLevels.pulsing(at: time, energy: song.energy, count: count)
-            hit = AmbientLevels.beat(at: time, energy: song.energy) * 0.4
-        }
-        if calm {
-            // Reduce Motion: still says it's playing, in a narrow, slow range, with no hits.
-            target = target.map { 0.1 + $0 * 0.25 }
-            hit = 0
+            target = AmbientLevels.levels(at: time, energy: song.energy, count: count)
+            // A song heard too unsure of its beat to show one still breathes as loud as it is.
+            if let groove = song.groove {
+                let intensity = Float(groove.intensity)
+                target = target.map { Self.resting + ($0 - Self.resting) * intensity }
+            }
         }
         // Heard, they follow the sound closely, quick up and a natural fall; from a groove,
-        // closer still, since the hits already have their own shape; otherwise they ease.
-        (smoother.attack, smoother.release) = switch (source, calm) {
-        case (.heard, false): (0.02, 0.18)
-        case (.groove, false): (0.012, 0.08)
-        case (.feel, false): (0.1, 0.3)
-        case (.heard, true), (.groove, true): (0.25, 0.6)
-        default: (0.35, 0.45)
+        // closer still, since the hits already have their own shape; breathing, they ease.
+        (smoother.attack, smoother.release) = switch source {
+        case .heard: (0.02, 0.18)
+        case .groove: (0.012, 0.08)
+        case .feel: (0.3, 0.5)
+        case .resting: (0.35, 0.45)
         }
         let bands = smoother.step(toward: target, elapsed: elapsed)
         // Up at once on a hit, then away quickly, so a pause never cuts one off.
         kick = max(hit, kick * Float(exp(-elapsed / 0.08)))
         // A song at 120 beats a minute moves at one second a second; paused, nothing does.
-        let tempo = song.groove?.tempo ?? AmbientLevels.tempo(energy: song.energy)
-        let pace = calm || !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.4 * song.energy)
+        let tempo = source == .groove ? song.groove?.tempo ?? 90 : AmbientLevels.tempo(energy: song.energy)
+        let pace = !isPlaying ? 0 : min(1.6, max(0.55, tempo / 120)) * (0.8 + 0.4 * song.energy)
         motion = (motion + elapsed * pace).truncatingRemainder(dividingBy: 100_000)
         last = StagePulse(bands: bands, kick: kick, motion: motion)
         return last
-    }
-}
-
-/// The caps over the bars, kept from one frame to the next. Not observed: a frame redraws nothing.
-final class BarCaps {
-    private var caps = PeakCaps()
-    private var lastTime: Double?
-
-    func step(_ levels: [Float], time: Double) -> [Float] {
-        let elapsed = lastTime.map { time - $0 } ?? 0
-        lastTime = time
-        return caps.step(levels, elapsed: elapsed)
     }
 }

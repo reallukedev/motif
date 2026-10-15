@@ -3,9 +3,12 @@ import MusicKit
 import TracksCore
 
 /// An Apple Music playlist, yours or Apple's: its cover on a field of its colour, your history
-/// with it, and its songs. Long ones load as you scroll.
+/// with it, and its songs. Long ones load as you scroll, in the playlist's own order; any other
+/// order waits for every song.
 struct PlaylistPage: View {
     let playlist: Playlist
+    /// Kept for each playlist, as Music keeps a playlist's sort.
+    @AppStorage private var storedOrder: String
     @Environment(PlayerModel.self) private var player
     @Environment(PlayFeed.self) private var feed
     @State private var loaded: Playlist?
@@ -15,6 +18,11 @@ struct PlaylistPage: View {
     @State private var loadMoreFailed = false
     @State private var loadFailed = false
     @AppStorage(PlayPreferences.allowsExplicitKey) private var allowsExplicit = true
+
+    init(playlist: Playlist) {
+        self.playlist = playlist
+        _storedOrder = AppStorage(wrappedValue: "", "playlistOrder.\(playlist.id.rawValue)")
+    }
 
     var body: some View {
         let playlist = loaded ?? playlist
@@ -26,7 +34,7 @@ struct PlaylistPage: View {
             }
 
             Section {
-                if tracks.isEmpty, loaded == nil, !loadFailed {
+                if (tracks.isEmpty && loaded == nil || !isOrderReady) && !loadFailed && !loadMoreFailed {
                     LoadingRows()
                         .listRowSeparator(.hidden)
                 } else if loaded != nil, tracks.isEmpty {
@@ -50,7 +58,7 @@ struct PlaylistPage: View {
                 }
                 // Loads the next page as the end of the list comes into view. A row of its own,
                 // since with explicit songs off the last rows loaded may all be hidden.
-                if nextBatch != nil {
+                if nextBatch != nil, isOrderReady || loadMoreFailed {
                     if loadMoreFailed {
                         LoadMoreFailedRow { Task { await loadMore() } }
                             .listRowSeparator(.hidden)
@@ -77,11 +85,13 @@ struct PlaylistPage: View {
         }
         .collectionPage(title: playlist.name)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) { sortMenu }
             ToolbarItem(placement: .primaryAction) {
                 Menu("More", systemImage: "ellipsis") { moreItems(playlist) }
             }
         }
         .task(id: playlist.id) { await loadOnce() }
+        .task(id: EveryPage(order: order, playlist: loaded?.id)) { await loadEverySongIfNeeded() }
         #else
         CollectionMacLayout(hasNote: note(playlist) != nil) {
             header(playlist, context: context)
@@ -89,8 +99,76 @@ struct PlaylistPage: View {
             macTracks(playlist, context: context)
         }
         .navigationTitle(playlist.name)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { sortMenu }
+        }
         .task(id: playlist.id) { await loadOnce() }
+        .task(id: EveryPage(order: order, playlist: loaded?.id)) { await loadEverySongIfNeeded() }
         #endif
+    }
+
+    // MARK: - Order
+
+    /// Liked songs keep the order they were liked in, so the newest likes are at the end.
+    private static let favoriteSongsNames: Set<String> = ["Favorite Songs", "Favourite Songs"]
+
+    private var isFavoriteSongs: Bool {
+        Self.favoriteSongsNames.contains(playlist.name)
+    }
+
+    /// Only a playlist in your library was put together a song at a time; Apple's are in the
+    /// order their editors chose.
+    private var isInLibrary: Bool {
+        playlist.id.rawValue.hasPrefix("p.") || isFavoriteSongs
+    }
+
+    private var order: PlaylistOrder {
+        PlaylistOrder(rawValue: storedOrder) ?? (isFavoriteSongs ? .newestFirst : .playlist)
+    }
+
+    private var orders: [PlaylistOrder] {
+        (isInLibrary ? [.playlist, .newestFirst] : [.playlist])
+            + [.library(.title), .library(.natural(.artist)), .library(.natural(.album)), .library(.natural(.plays))]
+    }
+
+    private func title(_ order: PlaylistOrder) -> LocalizedStringKey {
+        switch order {
+        case .playlist: "Playlist Order"
+        case .newestFirst: isFavoriteSongs ? "Recently Liked" : "Recently Added"
+        case .library(let order): order.menuTitle
+        }
+    }
+
+    private var sortMenu: some View {
+        LibrarySortMenu(
+            selection: Binding(get: { order }, set: { storedOrder = $0.rawValue }),
+            options: orders,
+            title: title
+        )
+    }
+
+    /// Whether the songs can show yet: any order but the playlist's own waits for all of them,
+    /// so the list doesn't reshuffle as pages arrive.
+    private var isOrderReady: Bool {
+        !order.needsEverySong || (loaded != nil && nextBatch == nil)
+    }
+
+    /// Fetches every page for an order that needs them all. Stops at a playlist's worth Music
+    /// would never hold, should the pages never end.
+    private func loadEverySongIfNeeded() async {
+        guard order.needsEverySong, loaded != nil else { return }
+        while nextBatch != nil, tracks.count < 20_000, !loadMoreFailed, !Task.isCancelled {
+            if isLoadingMore {
+                try? await Task.sleep(for: .milliseconds(50))
+            } else {
+                await loadMore()
+            }
+        }
+    }
+
+    private struct EveryPage: Hashable {
+        let order: PlaylistOrder
+        let playlist: MusicItemID?
     }
 
     private func header(_ playlist: Playlist, context: PlayContext) -> some View {
@@ -104,7 +182,7 @@ struct PlaylistPage: View {
             note: note(playlist),
             tintCover: cover(playlist),
             canPlay: !(loaded != nil && tracks.isEmpty),
-            play: { player.play(.playlist(playlist), from: context) },
+            play: { play(playlist, context: context) },
             shuffle: { shuffle(playlist, context: context) }
         ) {
             moreItems(playlist)
@@ -145,7 +223,7 @@ struct PlaylistPage: View {
     #if os(macOS)
     @ViewBuilder
     private func macTracks(_ playlist: Playlist, context: PlayContext) -> some View {
-        if tracks.isEmpty, loaded == nil, !loadFailed {
+        if (tracks.isEmpty && loaded == nil || !isOrderReady) && !loadFailed && !loadMoreFailed {
             LoadingRows(count: 8)
                 .padding(.horizontal, PlayMetrics.margin)
                 .padding(.top, 12)
@@ -158,11 +236,12 @@ struct PlaylistPage: View {
         } else {
             VStack(spacing: 0) {
                 CollectionTable(
-                    tracks: shownTracks.map { index, track in
-                        CollectionTrack(
+                    tracks: shownTracks.enumerated().map { place, shown in
+                        let (index, track) = shown
+                        return CollectionTrack(
                             id: String(index),
-                            position: index + 1,
-                            number: index + 1,
+                            position: place + 1,
+                            number: place + 1,
                             title: track.title,
                             artist: track.artistName,
                             album: track.albumTitle ?? "",
@@ -234,12 +313,23 @@ struct PlaylistPage: View {
         return lines
     }
 
-    /// Every track with its place in the full list, less the explicit ones when they're off.
-    /// Played by their place, so the queue lines up with the list either way.
+    /// Every track in the order chosen, with its place in the playlist.
+    private var orderedTracks: [(index: Int, track: Track)] {
+        let all = tracks.enumerated().map { (index: $0.offset, track: $0.element) }
+        return order.sorted(all) { entry in
+            LibrarySortKeys(
+                title: entry.track.title,
+                artist: entry.track.artistName,
+                album: entry.track.albumTitle ?? "",
+                plays: feed.facts[HistoryImport.key(title: entry.track.title, artistName: entry.track.artistName)]?.plays ?? 0
+            )
+        }
+    }
+
+    /// The tracks as listed, less the explicit ones when they're off. Each keeps its place in
+    /// the playlist, which is what plays it, so the queue lines up with the list either way.
     private var shownTracks: [(index: Int, track: Track)] {
-        tracks.enumerated()
-            .filter { allowsExplicit || $0.element.contentRating != .explicit }
-            .map { (index: $0.offset, track: $0.element) }
+        orderedTracks.filter { allowsExplicit || $0.track.contentRating != .explicit }
     }
 
     /// "2 explicit songs hidden", when the setting hides some.
@@ -290,6 +380,18 @@ struct PlaylistPage: View {
         Self.songs(in: tracks).songs
     }
 
+    /// The playable songs in the order listed, and where each track landed among them.
+    private var orderedSongs: (songs: [Song], positions: [Int: Int]) {
+        var songs: [Song] = []
+        var positions: [Int: Int] = [:]
+        for (index, track) in orderedTracks {
+            guard case .song(let song) = track else { continue }
+            positions[index] = songs.count
+            songs.append(song)
+        }
+        return (songs, positions)
+    }
+
     /// The playable songs, and where each track landed among them. By position, since a
     /// playlist can hold one song twice.
     static func songs(in tracks: [Track]) -> (songs: [Song], positions: [Int: Int]) {
@@ -304,9 +406,10 @@ struct PlaylistPage: View {
     }
 
     private func playTrack(at index: Int, context: PlayContext) {
-        let (songs, positions) = Self.songs(in: tracks)
+        let (songs, positions) = orderedSongs
         guard let start = positions[index] else { return }
-        let pending = nextBatch
+        // Pages not loaded yet follow only in the playlist's own order; any other has them all.
+        let pending = order == .playlist ? nextBatch : nil
         Task {
             await player.start(.songs(songs, startingAt: start), from: context)
             // Songs further down that haven't loaded yet join the queue as they arrive, so
@@ -327,6 +430,15 @@ struct PlaylistPage: View {
             if !songs.isEmpty { player.append(.songs(songs)) }
             added += songs.count
             batch = more.hasNextBatch ? more : nil
+        }
+    }
+
+    /// In the order listed, once every song it needs is here; Music's own order otherwise.
+    private func play(_ playlist: Playlist, context: PlayContext) {
+        if order != .playlist, isOrderReady, !orderedSongs.songs.isEmpty {
+            player.play(.songs(orderedSongs.songs), from: context)
+        } else {
+            player.play(.playlist(playlist), from: context)
         }
     }
 

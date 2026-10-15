@@ -44,9 +44,8 @@ struct CollectionMacLayout<Header: View, Content: View>: View {
             }
         }
         .background(Color.pageBackground)
-        .toolbar(removing: .title)
-        // The glow runs on under the toolbar, as Music's headers do.
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // The glow runs on under the bar, as Music's headers do.
+        .headerUnderBar()
         #if DEBUG
         .task { CollectionScreenshotSetup.apply() }
         #endif

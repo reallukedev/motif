@@ -75,10 +75,10 @@ shot "$out3" genre dark -TracksTab play -TracksGenre jazz
 shot "$out3" party light -TracksTab play -TracksParty YES
 # History filtered to Radio, so every row carries the radio glyph.
 shot "$out3" history-radio light -TracksTab history -TracksHistoryFilter radio
-shot "$out3" stage-orb dark "${stage[@]}" -stageLayout visualizer -stageVisualizer orb -stageOrientation portrait
+shot "$out3" stage-orb dark "${stage[@]}" -stageLayout visualizer -stageVisualizer halo -stageOrientation portrait
 read -r -p "  Turn the simulator to landscape (Device > Rotate Left), then press Return. "
-shot "$out3" stage-bars dark "${stage[@]}" -stageLayout cover -stageVisualizer bars -stageOrientation landscape
-shot "$out3" stage-poster dark "${stage[@]}" -stageLayout poster -stageVisualizer wave -stageOrientation landscape
+shot "$out3" stage-bars dark "${stage[@]}" -stageLayout cover -stageVisualizer waveform -stageOrientation landscape
+shot "$out3" stage-poster dark "${stage[@]}" -stageLayout poster -stageVisualizer waveform -stageOrientation landscape
 read -r -p "  Turn the simulator back to portrait, then press Return. "
 xcrun simctl ui "$udid" appearance light
 
@@ -141,7 +141,7 @@ for name in history radio mood-chill top-artists; do mv "$out/mac/$name.png" "$o
 
 # Stage runs full screen, so it's captured as the whole display rather than a window.
 "$app" -TracksDemoData YES -TracksActivate YES -AppleInterfaceStyle Dark -TracksDemoPlaying YES -TracksStage YES \
-  -stageLayout cover -stageVisualizer bars >/dev/null 2>&1 &
+  -stageLayout cover -stageVisualizer waveform >/dev/null 2>&1 &
 pid=$!
 read -r -p "  Put the Stage window in full screen on the built-in display, then press Return. "
 screencapture -x -m "$out3/mac/stage.png"

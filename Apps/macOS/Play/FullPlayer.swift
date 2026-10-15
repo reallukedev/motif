@@ -68,8 +68,8 @@ struct FullPlayer: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .padding(.horizontal, 32)
         }
-        .padding(.horizontal, 32)
         .padding(.bottom, 32)
         // Up into the title bar, whose buttons hide while the full player is open, so its
         // own bar sits where they were rather than a bar's height below.
@@ -80,6 +80,7 @@ struct FullPlayer: View {
     /// The song's details and every control, stacked with their least spacing.
     private static let columnHeight: CGFloat = 330
     private static let gap: CGFloat = 56
+    private static let barInset: CGFloat = 18
 
     // MARK: - Top bar
 
@@ -121,9 +122,11 @@ struct FullPlayer: View {
                 .help("More")
             }
         }
-        // The title bar's height, its buttons centred in it as the traffic lights were.
-        .frame(height: 52)
-        .padding(.bottom, 8)
+        // Its buttons as far in from the window's top as from its sides, clear of the
+        // rounded corners, with the title centred on them.
+        .padding(.horizontal, Self.barInset)
+        .padding(.top, Self.barInset)
+        .padding(.bottom, 12)
     }
 
     // MARK: - The sleeve

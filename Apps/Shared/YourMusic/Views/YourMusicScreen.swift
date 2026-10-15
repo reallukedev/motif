@@ -76,7 +76,8 @@ struct YourMusicScreen: View {
         #if os(iOS)
         .navigationTitle("Play")
         #else
-        .navigationTitle("Listen Now")
+        // No title over the page, and its glow meets the top edge until it scrolls under the bar.
+        .headerUnderBar()
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {

@@ -220,8 +220,8 @@ public nonisolated struct LevelSmoother: Equatable, Sendable {
 /// Apple Music with no preview, offline, or in the moment before its preview is heard.
 ///
 /// It doesn't pretend to hear it, and nothing jumps the way a drum would: a slow swell that
-/// rolls across the bands and breathes, a little quicker and fuller for a lively song, and in
-/// ``pulsing(at:energy:count:)`` a soft beat at the tempo the song's feel suggests.
+/// rolls across the bands and breathes, a little quicker and fuller for a lively song. No
+/// beat, since one at a made-up tempo against the song's own looks like random flashing.
 public nonisolated enum AmbientLevels {
     public static func levels(at time: Double, energy: Double, count: Int) -> [Float] {
         let energy = min(1, max(0, energy))
@@ -245,25 +245,6 @@ public nonisolated enum AmbientLevels {
     /// own is known: about 85 beats a minute for the calmest, 128 for the liveliest.
     public static func tempo(energy: Double) -> Double {
         84 + 44 * min(1, max(0, energy))
-    }
-
-    /// A soft beat, 0 to 1, at the tempo the song's `energy` suggests: a rounded swell rather
-    /// than a hit, since it can't know where the song's own beats fall.
-    public static func beat(at time: Double, energy: Double) -> Float {
-        let phase = time * tempo(energy: energy) / 60
-        let swing = 0.5 + 0.5 * cos(2 * .pi * (phase - phase.rounded(.down)))
-        return Float(pow(swing, 4))
-    }
-
-    /// The swell, with a soft beat in the low bands at the tempo the song's feel suggests, so
-    /// a song whose groove isn't known yet still moves like music rather than a tide.
-    public static func pulsing(at time: Double, energy: Double, count: Int) -> [Float] {
-        let swell = levels(at: time, energy: energy, count: count)
-        let beat = beat(at: time, energy: energy) * Float(0.14 + 0.1 * min(1, max(0, energy)))
-        return swell.enumerated().map { index, level in
-            let place = count > 1 ? Float(index) / Float(count - 1) : 0
-            return min(1, level + beat * (1 - place) * (1 - place))
-        }
     }
 }
 

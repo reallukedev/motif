@@ -35,19 +35,49 @@ enum StageLayout: String, CaseIterable, Identifiable {
 
 /// How the visualizer draws the sound.
 enum StageVisualizer: String, CaseIterable, Identifiable {
-    case bars, wave, orb, off
+    /// The cover's colours as a soft cloud that swells with the music.
+    case glow
+    /// Light blooming from behind the cover on each beat.
+    case halo
+    /// The last few seconds passing by, as Voice Memos draws a recording.
+    case waveform
+    case off
 
     var id: String { rawValue }
     static let storageKey = "stageVisualizer"
 
+    /// The styles these took the place of, as the nearest of them, so a choice made before
+    /// carries on.
+    init?(rawValue: String) {
+        switch rawValue {
+        case "glow": self = .glow
+        case "halo", "orb": self = .halo
+        case "waveform", "bars", "wave": self = .waveform
+        case "off": self = .off
+        default: return nil
+        }
+    }
+
     var title: LocalizedStringKey {
         switch self {
-        case .bars: "Bars"
-        case .wave: "Wave"
-        case .orb: "Orb"
+        case .glow: "Glow"
+        case .halo: "Halo"
+        case .waveform: "Waveform"
         case .off: "Off"
         }
     }
+
+    var footer: LocalizedStringKey {
+        switch self {
+        case .glow: "The cover's colours drift behind it and swell with the music."
+        case .halo: "Light blooms from behind the cover on every beat, most on the first of each bar."
+        case .waveform: "The last few seconds of the music pass by, as Voice Memos draws a recording."
+        case .off: "Just the song."
+        }
+    }
+
+    /// Whether it's drawn around the cover, and so needs one large enough to surround.
+    var surroundsCover: Bool { self == .glow || self == .halo }
 }
 
 /// Which way up Stage is on iPhone. Landscape by default: Stage is for a screen propped on

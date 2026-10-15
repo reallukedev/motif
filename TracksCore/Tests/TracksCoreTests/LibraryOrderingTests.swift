@@ -105,4 +105,20 @@ struct LibraryOrderingTests {
         #expect(LibraryOrder(rawValue: "time.ascending") == LibraryOrder(.time, ascending: true))
         #expect(LibraryOrder(rawValue: "loudness.ascending") == nil)
     }
+
+    @Test("a playlist's own order, the newest first, or a library order, and each survives being stored")
+    func playlistOrders() {
+        // As a playlist holds them: added oldest first, one song twice.
+        let items = ["Zed", "abba", "Moon", "abba"].map { Item(title: $0) }
+        #expect(titles(PlaylistOrder.playlist.sorted(items) { $0.keys }) == ["Zed", "abba", "Moon", "abba"])
+        #expect(titles(PlaylistOrder.newestFirst.sorted(items) { $0.keys }) == ["abba", "Moon", "abba", "Zed"])
+        #expect(titles(PlaylistOrder.library(.title).sorted(items) { $0.keys }) == ["abba", "abba", "Moon", "Zed"])
+
+        #expect(!PlaylistOrder.playlist.needsEverySong)
+        #expect(PlaylistOrder.newestFirst.needsEverySong)
+        for order in [PlaylistOrder.playlist, .newestFirst, .library(.natural(.plays))] {
+            #expect(PlaylistOrder(rawValue: order.rawValue) == order)
+        }
+        #expect(PlaylistOrder(rawValue: "shuffled") == nil)
+    }
 }

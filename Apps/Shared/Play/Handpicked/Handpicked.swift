@@ -2,9 +2,9 @@ import SwiftUI
 import MusicKit
 import TracksCore
 
-/// Handpicked: a station made from songs you choose, as Music makes a station from a song.
-/// Pick a few songs you love, from your playlists, what you play, or a search, and it plays
-/// them, your songs most like them, and new songs like them, live, steered by what you skip.
+/// Handpicked: a one-time station made from songs you choose, as Music makes a station from a
+/// song. Pick a few songs you love, from your playlists, what you play, or a search, and it
+/// plays them, your songs most like them, and new songs like them, steered by what you skip.
 enum Handpicked {
     static var title: String { String(localized: "Handpicked") }
     static var tagline: String { String(localized: "Songs you choose, and more like them.") }
@@ -20,8 +20,8 @@ enum Handpicked {
     static let limit = 15
 }
 
-/// A song picked for Handpicked, kept between launches.
-struct Handpick: Codable, Hashable, Identifiable {
+/// A song picked for a Handpicked station.
+struct Handpick: Hashable, Identifiable {
     /// The song as the history knows it.
     let identity: String
     /// Apple Music's id for it, or your music's.
@@ -79,89 +79,44 @@ struct Handpick: Codable, Hashable, Identifiable {
     }
 }
 
-/// The songs picked, one list for Apple Music and one for your own music, since neither plays
-/// the other's. Kept on this device; sample data keeps its own.
+/// The songs picked for one station, while the sheet that picks them is open. Each station
+/// is made once, from fresh picks, so nothing is kept after it starts.
 @MainActor
 @Observable
-final class HandpickedPicks {
-    static let shared = HandpickedPicks()
+final class HandpickedSelection {
+    private(set) var picks: [Handpick] = []
 
-    private var bySource: [String: [Handpick]]
-    private let key: String
+    var isFull: Bool { picks.count >= Handpicked.limit }
 
-    private init() {
-        key = DemoMode.isRequestedAtLaunch ? "handpickedSongs.sample" : "handpickedSongs"
-        let data = UserDefaults.standard.data(forKey: key)
-        bySource = data.flatMap { try? JSONDecoder().decode([String: [Handpick]].self, from: $0) } ?? [:]
-    }
-
-    func picks(for source: MusicSource) -> [Handpick] {
-        bySource[source.rawValue] ?? []
-    }
-
-    func contains(_ identity: String, for source: MusicSource) -> Bool {
-        picks(for: source).contains { $0.identity == identity }
-    }
-
-    func isFull(for source: MusicSource) -> Bool {
-        picks(for: source).count >= Handpicked.limit
+    func contains(_ identity: String) -> Bool {
+        picks.contains { $0.identity == identity }
     }
 
     /// Adds the song, or takes it out if it's there. False when it couldn't be added, as
-    /// there are as many picks as there can be.
+    /// there are as many picks as a station takes.
     @discardableResult
-    func toggle(_ pick: Handpick, for source: MusicSource) -> Bool {
-        var picks = picks(for: source)
+    func toggle(_ pick: Handpick) -> Bool {
         if let index = picks.firstIndex(where: { $0.identity == pick.identity }) {
             picks.remove(at: index)
-        } else {
-            guard picks.count < Handpicked.limit else { return false }
-            picks.append(pick)
+            return true
         }
-        set(picks, for: source)
+        guard !isFull else { return false }
+        picks.append(pick)
         return true
-    }
-
-    func remove(atOffsets offsets: IndexSet, for source: MusicSource) {
-        var picks = picks(for: source)
-        picks.remove(atOffsets: offsets)
-        set(picks, for: source)
-    }
-
-    func move(fromOffsets offsets: IndexSet, toOffset destination: Int, for source: MusicSource) {
-        var picks = picks(for: source)
-        picks.move(fromOffsets: offsets, toOffset: destination)
-        set(picks, for: source)
-    }
-
-    func removeAll(for source: MusicSource) {
-        set([], for: source)
-    }
-
-    private func set(_ picks: [Handpick], for source: MusicSource) {
-        bySource[source.rawValue] = picks
-        if let data = try? JSONEncoder().encode(bySource) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
     }
 }
 
 // MARK: - Playing
 
-/// Starting Handpicked from its page or its tile: the picks, your songs most like them, and
+/// Starting a Handpicked station from its sheet: the picks, your songs most like them, and
 /// new songs like them from Apple Music, or from your servers with your own music.
 @MainActor
 enum HandpickedPlayback {
-    /// - Parameter first: the pick to start with; one of them at random otherwise, as each
-    ///   listen starts somewhere new.
-    static func start(model: AppModel, startingWith first: Handpick? = nil) async {
+    /// Starts with one of the picks at random, so the station doesn't always open the same way.
+    static func start(model: AppModel, picks: [Handpick]) async {
         let source = model.musicSource
         let player = model.player
-        let picks = HandpickedPicks.shared.picks(for: source)
-        guard let opener = first ?? picks.randomElement() else {
-            player.problem = .failed(String(localized: "Pick a song or two for Handpicked first."))
-            return
-        }
+        guard let opener = picks.randomElement() else { return }
         let (history, signals, isDemo) = (model.library.history, player.signals, player.isDemo)
         if source == .yourMusic {
             let music = model.yourMusic

@@ -41,9 +41,6 @@ struct MacRootView: View {
                         .playDestinations()
                 }
             }
-            // The title bar is the page's own: no band of material across the top, every page
-            // showing through it, as Music's does.
-            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             // Under the full player, the page and its bar stop ticking.
             .environment(\.isOnScreen, isOnScreen && !isShowingFullPlayer)
             .environment(playerWindow)

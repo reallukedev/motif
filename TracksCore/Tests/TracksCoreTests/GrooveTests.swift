@@ -1,3 +1,4 @@
+import AVFoundation
 import Testing
 import Foundation
 @testable import TracksCore
@@ -54,19 +55,212 @@ private enum Drums {
     }
 }
 
-@Suite("Groove analysis")
+/// A made-up band, the same every run: drums in one of a few patterns, a bass note on each
+/// beat, a sung line in eighths and a held chord, as a preview would be, starting partway
+/// into a song whose first downbeat is at its very start.
+enum Band {
+    /// Half a CD's rate, and shorter than a preview, so the many cases run quickly; the click
+    /// tests cover a preview's own rate and length.
+    static let rate = 22_050.0
+
+    enum Style: String, CaseIterable, CustomTestStringConvertible {
+        /// A kick on every beat, snare on two and four, open hats between.
+        case fourOnFloor
+        /// Kick on one and three and the and of three, snare on two and four, eighth hats.
+        case backbeat
+        /// One kick and a pushed one a bar, a snare on three, sixteenth hats.
+        case halfTime
+        /// Kick on one and the and of three, snare on two and four, eighth hats.
+        case breakbeat
+        /// Only a kick on one and a snare on three.
+        case ballad
+
+        var testDescription: String { rawValue }
+    }
+
+    static func song(bpm: Double, style: Style, start: Double, seconds: Double = 20, rate: Double = Band.rate) -> [Float] {
+        var random = SeededRandom("\(bpm)\(style)")
+        let count = Int(rate * seconds)
+        var out = [Float](repeating: 0, count: count)
+        let beat = 60 / bpm
+        func noise() -> Double { Double(random.next() % 20_000) / 10_000 - 1 }
+        func add(at songTime: Double, length: Double, _ sound: (Double) -> Double) {
+            let first = Int(((songTime - start) * rate).rounded())
+            for offset in 0..<Int(length * rate) where first + offset >= 0 && first + offset < count {
+                out[first + offset] += Float(sound(Double(offset) / rate))
+            }
+        }
+        let kick: (Double) -> Double = { time in
+            0.8 * min(1, time / 0.003) * exp(-time / 0.11) * sin(2 * .pi * (50 * time + 2.7 * (1 - exp(-time / 0.03))))
+        }
+        let snareNoise = (0..<Int(rate * 0.3)).map { _ in noise() }
+        let snare: (Double) -> Double = { time in
+            let noise = snareNoise[min(snareNoise.count - 1, Int(time * rate))]
+            return min(1, time / 0.002) * (0.35 * noise * exp(-time / 0.07) + 0.3 * sin(2 * .pi * 190 * time) * exp(-time / 0.05))
+        }
+        let raw = (0..<Int(rate * 0.1)).map { _ in noise() }
+        let hatNoise = zip(raw, [0] + raw).map { $0 - $1 }
+        let hat: (Double) -> Double = { time in 0.12 * hatNoise[min(hatNoise.count - 1, Int(time * rate))] * exp(-time / 0.02) }
+        let roots = [55.0, 55, 65.4, 49]
+        let tune = [440.0, 494, 523, 587, 659, 587, 523, 494]
+        for index in Int((start / beat).rounded(.down)) - 1...Int(((start + seconds) / beat).rounded(.up)) {
+            let time = Double(index) * beat
+            let inBar = index % 4
+            let root = roots[(index / 4) % 4]
+            switch style {
+            case .fourOnFloor:
+                add(at: time, length: 0.4, kick)
+                if inBar % 2 == 1 { add(at: time, length: 0.3, snare) }
+                add(at: time + beat / 2, length: 0.1, hat)
+            case .backbeat:
+                if inBar % 2 == 0 { add(at: time, length: 0.4, kick) }
+                if inBar == 2 { add(at: time + beat / 2, length: 0.4, kick) }
+                if inBar % 2 == 1 { add(at: time, length: 0.3, snare) }
+                add(at: time, length: 0.1, hat)
+                add(at: time + beat / 2, length: 0.1, hat)
+            case .halfTime:
+                if inBar == 0 {
+                    add(at: time, length: 0.4, kick)
+                    add(at: time + beat * 0.75, length: 0.4, kick)
+                }
+                if inBar == 2 { add(at: time, length: 0.3, snare) }
+                for sixteenth in 0..<4 { add(at: time + Double(sixteenth) * beat / 4, length: 0.1, hat) }
+            case .breakbeat:
+                if inBar == 0 { add(at: time, length: 0.4, kick) }
+                if inBar == 2 { add(at: time + beat / 2, length: 0.4, kick) }
+                if inBar % 2 == 1 { add(at: time, length: 0.3, snare) }
+                add(at: time, length: 0.1, hat)
+                add(at: time + beat / 2, length: 0.1, hat)
+            case .ballad:
+                if inBar == 0 { add(at: time, length: 0.4, kick) }
+                if inBar == 2 { add(at: time, length: 0.3, snare) }
+            }
+            add(at: time, length: beat) { time in
+                0.25 * min(1, time / 0.02) * exp(-time / (beat * 0.8)) * (sin(2 * .pi * root * time) + 0.4 * sin(4 * .pi * root * time))
+            }
+            for eighth in 0..<2 {
+                let note = tune[(index * 2 + eighth) % tune.count]
+                add(at: time + Double(eighth) * beat / 2, length: beat / 2) { time in
+                    0.08 * min(1, time / 0.03) * min(1, (beat / 2 - time) / 0.02) * sin(2 * .pi * note * time + 0.3 * sin(2 * .pi * 5 * time))
+                }
+            }
+            if inBar == 0 {
+                add(at: time, length: beat * 4) { time in
+                    0.05 * min(1, time / 0.3) * (4...6).reduce(0) { $0 + sin(2 * .pi * root * Double($1) * time) }
+                }
+            }
+        }
+        return out
+    }
+
+    /// Where a preview starts in its song: anywhere, not on a beat.
+    static func start(for bpm: Double) -> Double { 47.3 + bpm.truncatingRemainder(dividingBy: 7) }
+}
+
+/// One at a time: each case is seconds of number crunching, and dozens at once hold every
+/// thread the other suites' tasks wait on.
+@Suite("Groove analysis", .serialized)
 struct GrooveAnalysisTests {
-    @Test("Finds the tempo of a click track, not half or twice it", arguments: [90.0, 120, 128, 170])
+    @Test("Finds the tempo of a click track, not half or twice it", arguments: [90.0, 120, 128, 170, 174])
     func tempo(bpm: Double) {
         let groove = GrooveAnalysis.groove(of: Drums.clicks(bpm: bpm), sampleRate: Drums.rate)
-        #expect(abs(groove.tempo - bpm) < 2, "heard \(groove.tempo) BPM")
+        #expect(abs(groove.tempo - bpm) < 0.1, "heard \(groove.tempo) BPM")
         #expect(groove.confidence > 0.3)
+    }
+
+    /// A song is in time if it's counted at its tempo, or at half it when that's over 160 or
+    /// the drums only play every other beat, as a listener would feel it. Twice the tempo, or
+    /// a third off it, flashes against the music.
+    private static func feels(_ heard: Double, like bpm: Double, style: Band.Style) -> Bool {
+        if abs(heard - bpm) < 0.1 { return true }
+        let halfTime = bpm > 160 || style == .ballad
+        return halfTime && abs(heard - bpm / 2) < 0.05
+    }
+
+    @Test("Finds a band's tempo to a tenth of a beat a minute, whatever its drums play",
+          arguments: [90.0, 97.3, 128, 140, 174], Band.Style.allCases)
+    func bandTempo(bpm: Double, style: Band.Style) {
+        let groove = GrooveAnalysis.groove(of: Band.song(bpm: bpm, style: style, start: Band.start(for: bpm)), sampleRate: Band.rate)
+        #expect(Self.feels(groove.tempo, like: bpm, style: style), "heard \(groove.tempo) BPM")
+        #expect(groove.confidence >= GrooveLevels.leastConfidence)
+    }
+
+    @Test("Finds where a band's beats fall, to a fiftieth of a second",
+          arguments: [90.0, 128, 174], [Band.Style.fourOnFloor, .backbeat, .breakbeat])
+    func bandBeats(bpm: Double, style: Band.Style) throws {
+        let start = Band.start(for: bpm)
+        let found = try #require(GrooveAnalysis.beats(of: Band.song(bpm: bpm, style: style, start: start), sampleRate: Band.rate))
+        #expect(found.times.count >= 14)
+        let beat = 60 / bpm
+        for time in found.times {
+            // Measured from the song's start, every found beat is on one of the song's.
+            let place = (time + start) / beat
+            #expect(abs(place - place.rounded()) * beat < 0.02, "a beat at \(time) s")
+        }
+    }
+
+    @Test("Hears a band through an AAC file, as a preview arrives")
+    func harness() throws {
+        let bpm = 123.0
+        let start = Band.start(for: bpm)
+        // A preview's own rate and length.
+        let rate = 44_100.0
+        let samples = Band.song(bpm: bpm, style: .backbeat, start: start, seconds: 30, rate: rate)
+        let url = URL.temporaryDirectory.appending(path: "groove-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 256_000]
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2))
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)))
+            buffer.frameLength = AVAudioFrameCount(samples.count)
+            for channel in 0..<2 {
+                let data = try #require(buffer.floatChannelData?[channel])
+                for index in samples.indices { data[index] = samples[index] * 0.7 }
+            }
+            try file.write(from: buffer)
+        }
+        let file = try AVAudioFile(forReading: url)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+        try file.read(into: buffer)
+        let channels = try #require(buffer.floatChannelData)
+        let read = Int(buffer.frameLength), channelCount = Int(file.processingFormat.channelCount)
+        let mono = (0..<read).map { index in (0..<channelCount).reduce(Float(0)) { $0 + channels[$1][index] } / Float(channelCount) }
+
+        let groove = GrooveAnalysis.groove(of: mono, sampleRate: file.processingFormat.sampleRate)
+        let found = try #require(GrooveAnalysis.beats(of: mono, sampleRate: file.processingFormat.sampleRate))
+        print("Groove harness: \(String(format: "%.2f", groove.tempo)) BPM, sure \(String(format: "%.2f", groove.confidence)), beats at \(found.times.prefix(8).map { String(format: "%.3f", $0) }.joined(separator: ", ")) s")
+        #expect(abs(groove.tempo - bpm) < 0.1)
+        // AAC adds a little delay of its own at the start, which is the only slack here.
+        let beat = 60 / bpm
+        let places = found.times.map { (($0 + start) / beat).truncatingRemainder(dividingBy: 1) }
+        let off = places.map { min($0, 1 - $0) * beat }
+        #expect((off.max() ?? 1) < 0.06, "off by \(off.max() ?? 1) s")
+    }
+
+    @Test("Noise, and held chords, have no beat to show")
+    func noBeat() {
+        var random = SeededRandom("noise")
+        let noise = (0..<Int(Drums.rate * 30)).map { _ in Float(Double(random.next() % 20_000) / 40_000 - 0.25) }
+        #expect(GrooveAnalysis.groove(of: noise, sampleRate: Drums.rate).confidence < GrooveLevels.leastConfidence)
+        let chord = (0..<Int(Drums.rate * 30)).map { index in
+            let time = Double(index) / Drums.rate
+            return Float([220.0, 277.2, 329.6].reduce(0) { $0 + 0.1 * sin(2 * .pi * $1 * time) } * (0.8 + 0.2 * sin(2 * .pi * time / 7)))
+        }
+        #expect(GrooveAnalysis.groove(of: chord, sampleRate: Drums.rate).confidence < GrooveLevels.leastConfidence)
+    }
+
+    @Test("A count within a hair of a whole number is taken as it, and one further off isn't")
+    func steadied() {
+        #expect(GrooveAnalysis.steadied(127.93) == 128)
+        #expect(GrooveAnalysis.steadied(120.1) == 120)
+        #expect(GrooveAnalysis.steadied(97.3) == 97.3)
     }
 
     @Test("A kick on one and three and a snare on two and four show where they land")
     func backbeat() {
         let groove = GrooveAnalysis.groove(of: Drums.backbeat(bpm: 120), sampleRate: Drums.rate)
-        #expect(abs(groove.tempo - 120) < 2, "heard \(groove.tempo) BPM")
+        #expect(abs(groove.tempo - 120) < 0.1, "heard \(groove.tempo) BPM")
         let low = groove.low.hits, mid = groove.mid.hits
         // The kick's beats, and the snare's, by the bar the analysis settled on.
         #expect(min(low[0], low[8]) > max(low[4], low[12]) + 0.2, "low \(low)")
@@ -114,7 +308,7 @@ struct GrooveAnalysisTests {
         var samples = Drums.clicks(bpm: 120)
         for index in stride(from: 0, to: samples.count, by: 7) { samples[index] = .nan }
         let groove = GrooveAnalysis.groove(of: samples, sampleRate: Drums.rate)
-        #expect(abs(groove.tempo - 120) < 2)
+        #expect(abs(groove.tempo - 120) < 0.1)
     }
 }
 
@@ -129,27 +323,82 @@ struct GrooveLevelsTests {
         return groove
     }()
 
-    @Test("The low bands pulse once a beat")
+    @Test("The low bands pulse once a beat, up at once and well down before the next")
     func pulsesAtTempo() throws {
         let tick = 0.002
         let lows = (0..<2_000).map { GrooveLevels.levels(playbackTime: Double($0) * tick, groove: Self.floor, count: 24)[0] }
-        let peaks = lows.indices.dropFirst().dropLast().filter { lows[$0] > lows[$0 - 1] && lows[$0] >= lows[$0 + 1] && lows[$0] > 0.5 }
+        let peaks = lows.indices.dropFirst().dropLast().filter { lows[$0] > lows[$0 - 1] && lows[$0] >= lows[$0 + 1] && lows[$0] > 0.4 }
         try #require(peaks.count >= 6)
+        let beat = 60 / 124.0
         for (first, second) in zip(peaks, peaks.dropFirst()) {
-            #expect(abs(Double(second - first) * tick - 60 / 124) < 0.01)
+            #expect(abs(Double(second - first) * tick - beat) < 0.01)
         }
-        // And falls well away between them.
+        for peak in peaks {
+            // Within a fiftieth of a second of the beat.
+            let place = Double(peak) * tick / beat
+            #expect((place - place.rounded(.down)) * beat < 0.02)
+        }
         #expect((lows.min() ?? 1) < (lows.max() ?? 0) - 0.3)
     }
 
-    @Test("Swing pushes a hit late")
-    func swing() {
+    @Test("The first beat of a bar lands hardest")
+    func downbeat() {
         var groove = Self.floor
-        groove.low.lean[4] = 0.4
+        groove.mid.hits = [Float](repeating: 0, count: 16)
+        let beat = 60 / groove.tempo
+        let kicks = (0..<4).map { GrooveLevels.hits(playbackTime: (Double(4 + $0) + 0.015) * beat, groove: groove).kick }
+        #expect(kicks[0] > kicks[1] + 0.15)
+        #expect(kicks[0] > kicks[2])
+        #expect(kicks[2] > kicks[1])
+    }
+
+    @Test("Every beat shows, even with no drums heard on it, and only the beats")
+    func everyBeat() {
+        var groove = Groove.calm
+        groove.tempo = 100
+        groove.confidence = 0.8
+        groove.punch = 0.5
+        let beat = 0.6
+        var bumps = 0
+        var rising = false
+        var last: Float = 0
+        for frame in 0..<(8 * 60) {
+            // Thirty frames a second, as the Mac draws.
+            let kick = GrooveLevels.hits(playbackTime: Double(frame) / 30, groove: groove).kick
+            if kick > last + 0.05, !rising { bumps += 1; rising = true }
+            if kick < last { rising = false }
+            last = kick
+        }
+        #expect(bumps == Int(8 * 60 / 30 / beat) || bumps == Int(8 * 60 / 30 / beat) + 1, "\(bumps) bumps in 16 seconds")
+    }
+
+    @Test("Between the hits, nothing flickers")
+    func noFlicker() {
+        let groove = Groove.sample(seed: "Night Drive")
+        let step = 60 / groove.tempo / 4
+        var previous = GrooveLevels.levels(playbackTime: 0, groove: groove, count: 24)
+        for frame in 1..<(20 * 60) {
+            let time = Double(frame) / 60
+            let levels = GrooveLevels.levels(playbackTime: time, groove: groove, count: 24)
+            // A level only jumps up just after a step, where a drum can land.
+            let sinceStep = time - (time / step).rounded(.down) * step
+            if sinceStep > 0.04 {
+                for (now, before) in zip(levels, previous) { #expect(now - before < 0.03) }
+            }
+            previous = levels
+        }
+    }
+
+    @Test("Swing pushes a kick between the beats late")
+    func swing() {
+        var straight = Self.floor
+        straight.low.hits[6] = 1
+        var swung = straight
+        swung.low.lean[6] = 0.4
         let step = 60 / 124.0 / 4
-        let onTime = GrooveLevels.hits(playbackTime: 4 * step + 0.02, groove: Self.floor).kick
-        let late = GrooveLevels.hits(playbackTime: 4 * step + 0.02, groove: groove).kick
-        #expect(late < onTime * 0.3)
+        let onTime = GrooveLevels.hits(playbackTime: 6 * step + 0.02, groove: straight).kick
+        let late = GrooveLevels.hits(playbackTime: 6 * step + 0.02, groove: swung).kick
+        #expect(late < onTime * 0.5)
     }
 
     @Test("Stays between 0 and 1, for any time", arguments: [Groove.calm, GrooveLevelsTests.floor, Groove.sample(seed: "a"), Groove.sample(seed: "b")])
@@ -176,18 +425,20 @@ struct GrooveLevelsTests {
     }
 }
 
-@Suite("Ambient pulse")
-struct AmbientPulseTests {
-    @Test("Beats faster for a livelier song")
+@Suite("Ambient breath")
+struct AmbientBreathTests {
+    @Test("Moves quicker for a livelier song")
     func tempo() {
         #expect(AmbientLevels.tempo(energy: 1) > AmbientLevels.tempo(energy: 0) + 30)
     }
 
-    @Test("Stays gentle, and in range", arguments: [0.0, 0.5, 1])
-    func bounded(energy: Double) {
-        for step in 0..<1_200 {
-            let levels = AmbientLevels.pulsing(at: Double(step) / 60, energy: energy, count: 24)
-            #expect(levels.allSatisfy { $0 >= 0.15 && $0 <= 1 })
+    @Test("Breathes slowly, with no beat", arguments: [0.0, 0.5, 1])
+    func breathes(energy: Double) {
+        var previous = AmbientLevels.levels(at: 0, energy: energy, count: 24)
+        for step in 1..<1_200 {
+            let levels = AmbientLevels.levels(at: Double(step) / 60, energy: energy, count: 24)
+            for (now, before) in zip(levels, previous) { #expect(abs(now - before) < 0.01) }
+            previous = levels
         }
     }
 }

@@ -104,6 +104,32 @@ extension View {
     }
 }
 
+#if os(macOS)
+extension View {
+    /// A page whose colour runs up under the Mac's title bar: the colour meets the top edge
+    /// clean, and the bar's material comes back once the page scrolls under it. The title is
+    /// empty rather than removed, as a window without one drops the material altogether.
+    func headerUnderBar() -> some View {
+        modifier(HeaderUnderBar())
+    }
+}
+
+private struct HeaderUnderBar: ViewModifier {
+    @State private var isScrolled = false
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle("")
+            .toolbarBackgroundVisibility(isScrolled ? .automatic : .hidden, for: .windowToolbar)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 8
+            } action: { _, scrolled in
+                isScrolled = scrolled
+            }
+    }
+}
+#endif
+
 extension View {
     /// What every page of the Mac's main window wears around it: the player's bar at its foot.
     /// Applied by the page, not the window, since a pushed page takes the stack's place. The

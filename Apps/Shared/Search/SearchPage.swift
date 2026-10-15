@@ -19,14 +19,20 @@ struct SearchPage: View {
             // Return keeps the search, as acting on a result does.
             .onSubmit(of: .search) { session.remember(source: source) }
             .searchFocused($isFieldFocused)
-            // On the page rather than the toolbar, so a narrow Mac window never tucks it away.
+            #if os(macOS)
+            // Where the title would be: the scope says what the page is.
+            .toolbar(removing: .title)
+            .toolbar {
+                ToolbarItem(placement: .navigation) { scopePicker }
+            }
+            #else
             .safeAreaBar(edge: .top) {
                 scopePicker
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, PlayMetrics.margin)
-                    .padding(.top, Self.scopeTopPadding)
                     .padding(.bottom, 8)
             }
+            #endif
             .onAppear {
                 isShowing = true
                 session.keepScope(for: source)
@@ -83,12 +89,6 @@ struct SearchPage: View {
         .fixedSize()
         #endif
     }
-
-    #if os(macOS)
-    private static let scopeTopPadding: CGFloat = 12
-    #else
-    private static let scopeTopPadding: CGFloat = 0
-    #endif
 
     /// The toolbar's field on the Mac, as Finder and Mail have it; under the large title on
     /// iPhone, always showing, as on a page that's for nothing but searching.

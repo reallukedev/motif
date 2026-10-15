@@ -65,11 +65,7 @@ struct GenreView: View {
         #if DEBUG
         .launchScroll()
         #endif
-        #if os(macOS)
-        .navigationTitle(genre.title)
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        #else
+        #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
         #endif
         .task { await load() }

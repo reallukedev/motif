@@ -12,7 +12,7 @@ struct StageView: View {
     let onClose: () -> Void
     @Environment(PlayerModel.self) private var player
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
-    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
+    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.glow
     @AppStorage(StageOption.background) private var background = StageBackground.flow
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
@@ -180,8 +180,9 @@ struct StageView: View {
             Spacer(minLength: 0)
             layout {
                 ZStack {
-                    if visualizer == .orb {
-                        visualizerView(track, isBehindCover: true).frame(width: side * 1.7, height: side * 1.7)
+                    if visualizer.surroundsCover {
+                        let reach = side * (visualizer == .glow ? 2.1 : 2)
+                        visualizerView(track, cover: side).frame(width: reach, height: reach)
                     }
                     CoverImage(cover: track.cover, size: side)
                         .shadow(color: .black.opacity(0.35), radius: 30, y: 16)
@@ -192,7 +193,7 @@ struct StageView: View {
                     .frame(maxWidth: wide ? .infinity : nil, alignment: .leading)
             }
             Spacer(minLength: 0)
-            if visualizer == .bars || visualizer == .wave {
+            if visualizer == .waveform {
                 visualizerView(track).frame(height: max(size.height * 0.2, 72))
                     .padding(.bottom, 20)
             }
@@ -216,9 +217,10 @@ struct StageView: View {
                 if showsClock { clock(size: 28) }
             }
             Spacer(minLength: 0)
+            // No cover large enough here for the halo to light, so the waveform.
             if visualizer != .off {
-                visualizerView(track)
-                    .frame(height: size.height * (visualizer == .orb ? 0.34 : wide ? 0.2 : 0.26))
+                visualizerView(track, style: visualizer == .glow ? .glow : .waveform)
+                    .frame(height: size.height * (visualizer == .glow ? 0.34 : wide ? 0.2 : 0.26))
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, 24)
             }
@@ -251,23 +253,29 @@ struct StageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The visualizer at the centre: an orb around the cover, or the bars or wave large, with
-    /// the song under it.
+    /// The visualizer at the centre: the glow or the halo around the cover, or the waveform
+    /// large, with the song under it.
     private func visualizerLayout(_ track: PlayerTrack, in size: CGSize) -> some View {
         let side = min(size.width, size.height * 0.62)
+        let cover = side * 0.62
         return VStack(spacing: 0) {
             topCorner
             Spacer(minLength: 0)
             switch visualizer {
-            case .orb:
+            case .glow, .halo:
                 ZStack {
-                    visualizerView(track)
-                    CoverImage(cover: track.cover, size: side * 0.54, isCircle: true)
+                    if visualizer == .glow {
+                        // A wide cloud, as the screen is.
+                        visualizerView(track, cover: cover).frame(width: min(size.width, side * 2.6), height: side * 1.7)
+                    } else {
+                        visualizerView(track, cover: cover).frame(width: cover * 2.4, height: cover * 2.4)
+                    }
+                    CoverImage(cover: track.cover, size: cover)
                         .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
                         .backdropFocus()
                 }
                 .frame(width: side, height: side)
-            case .bars, .wave:
+            case .waveform:
                 visualizerView(track).frame(height: size.height * 0.42)
             case .off:
                 CoverImage(cover: track.cover, size: side * 0.8)
@@ -311,7 +319,8 @@ struct StageView: View {
                 }
                 Spacer(minLength: 12)
                 if visualizer != .off {
-                    visualizerView(track, style: visualizer == .orb ? .bars : visualizer)
+                    // Too small for light around the cover; the waveform reads at any size.
+                    visualizerView(track, style: .waveform)
                         .frame(width: min(220, size.width * 0.3), height: 48)
                 }
             }
@@ -422,8 +431,9 @@ struct StageView: View {
         }
     }
 
-    private func visualizerView(_ track: PlayerTrack, style: StageVisualizer? = nil, isBehindCover: Bool = false) -> some View {
-        StageVisualizerView(style: style ?? visualizer, palette: palette, energy: songEnergy(track), isPlaying: player.isPlaying, levels: levels, isBehindCover: isBehindCover)
+    /// `cover` is the side of the cover the visualizer surrounds, centred in it.
+    private func visualizerView(_ track: PlayerTrack, style: StageVisualizer? = nil, cover: CGFloat = 0) -> some View {
+        StageVisualizerView(style: style ?? visualizer, palette: palette, energy: songEnergy(track), isPlaying: player.isPlaying, levels: levels, cover: cover)
     }
 
     // MARK: - Controls

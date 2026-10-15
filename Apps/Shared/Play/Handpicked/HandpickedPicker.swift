@@ -2,9 +2,9 @@ import SwiftUI
 import MusicKit
 import TracksCore
 
-/// Adding songs to Handpicked, as Music adds songs to a playlist: search at the top, then
-/// your playlists, what you've played lately and what you play most. Each song's ⊕ picks it
-/// and turns to a ✓, and a second tap takes it back out.
+/// Making a Handpicked station: pick songs as Music adds songs to a playlist, from a search,
+/// your playlists, what you've played lately and what you play most, then start it. Each
+/// song's ⊕ picks it and turns to a ✓, and a second tap takes it back out.
 struct HandpickedPicker: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
@@ -15,10 +15,12 @@ struct HandpickedPicker: View {
     @State private var recent: [Handpick] = []
     @State private var mostPlayed: [Handpick] = []
     @State private var hasLoaded = false
+    @State private var selection = HandpickedSelection()
+    @State private var isStarting = false
 
     var body: some View {
         let source = model.musicSource
-        let count = HandpickedPicks.shared.picks(for: source).count
+        let count = selection.picks.count
         NavigationStack {
             List {
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -30,15 +32,27 @@ struct HandpickedPicker: View {
             #if os(iOS)
             .listStyle(.insetGrouped)
             #endif
-            .navigationTitle("Add Songs")
+            .navigationTitle(Handpicked.title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            // On the Mac a sheet's subtitle shows in the window behind it too, so there the
+            // list says the same at its top.
+            .navigationSubtitle(Self.status(count: count))
             #endif
-            .navigationSubtitle(String(localized: "\(count) of \(Handpicked.limit) Picked"))
             .searchable(text: $query, prompt: source == .appleMusic ? "Apple Music" : "Your Music")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", role: .cancel) { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", role: .confirm) { dismiss() }
+                    if isStarting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Starting Station")
+                    } else {
+                        Button("Start", role: .confirm, action: start)
+                            .disabled(selection.picks.isEmpty)
+                    }
                 }
             }
             .navigationDestination(for: PickerPlaylist.self) { playlist in
@@ -47,6 +61,7 @@ struct HandpickedPicker: View {
             .task { await loadHistory(source: source) }
             .task(id: query) { await search(source: source) }
         }
+        .environment(selection)
         #if os(macOS)
         .frame(minWidth: 460, idealWidth: 520, minHeight: 560, idealHeight: 640)
         #endif
@@ -54,8 +69,28 @@ struct HandpickedPicker: View {
 
     // MARK: Browsing
 
+    private func start() {
+        isStarting = true
+        let picks = selection.picks
+        Task {
+            await HandpickedPlayback.start(model: model, picks: picks)
+            dismiss()
+        }
+    }
+
+    private static func status(count: Int) -> String {
+        count == 0
+            ? String(localized: "Pick Songs for a Station")
+            : String(localized: "\(count) of \(Handpicked.limit) Picked")
+    }
+
     @ViewBuilder
     private func browse(source: MusicSource) -> some View {
+        #if os(macOS)
+        Section {} header: {
+            Text(Self.status(count: selection.picks.count))
+        }
+        #endif
         if PickerPlaylist.canBrowse(source: source, isDemo: player.isDemo) {
             Section {
                 NavigationLink {
@@ -80,6 +115,12 @@ struct HandpickedPicker: View {
                 Text("Search for songs you love, or pick from your playlists. Songs you play show up here too.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+        }
+        // Last, so a pick never moves the rows under your finger.
+        if !selection.picks.isEmpty {
+            Section("Picked") {
+                ForEach(selection.picks) { PickRow(pick: $0) }
             }
         }
     }
@@ -188,17 +229,17 @@ struct HandpickedPicker: View {
 /// A song to pick: its cover, name and artist, and ⊕, or ✓ once picked. The whole row picks.
 private struct PickRow: View {
     let pick: Handpick
-    @Environment(AppModel.self) private var model
+    @Environment(HandpickedSelection.self) private var selection
     /// Counts picks made here, so the tap is felt.
     @State private var toggles = 0
 
     var body: some View {
-        let source = model.musicSource
-        let picks = HandpickedPicks.shared
-        let isPicked = picks.contains(pick.identity, for: source)
-        let isBlocked = !isPicked && picks.isFull(for: source)
+        let isPicked = selection.contains(pick.identity)
+        let isBlocked = !isPicked && selection.isFull
         Button {
-            if picks.toggle(pick, for: source) { toggles += 1 }
+            withAnimation(PlayMotion.row) {
+                if selection.toggle(pick) { toggles += 1 }
+            }
         } label: {
             HStack(spacing: 12) {
                 CoverImage(cover: pick.cover, size: 44)
@@ -226,7 +267,7 @@ private struct PickRow: View {
         .sensoryFeedback(.selection, trigger: toggles)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isPicked ? .isSelected : [])
-        .accessibilityHint(isPicked ? "Takes it out of Handpicked" : "Adds it to Handpicked")
+        .accessibilityHint(isPicked ? "Takes it out of the station" : "Adds it to the station")
     }
 }
 

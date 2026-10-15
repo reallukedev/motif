@@ -97,9 +97,9 @@ private struct FlowBackdrop: View {
     @Environment(PlayerModel.self) private var player: PlayerModel?
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: reduceMotion), paused: isSettled || !isOnScreen)) { context in
+        TimelineView(.animation(minimumInterval: BackdropFrameRate.interval(reduceMotion: reduceMotion), paused: reduceMotion || isSettled || !isOnScreen)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
-            let pulse = levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying, calm: reduceMotion)
+            let pulse = reduceMotion ? .still(isPlaying: isPlaying) : levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying)
             let bass = pulse.bass
             let mid = Float(pulse.bands[6..<14].reduce(0, +) / 8)
             // Slow, whatever the song: the drift is the room, the bass is the music.
@@ -165,9 +165,9 @@ private struct BloomBackdrop: View {
     var body: some View {
         GeometryReader { proxy in
             let side = max(proxy.size.width, proxy.size.height) * 1.5
-            TimelineView(.animation(minimumInterval: reduceMotion || LowPowerMode.shared.isOn ? 1 / 20 : 1 / 30, paused: isSettled || !isOnScreen)) { context in
+            TimelineView(.animation(minimumInterval: LowPowerMode.shared.isOn ? 1 / 20 : 1 / 30, paused: reduceMotion || isSettled || !isOnScreen)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
-                let pulse = levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying, calm: reduceMotion)
+                let pulse = reduceMotion ? .still(isPlaying: isPlaying) : levels.next(heard: AudioLevelMeter.shared.current(), time: time, song: SongMoment(player: player, energy: energy), isPlaying: isPlaying)
                 let bass = CGFloat(pulse.bass)
                 let kick = CGFloat(pulse.kick)
                 ZStack {

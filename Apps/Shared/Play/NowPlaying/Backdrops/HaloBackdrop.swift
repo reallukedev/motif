@@ -20,7 +20,7 @@ func songEnergy(_ track: PlayerTrack?) -> Double {
 ///
 /// Your own music is heard, band by band. Apple Music plays where Tracks can't hear it, so for
 /// it the rays follow each song's beat and feel, learned from its preview, as Stage's
-/// visualizer does (see ``GrooveStore``); each kick blooms from behind the cover. Paused, the
+/// visualizer does (see ``GrooveStore``); each beat blooms from behind the cover. Paused, the
 /// light settles and the drawing stops. Under Reduce Motion it glows, still, in the cover's
 /// colours.
 ///
@@ -56,8 +56,7 @@ struct HaloBackdrop: View {
                         heard: AudioLevelMeter.shared.current(),
                         time: now.timeIntervalSinceReferenceDate,
                         song: SongMoment(player: player, energy: energy),
-                        isPlaying: isPlaying,
-                        calm: false
+                        isPlaying: isPlaying
                     )
                 let frame = HaloFrame(
                     bands: pulse.bands,
@@ -126,7 +125,9 @@ private struct AudioListening: ViewModifier {
                 update()
             }
             .onChange(of: isOnScreen) { update() }
-            .task(id: GrooveRequest(track: player?.current?.id, isListening: isListening)) {
+            // By the song as well as the queue entry: a station's entry is often in the queue
+            // before its song is known.
+            .task(id: GrooveRequest(track: player?.current?.id, song: player?.current?.song?.id.rawValue, isListening: isListening)) {
                 guard isListening, let player else { return }
                 GrooveStore.shared.follow(player.current, isDemo: player.isDemo)
             }
@@ -134,6 +135,7 @@ private struct AudioListening: ViewModifier {
 
     private struct GrooveRequest: Hashable {
         let track: String?
+        let song: String?
         let isListening: Bool
     }
 

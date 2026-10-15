@@ -37,11 +37,7 @@ struct YourMusicMoodView: View {
         }
         .tint(mood.style.ink)
         .heroTitle(mood.title)
-        #if os(macOS)
-        .navigationTitle(mood.title)
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        #else
+        #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
         #endif
         .task { await load() }

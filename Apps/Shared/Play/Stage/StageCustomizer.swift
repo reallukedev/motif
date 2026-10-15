@@ -4,7 +4,7 @@ import SwiftUI
 /// shown. On iPhone it's a half-height sheet, so Stage changes above it as you choose.
 struct StageCustomizer: View {
     @AppStorage(StageLayout.storageKey) private var layout = StageLayout.cover
-    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.bars
+    @AppStorage(StageVisualizer.storageKey) private var visualizer = StageVisualizer.glow
     @AppStorage(StageOption.background) private var background = StageBackground.flow
     @AppStorage(StageOption.showsAlbum) private var showsAlbum = true
     @AppStorage(StageOption.showsProgress) private var showsProgress = true
@@ -29,7 +29,7 @@ struct StageCustomizer: View {
                 } header: {
                     Text("Visualizer")
                 } footer: {
-                    Text("Your own music moves it as it plays. Apple Music doesn't let Tracks hear the song, so for it the visualizer swells gently instead.")
+                    Text(visualizer.footer)
                 }
                 Section {
                     Picker("Background", selection: $background) {

@@ -37,10 +37,8 @@ struct PartyView: View {
             .padding(.bottom, 24)
         }
         #if os(macOS)
-        .navigationTitle("Party")
-        // The field runs on under the toolbar, which says nothing the field doesn't.
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // The field runs on under the bar, which says nothing the field doesn't.
+        .headerUnderBar()
         #else
         .toolbarTitleDisplayMode(.inline)
         #endif
